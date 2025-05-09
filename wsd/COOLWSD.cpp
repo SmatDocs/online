@@ -27,7 +27,8 @@
 #define COOLWSD_TEST_METRICS "/cool/getMetrics"
 
 /* Default cool UI used in the start test URI */
-#define COOLWSD_TEST_COOL_UI "/browser/" COOLWSD_VERSION_HASH "/debug.html"
+//#define COOLWSD_TEST_COOL_UI "/browser/" COOLWSD_VERSION_HASH "/debug.html"
+#define COOLWSD_TEST_COOL_UI "/browser/dist/debug.html"
 
 /* Default ciphers used, when not specified otherwise */
 #define DEFAULT_CIPHER_SET "ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH"

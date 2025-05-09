@@ -1,0 +1,16 @@
+
+after cloning the repo from github, one important thing, don't use sudo to modify any file permissions.
+Make sure all file permissions are for the current user that is not sudo
+
+
+Follow the steps for ubuntu here 
+https://collaboraonline.github.io/post/build-code/#build-code-on-ubuntu
+
+
+I chose here in the instructions
+# Or make it persistent as part of your .bashrc with
+echo "export LOCOREPATH=$(pwd)" >> ~/.bashrc && source ~/.bashrc
+
+also added this
+ --disable-ssl
+ 

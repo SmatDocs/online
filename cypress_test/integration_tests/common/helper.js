@@ -166,7 +166,11 @@ function loadDocumentNoIntegration(filePath, isMultiUser) {
 		URI += 'http://' + Cypress.env('SERVER') + '/richproxy/proxy.php?req=';
 	}
 
-	URI += '/browser/' + Cypress.env('WSD_VERSION_HASH') + '/debug.html'
+	// URI += '/browser/' + Cypress.env('WSD_VERSION_HASH') + '/debug.html'
+	// 	+ '?lang=en-US'
+	// 	+ '&file_path=' + Cypress.env('DATA_WORKDIR') + filePath;
+
+	URI += '/browser/dist/debug.html'
 		+ '?lang=en-US'
 		+ '&file_path=' + Cypress.env('DATA_WORKDIR') + filePath;
 
