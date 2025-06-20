@@ -11,6 +11,12 @@ I chose here in the instructions
 # Or make it persistent as part of your .bashrc with
 echo "export LOCOREPATH=$(pwd)" >> ~/.bashrc && source ~/.bashrc
 
+./configure --enable-silent-rules --with-lokit-path=${LOCOREPATH}/include \
+            --with-lo-path=${LOCOREPATH}/instdir \
+            --enable-debug --enable-cypress \
+            --disable-ssl
+
 also added this
  --disable-ssl
  
+sudo apt install libreoffice-script-provider-python python3-uno
