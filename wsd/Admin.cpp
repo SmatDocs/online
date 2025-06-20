@@ -427,6 +427,8 @@ void AdminSocketHandler::handleMessage(const std::vector<char> &payload)
     }
 }
 
+std::atomic<uint64_t> AdminSocketHandler::NextSessionId(1);
+
 AdminSocketHandler::AdminSocketHandler(Admin* adminManager,
                                        const std::weak_ptr<StreamSocket>& socket,
                                        const Poco::Net::HTTPRequest& request,
@@ -435,8 +437,7 @@ AdminSocketHandler::AdminSocketHandler(Admin* adminManager,
     , _admin(adminManager)
     , _isAuthenticated(false)
 {
-    // Different session id pool for admin sessions (?)
-    _sessionId = Util::decodeId(COOLWSD::GetConnectionId());
+    _sessionId = NextSessionId++;
     _clientIPAdress = socket.lock()->clientAddress();
 }
 
@@ -445,7 +446,7 @@ AdminSocketHandler::AdminSocketHandler(Admin* adminManager)
       _admin(adminManager),
       _isAuthenticated(true)
 {
-    _sessionId = Util::decodeId(COOLWSD::GetConnectionId());
+    _sessionId = NextSessionId++;
 }
 
 void AdminSocketHandler::sendTextFrame(const std::string& message)
@@ -594,7 +595,7 @@ Admin::Admin()
         LOG_WRN("Low memory condition detected: only " << _totalAvailMemKb / 1024
                                                        << " MB of RAM available");
 
-    LOG_INF("hardware threads: " << std::thread::hardware_concurrency());
+    LOG_INF("Hardware threads: " << std::thread::hardware_concurrency());
 }
 
 Admin::~Admin()
@@ -822,6 +823,11 @@ void Admin::rescheduleCpuTimer(unsigned interval)
     _cpuStatsTaskIntervalMs = capAndRoundInterval(interval);
     LOG_INF("CPU stats interval changed - New interval: " << _cpuStatsTaskIntervalMs);
     wakeup();
+}
+
+std::time_t Admin::getLastActivityTime() const
+{
+    return _model.getLastActivityTime();
 }
 
 size_t Admin::getTotalMemoryUsage() const
@@ -1262,7 +1268,7 @@ void Admin::sendMetrics(const std::shared_ptr<StreamSocket>& socket,
     response->setBody(oss.str(), "text/plain");
 
     socket->send(*response);
-    socket->shutdown();
+    socket->asyncShutdown();
 
     static bool skipAuthentication =
         ConfigUtil::getConfigValue<bool>("security.enable_metrics_unauthenticated", false);

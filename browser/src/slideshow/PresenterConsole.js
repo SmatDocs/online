@@ -48,7 +48,7 @@ class PresenterConsole {
 			<html lang="en">
 			<head>
 				<meta charset="UTF-8">
-				<meta name="viewport" content="width=device-width, initial-scale=1.0">
+				<meta name="viewport" content="width=device-width, initial-scale=1">
 				<title>${sanitizedTitle}</title>
 			</head>
 			<body>
@@ -170,6 +170,7 @@ class PresenterConsole {
 				img = this._proxyPresenter.document.createElement('img');
 				img.id = `preview-slide-${index}`;
 				img.src = document.querySelector('meta[name="previewImg"]').content;
+				img.alt = _('Preview Slide {1}').replace('{1}', index + 1);
 				img.style.marginLeft = '10px';
 				img.style.marginRight = '10px';
 				img.style.marginTop = '10px';

@@ -37,8 +37,6 @@ class Message;
 // Forward declaration to avoid pulling the world here.
 namespace Poco
 {
-    class MemoryInputStream;
-
     namespace Net
     {
         class HTTPServerRequest;
@@ -203,16 +201,16 @@ public:
 
     /// Custom response to a http request.
     virtual bool handleHttpRequest(const Poco::Net::HTTPRequest& /*request*/,
-                                   Poco::MemoryInputStream& /*message*/,
-                                   std::shared_ptr<StreamSocket>& /*socket*/)
+                                   std::istream& /*message*/,
+                                   const std::shared_ptr<StreamSocket>& /*socket*/)
     {
         return false;
     }
 
     virtual std::map<std::string, std::string>
         parallelizeCheckInfo(const Poco::Net::HTTPRequest& /*request*/,
-                             Poco::MemoryInputStream& /*message*/,
-                             std::shared_ptr<StreamSocket>& /*socket*/)
+                             std::istream& /*message*/,
+                             const std::shared_ptr<StreamSocket>& /*socket*/)
     {
         return {};
     }
@@ -357,6 +355,8 @@ private:
         return _socketPoll;
     }
 
+    std::string getReason() const;
+
     static UnitBase* get(UnitType type);
 
     /// setup global instance for get() method
@@ -369,7 +369,7 @@ private:
     static TestOptions GlobalTestOptions; ///< The test options for this Test Suite.
     static TestResult GlobalResult; ///< The result of all tests. Latches at first failure.
 
-    std::mutex _lock; ///< Used to protect cleanup functions.
+    mutable std::mutex _lock; ///< Used to protect cleanup functions.
     std::mutex _lockSocketPoll; ///< Used to sync _socketPoll
 
     std::string _reason;

@@ -36,8 +36,8 @@ public:
     }
 
     virtual bool handleHttpRequest(const Poco::Net::HTTPRequest& request,
-                                   Poco::MemoryInputStream& message,
-                                   std::shared_ptr<StreamSocket>& socket) override
+                                   std::istream& message,
+                                   const std::shared_ptr<StreamSocket>& socket) override
     {
         Poco::URI uriReq(request.getURI());
         Poco::RegularExpression regInfo("/wopi/files/1");
@@ -171,8 +171,8 @@ public:
     }
 
     virtual bool handleHttpRequest(const Poco::Net::HTTPRequest& request,
-                                   Poco::MemoryInputStream& /*message*/,
-                                   std::shared_ptr<StreamSocket>& socket) override
+                                   std::istream& /*message*/,
+                                   const std::shared_ptr<StreamSocket>& socket) override
     {
         Poco::URI uriReq(request.getURI());
         Poco::RegularExpression regInfo("/wopi/files/[0-9]+");

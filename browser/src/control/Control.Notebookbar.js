@@ -73,7 +73,7 @@ L.Control.Notebookbar = L.Control.extend({
 		$('#toolbar-wrapper').addClass('hasnotebookbar');
 		$('.main-nav').addClass('hasnotebookbar');
 		this.floatingNavIcon = document.querySelector('.navigator-btn-wrapper');
-		if (this.floatingNavIcon) 
+		if (this.floatingNavIcon)
 			this.floatingNavIcon.classList.add('hasnotebookbar');
 		document.getElementById('document-container').classList.add('notebookbar-active');
 
@@ -81,18 +81,25 @@ L.Control.Notebookbar = L.Control.extend({
 		docLogoHeader.id = 'document-header';
 
 		var iconClass = 'document-logo';
+		var iconTooltip;
 		if (docType === 'text') {
 			iconClass += ' writer-icon-img';
+			iconTooltip = 'Writer';
 		} else if (docType === 'spreadsheet') {
 			iconClass += ' calc-icon-img';
+			iconTooltip = 'Calc';
 		} else if (docType === 'presentation') {
 			iconClass += ' impress-icon-img';
+			iconTooltip = 'Impress';
 		} else if (docType === 'drawing') {
 			iconClass += ' draw-icon-img';
+			iconTooltip = 'Draw';
 		}
 		var docLogo = L.DomUtil.create('div', iconClass, docLogoHeader);
 		$(docLogo).data('id', 'document-logo');
 		$(docLogo).data('type', 'action');
+		docLogo.setAttribute('data-cooltip', iconTooltip);
+		L.control.attachTooltipEventListener(docLogo, this.map);
 		$('.main-nav').prepend(docLogoHeader);
 		var isDarkMode = window.prefs.getBoolean('darkTheme');
 		if (!isDarkMode)
@@ -122,7 +129,7 @@ L.Control.Notebookbar = L.Control.extend({
 		$('.main-nav #document-header').remove();
 		$('.main-nav').removeClass('hasnotebookbar');
 		$('#toolbar-wrapper').removeClass('hasnotebookbar');
-		if (this.floatingNavIcon) 
+		if (this.floatingNavIcon)
 			this.floatingNavIcon.classList.remove('hasnotebookbar');
 		$('.main-nav #document-header').remove();
 		this.clearNotebookbar();
@@ -632,6 +639,11 @@ L.Control.Notebookbar = L.Control.extend({
 		} else {
 			$('#togglea11ystate').removeClass('selected');
 		}
+		if (this._map && this._map._lockAccessibilityOn) {
+			$('#togglea11ystate').addClass('disabled');
+			$('#togglea11ystate').attr('disabled', true);
+			$('#togglea11ystate-button').attr('disabled', true);
+		}
 	},
 
 	buildOptionsSectionData: function(childrenArray) {
@@ -664,7 +676,7 @@ L.Control.Notebookbar = L.Control.extend({
 				'useInLineLabelsForUnoButtons': false,
 			},
 		];
-	
+
 		if (this._map && this._map['wopi'].EnableShare) {
 			optionsToolItems.push({
 				'type': 'customtoolitem',
@@ -673,7 +685,7 @@ L.Control.Notebookbar = L.Control.extend({
 				'accessibility': { focusBack: false, combination: 'ZS', de: null }
 			});
 		}
-	
+
 		return optionsToolItems;
 	},
 

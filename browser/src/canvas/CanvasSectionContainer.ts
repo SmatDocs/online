@@ -495,10 +495,10 @@ class CanvasSectionContainer {
 	public isDocumentObjectVisible (section: CanvasSectionObject): boolean {
 		return app.isRectangleVisibleInTheDisplayedArea(
 			[
-				section.position[0] * app.pixelsToTwips,
-				section.position[1] * app.pixelsToTwips,
-				section.size[0] * app.pixelsToTwips,
-				section.size[1] * app.pixelsToTwips
+				Math.round(section.position[0] * app.pixelsToTwips),
+				Math.round(section.position[1] * app.pixelsToTwips),
+				Math.round(section.size[0] * app.pixelsToTwips),
+				Math.round(section.size[1] * app.pixelsToTwips)
 			]
 		);
 	}
@@ -685,8 +685,7 @@ class CanvasSectionContainer {
 
 		for (var j: number = 0; j < this.windowSectionList.length; j++) {
 			var windowSection = this.windowSectionList[j];
-			if (windowSection.interactable)
-				windowSection.onCellAddressChanged();
+			windowSection.onCellAddressChanged();
 
 			if (this.lowestPropagatedBoundSection === windowSection.name)
 				propagate = false; // Window sections can not stop the propagation of the event for other window sections.
@@ -694,8 +693,7 @@ class CanvasSectionContainer {
 
 		if (propagate) {
 			for (var i: number = this.sections.length - 1; i > -1; i--) {
-				if (this.sections[i].interactable)
-					this.sections[i].onCellAddressChanged();
+				this.sections[i].onCellAddressChanged();
 			}
 		}
 	}
@@ -1196,6 +1194,8 @@ class CanvasSectionContainer {
 		var section: CanvasSectionObject = this.findSectionContainingPoint(point);
 		if (section)
 			this.propagateOnMouseWheel(section, this.convertPositionToSectionLocale(section, point), delta, e);
+
+		app.idleHandler.notifyActive();
 	}
 
 	onMouseLeave (e: MouseEvent) {
@@ -1279,6 +1279,8 @@ class CanvasSectionContainer {
 				this.propagateOnMultiTouchMove(section, this.convertPositionToSectionLocale(section, this.touchCenter), distance, e);
 			}
 		}
+
+		app.idleHandler.notifyActive();
 	}
 
 	onTouchEnd (e: TouchEvent) { // Should be ignored unless this.draggingSomething = true.
@@ -1359,9 +1361,15 @@ class CanvasSectionContainer {
 		this.reNewAllSections(false);
 	}
 
-	findSectionContainingPoint (point: Array<number>): any {
+	findSectionContainingPoint (point: Array<number>, interactable = true): any {
 		for (var i: number = this.sections.length - 1; i > -1; i--) { // Search from top to bottom. Top section will be sent as target section.
-			if (this.sections[i].isLocated && !this.sections[i].windowSection && this.sections[i].showSection && (!this.sections[i].documentObject || this.sections[i].isVisible) && this.doesSectionIncludePoint(this.sections[i], point))
+			if (
+				this.sections[i].isLocated && !this.sections[i].windowSection &&
+				this.sections[i].showSection &&
+				(!this.sections[i].documentObject || this.sections[i].isVisible) &&
+				this.doesSectionIncludePoint(this.sections[i], point)
+				&& (interactable ? this.sections[i].interactable : true)
+			)
 				return this.sections[i];
 		}
 
@@ -2034,7 +2042,7 @@ class CanvasSectionContainer {
 
 	private animate (timeStamp: number) {
 		if (this.lastFrameStamp > 0)
-			this.elapsedTime += timeStamp - this.lastFrameStamp;
+			this.elapsedTime += Math.max(0, timeStamp - this.lastFrameStamp);
 
 		this.lastFrameStamp = timeStamp;
 
@@ -2109,7 +2117,7 @@ class CanvasSectionContainer {
 			if (options.defer)
 				requestAnimationFrame(this.animate.bind(this));
 			else
-				this.animate(performance.now());
+				this.animate(document.timeline.currentTime as number);
 			return true;
 		}
 		else {

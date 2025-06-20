@@ -135,12 +135,40 @@ class PaneBorder {
 	}
 }
 
+class RawDelta {
+	private _delta: Uint8Array;
+	private _id: number;
+	private _isKeyframe: boolean;
+
+	constructor(delta: Uint8Array, id: number, isKeyframe: boolean) {
+		this._delta = delta;
+		this._id = id;
+		this._isKeyframe = isKeyframe;
+	}
+
+	public get length() {
+		return this.delta.length;
+	}
+
+	public get delta() {
+		return this._delta;
+	}
+
+	public get id() {
+		return this._id;
+	}
+
+	public get isKeyframe() {
+		return this._isKeyframe;
+	}
+}
+
 class Tile {
 	coords: TileCoordData;
 	distanceFromView: number = 0; // distance to the center of the nearest visible area (0 = visible)
 	image: ImageBitmap | null = null; // ImageBitmap ready to render
 	imgDataCache: any = null; // flat byte array of image data
-	rawDeltas: any = null; // deltas ready to decompress
+	rawDeltas: RawDelta[] = []; // deltas ready to decompress
 	deltaCount: number = 0; // how many deltas on top of the keyframe
 	updateCount: number = 0; // how many updates did we have
 	loadCount: number = 0; // how many times did we get a new keyframe
@@ -150,10 +178,11 @@ class Tile {
 	viewId: number = 0; // canonical view id
 	wireId: number = 0; // monotonic timestamp for optimizing fetch
 	invalidFrom: number = 0; // a wireId - for avoiding races on invalidation
+	deltaId: number = 0; // monotonic id for delta updates
+	lastPendingId: number = 0; // the id of the last delta requested to be decompressed
+	decompressedId: number = 0; // the id of the last decompressed delta chunk in imgDataCache
 	lastRendered: number = performance.timeOrigin;
 	private lastRequestTime: Date = undefined; // when did we last do a tilecombine request.
-	hasPendingDelta: number = 0;
-	hasPendingKeyframe: number = 0;
 
 	constructor(coords: TileCoordData) {
 		this.coords = coords;
@@ -168,15 +197,17 @@ class Tile {
 	}
 
 	needsRehydration(): boolean {
-		return !this.imgDataCache && this.hasKeyframe();
+		if (this.rawDeltas.length === 0) return false;
+		const lastId = this.rawDeltas[this.rawDeltas.length - 1].id;
+		return this.lastPendingId !== lastId;
 	}
 
 	hasKeyframe(): boolean {
-		return !!this.rawDeltas && this.rawDeltas.length > 0;
+		return !!this.rawDeltas.length;
 	}
 
-	hasPendingUpdate(): boolean {
-		return this.hasPendingDelta > 0 || this.hasPendingKeyframe > 0;
+	isReady(): boolean {
+		return this.decompressedId === this.lastPendingId;
 	}
 
 	/// Demand a whole tile back to the keyframe from coolwsd.
@@ -223,9 +254,8 @@ class TileManager {
 	private static _partTilePreFetcher: any;
 	private static _adjacentTilePreFetcher: any;
 	private static inTransaction: number = 0;
-	private static pendingTransactions: number = 0;
+	private static pendingTransactions: any = [[]];
 	private static pendingDeltas: any = [];
-	private static transactionCallbacks: any = [];
 	private static worker: any;
 	private static nullDeltaUpdate = 0;
 	private static queuedProcessed: any = [];
@@ -233,7 +263,7 @@ class TileManager {
 	private static emptyTilesCount: number = 0;
 	private static debugDeltas: boolean = false;
 	private static debugDeltasDetail: boolean = false;
-	private static tiles: any = {}; // stores all tiles, keyed by coordinates, and cached, compressed deltas
+	private static tiles: Map<string, Tile> = new Map(); // stores all tiles, keyed by coordinates, and cached, compressed deltas
 	private static tileBitmapList: Tile[] = []; // stores all tiles with bitmaps, sorted by distance from view(s)
 	public static tileSize: number = 256;
 
@@ -242,13 +272,17 @@ class TileManager {
 	// The tile expansion ratio that the visible tile area will be expanded towards when
 	// updating during scrolling
 	private static directionalTileExpansion: number = 2;
+	private static pausedForDehydration: boolean = false;
+	private static shrinkCurrentId: any = null;
 
 	//private static _debugTime: any = {}; Reserved for future.
 
 	public static initialize() {
 		if (window.Worker && !(window as any).ThisIsAMobileApp) {
 			window.app.console.info('Creating CanvasTileWorker');
-			this.worker = new Worker('src/layer/tile/TileWorker.js');
+			this.worker = new Worker(
+				app.LOUtil.getURL('/src/layer/tile/TileWorker.js'),
+			);
 			this.worker.addEventListener('message', (e: any) =>
 				this.onWorkerMessage(e),
 			);
@@ -263,12 +297,10 @@ class TileManager {
 		var totalSize = 0;
 		var n_bitmaps = 0;
 		var n_current = 0;
-		var keys = Object.keys(this.tiles);
-		for (var i = 0; i < keys.length; ++i) {
-			var tile = this.tiles[keys[i]];
+		for (const tile of this.tiles.values()) {
 			if (tile.image) ++n_bitmaps;
 			if (tile.distanceFromView === 0) ++n_current;
-			totalSize += tile.rawDeltas ? tile.rawDeltas.length : 0;
+			totalSize += tile.rawDeltas.reduce((a, c) => a + c.length, 0);
 		}
 		let mismatch = '';
 		if (n_bitmaps != this.tileBitmapList.length)
@@ -277,7 +309,7 @@ class TileManager {
 		app.map._debug.setOverlayMessage(
 			'top-tileMem',
 			'Tiles: ' +
-				String(keys.length).padStart(4, ' ') +
+				String(this.tiles.size).padStart(4, ' ') +
 				', bitmaps: ' +
 				String(n_bitmaps).padStart(3, ' ') +
 				' current ' +
@@ -293,8 +325,10 @@ class TileManager {
 	}
 
 	private static sortTileKeysByDistance() {
-		return Object.keys(this.tiles).sort((a: any, b: any) => {
-			return this.tiles[b].distanceFromView - this.tiles[a].distanceFromView;
+		return Array.from(this.tiles.keys()).sort((a: any, b: any) => {
+			return (
+				this.tiles.get(b).distanceFromView - this.tiles.get(a).distanceFromView
+			);
 		});
 	}
 
@@ -322,12 +356,12 @@ class TileManager {
 		// FIXME: could maintain this as we go rather than re-accounting it regularly.
 		var totalSize = 0;
 		var tileCount = 0;
-		for (const tile of Object.values(this.tiles) as Tile[]) {
-			// Don't count size of tiles that are visible or that have pending deltas. We don't have
+		for (const tile of this.tiles.values()) {
+			// Don't count size of tiles that are visible. We don't have
 			// a mechanism to immediately rehydrate tiles, so GC'ing visible tiles would
-			// cause flickering, and the same would happen for tiles with pending deltas.
-			if (tile.distanceFromView !== 0 && !tile.hasPendingDelta) {
-				totalSize += tile.rawDeltas ? tile.rawDeltas.length : 0;
+			// cause flickering.
+			if (tile.distanceFromView !== 0) {
+				totalSize += tile.rawDeltas.reduce((a, c) => a + c.length, 0);
 				tileCount++;
 			}
 		}
@@ -345,23 +379,16 @@ class TileManager {
 
 			for (var i = 0; i < keys.length && totalSize > lowDeltaMemory; ++i) {
 				const key = keys[i];
-				const tile: Tile = this.tiles[key];
-				if (
-					tile.rawDeltas &&
-					tile.distanceFromView !== 0 &&
-					!tile.hasPendingDelta
-				) {
-					totalSize -= tile.rawDeltas.length;
+				const tile: Tile = this.tiles.get(key);
+				if (tile.rawDeltas.length && tile.distanceFromView !== 0) {
+					const rawDeltaSize = tile.rawDeltas.reduce((a, c) => a + c.length, 0);
+					totalSize -= rawDeltaSize;
 					if (this.debugDeltas)
 						window.app.console.log(
-							'Reclaim delta ' +
-								key +
-								' memory: ' +
-								tile.rawDeltas.length +
-								' bytes',
+							'Reclaim delta ' + key + ' memory: ' + rawDeltaSize + ' bytes',
 						);
 					this.reclaimTileBitmapMemory(tile);
-					tile.rawDeltas = null;
+					tile.rawDeltas = [];
 					tile.forceKeyframe();
 				}
 			}
@@ -374,10 +401,8 @@ class TileManager {
 
 			for (var i = 0; i < keys.length - lowTileCount; ++i) {
 				const key = keys[i];
-				const tile: Tile = this.tiles[key];
-				if (tile.distanceFromView !== 0 && !tile.hasPendingDelta) {
-					this.removeTile(keys[i]);
-				}
+				const tile: Tile = this.tiles.get(key);
+				if (tile.distanceFromView !== 0) this.removeTile(keys[i]);
 			}
 		}
 	}
@@ -448,112 +473,80 @@ class TileManager {
 			const delta = deltas.shift();
 			const bitmap = bitmaps.shift();
 
-			const tile = this.tiles[delta.key];
+			const tile = this.tiles.get(delta.key);
 			if (!tile) continue;
 
 			this.setBitmapOnTile(tile, bitmap);
 
-			if (delta.isKeyframe) --tile.hasPendingKeyframe;
-			else --tile.hasPendingDelta;
-
-			if (!tile.hasPendingUpdate()) this.tileReady(tile.coords, visibleRanges);
+			if (tile.isReady()) this.tileReady(tile.coords, visibleRanges);
 		}
 
-		if (this.pendingTransactions <= 0)
+		if (this.pendingTransactions.length === 0)
 			window.app.console.warn('Unexpectedly received decompressed deltas');
 		else {
-			--this.pendingTransactions;
-			var callback = this.transactionCallbacks.pop();
-			if (callback) callback();
+			const callbacks = this.pendingTransactions.shift();
+			while (callbacks.length) callbacks.pop()();
+		}
 
-			if (this.pendingTransactions === 0 && this.transactionCallbacks.length) {
-				window.app.console.warn('Transaction callback mismatch');
-				while (this.transactionCallbacks.length) {
-					var callback = this.transactionCallbacks.pop();
-					if (callback) callback();
+		if (this.pausedForDehydration) {
+			// Check if all current tiles are accounted for and resume drawing if so.
+			let shouldUnpause = true;
+			for (const tile of this.tiles.values()) {
+				if (tile.distanceFromView === 0 && !tile.isReady()) {
+					shouldUnpause = false;
+					break;
 				}
+			}
+			if (shouldUnpause) {
+				app.sectionContainer.resumeDrawing();
+				this.pausedForDehydration = false;
 			}
 		}
 
 		this.garbageCollect();
 	}
 
+	private static createTileBitmap(
+		tile: Tile,
+		delta: any,
+		deltas: any[],
+		bitmaps: Promise<ImageBitmap>[],
+	) {
+		if (tile.imgDataCache) {
+			bitmaps.push(
+				createImageBitmap(tile.imgDataCache, {
+					premultiplyAlpha: 'none',
+				}),
+			);
+			deltas.push(delta);
+		} else {
+			window.app.console.warn(
+				'Unusual: Tried to create a tile bitmap with no image data',
+			);
+		}
+	}
+
 	private static decompressPendingDeltas(message: string) {
-		++this.pendingTransactions;
 		if (this.worker) {
 			this.worker.postMessage(
 				{
 					message: message,
 					deltas: this.pendingDeltas,
 					tileSize: this.tileSize,
+					current: Array.from(this.tiles.keys()).filter(
+						(key) => this.tiles.get(key).distanceFromView === 0,
+					),
 				},
 				this.pendingDeltas.map((x: any) => x.rawDelta.buffer),
 			);
 		} else {
 			// Synchronous path
-			const bitmaps: Promise<ImageBitmap>[] = [];
-			const pendingDeltas: any[] = [];
-			for (const e of this.pendingDeltas) {
-				const tile = this.tiles[e.key];
-
-				if (!tile) {
-					window.app.console.warn(
-						'Tile deleted during rawDelta decompression.',
-					);
-					continue;
-				}
-
-				var deltas = (window as any).fzstd.decompress(e.rawDelta);
-
-				var keyframeDeltaSize = 0;
-				var keyframeImage = null;
-				if (e.isKeyframe) {
-					if (this.debugDeltas)
-						window.app.console.log(
-							'Applying a raw RLE keyframe of length ' +
-								deltas.length +
-								' hex: ' +
-								hex2string(deltas, deltas.length),
-						);
-
-					var width = this.tileSize;
-					var height = this.tileSize;
-					var resultu8 = new Uint8ClampedArray(width * height * 4);
-					keyframeDeltaSize = L.CanvasTileUtils.unrle(
-						deltas,
-						width,
-						height,
-						resultu8,
-					);
-					keyframeImage = new ImageData(resultu8, width, height);
-
-					if (this.debugDeltas)
-						window.app.console.log(
-							'Applied keyframe of total size ' +
-								resultu8.length +
-								' at stream offset 0',
-						);
-				}
-
-				this.applyDelta(
-					tile,
-					e.rawDelta,
-					deltas,
-					keyframeDeltaSize,
-					keyframeImage,
-					e.wireMessage,
-				);
-
-				if (tile.imgDataCache) {
-					bitmaps.push(
-						createImageBitmap(tile.imgDataCache, { premultiplyAlpha: 'none' }),
-					);
-					pendingDeltas.push(e);
-				}
-			}
-
-			Promise.all(bitmaps).then((bitmaps) => {
-				this.endTransactionHandleBitmaps(pendingDeltas, bitmaps);
+			this.onWorkerMessage({
+				data: {
+					message: 'endTransaction',
+					deltas: this.pendingDeltas,
+					tileSize: this.tileSize,
+				},
 			});
 		}
 		this.pendingDeltas.length = 0;
@@ -561,31 +554,35 @@ class TileManager {
 
 	private static applyCompressedDelta(
 		tile: Tile,
-		rawDelta: any,
+		rawDeltas: RawDelta[],
 		isKeyframe: any,
 		wireMessage: any,
-		rehydrate = true,
+		ids: number[],
 	) {
 		if (this.inTransaction === 0)
 			window.app.console.warn(
 				'applyCompressedDelta called outside of transaction',
 			);
 
-		if (rehydrate && !tile.imgDataCache && !isKeyframe)
-			this.rehydrateTile(tile);
-
-		// We need to own rawDelta for it to hang around outside of a transaction (which happens
-		// with workers enabled). If we're rehydrating, we already own it.
-		if (this.worker && !rehydrate) rawDelta = new Uint8Array(rawDelta);
+		// Concatenate the raw deltas for decompression. This also has the benefit of copying
+		// them, which allows us to transfer full ownership of the memory to a worker.
+		const rawDelta = new Uint8Array(
+			rawDeltas.reduce((a, c) => a + c.length, 0),
+		);
+		rawDeltas.reduce((a, c) => {
+			rawDelta.set(c.delta, a);
+			return a + c.length;
+		}, 0);
 
 		var e = {
 			key: tile.coords.key(),
 			rawDelta: rawDelta,
 			isKeyframe: isKeyframe,
 			wireMessage: wireMessage,
+			ids: ids,
 		};
-		if (isKeyframe) ++tile.hasPendingKeyframe;
-		else ++tile.hasPendingDelta;
+		tile.lastPendingId = ids[1];
+
 		this.pendingDeltas.push(e);
 	}
 
@@ -867,7 +864,7 @@ class TileManager {
 	}
 
 	private static hasPendingTransactions() {
-		return this.inTransaction > 0 || this.pendingTransactions > 0;
+		return this.inTransaction > 0 || this.pendingTransactions.length;
 	}
 
 	private static beginTransaction() {
@@ -893,8 +890,16 @@ class TileManager {
 	) {
 		var key = coords.key();
 
-		var tile: Tile = this.tiles[key];
+		const tile: Tile = this.tiles.get(key);
 		if (!tile) return;
+
+		// Discard old raw deltas
+		for (let i = tile.rawDeltas.length - 1; i > 0; --i) {
+			if (tile.rawDeltas[i].isKeyframe) {
+				tile.rawDeltas = tile.rawDeltas.splice(i);
+				break;
+			}
+		}
 
 		var emptyTilesCountChanged = false;
 		if (this.emptyTilesCount > 0) {
@@ -916,14 +921,14 @@ class TileManager {
 	}
 
 	private static createTile(coords: TileCoordData, key: string) {
-		if (this.tiles[key]) {
+		if (this.tiles.has(key)) {
 			if (this.debugDeltas)
 				window.app.console.debug('Already created tile ' + key);
-			return this.tiles[key];
+			return this.tiles.get(key);
 		}
 		const tile = new Tile(coords);
 
-		this.tiles[key] = tile;
+		this.tiles.set(key, tile);
 
 		return tile;
 	}
@@ -933,20 +938,46 @@ class TileManager {
 	private static makeTileCurrent(tile: Tile): boolean {
 		tile.distanceFromView = 0;
 		tile.allowFastRequest();
+		this.rehydrateTile(tile, false);
 
-		if (tile.needsRehydration()) this.rehydrateTile(tile);
-
-		return tile.hasPendingUpdate();
+		return !tile.isReady();
 	}
 
-	private static rehydrateTile(tile: Tile) {
-		if (tile.hasKeyframe() && tile.hasPendingKeyframe === 0) {
+	private static rehydrateTile(tile: Tile, wireMessage: boolean) {
+		if (tile.needsRehydration()) {
 			// Re-hydrate tile from cached raw deltas.
 			if (this.debugDeltas)
 				window.app.console.log(
 					'Restoring a tile from cached delta at ' + tile.coords.key(),
 				);
-			this.applyCompressedDelta(tile, tile.rawDeltas, true, false, false);
+
+			// Get the index of the last stored keyframe
+			// FIXME: EcmaScript 2023 has Array.findLastIndex
+			let firstDelta = 0;
+			for (let i = tile.rawDeltas.length - 1; i > 0; --i) {
+				if (tile.rawDeltas[i].isKeyframe) {
+					firstDelta = i;
+					break;
+				}
+			}
+
+			// Check if we have already decompressed data we can work from
+			if (tile.lastPendingId > tile.rawDeltas[firstDelta].id) {
+				const continuedIdIndex = tile.rawDeltas.findIndex(
+					(d) => d.id === tile.lastPendingId,
+				);
+				if (continuedIdIndex !== -1) firstDelta = continuedIdIndex + 1;
+			}
+			const rawDeltas = tile.rawDeltas.slice(firstDelta);
+			const lastId = tile.rawDeltas[tile.rawDeltas.length - 1].id;
+
+			this.applyCompressedDelta(
+				tile,
+				rawDeltas,
+				tile.rawDeltas[firstDelta].isKeyframe,
+				wireMessage,
+				[tile.rawDeltas[firstDelta].id, lastId],
+			);
 		}
 	}
 
@@ -957,17 +988,23 @@ class TileManager {
 		}
 
 		--this.inTransaction;
+		if (callback)
+			this.pendingTransactions[this.pendingTransactions.length - 1].push(
+				callback,
+			);
 
-		// Ignore transactions that did nothing
-		if (this.pendingDeltas.length === 0 && !this.hasPendingTransactions()) {
-			if (callback) callback();
+		if (this.inTransaction !== 0) return;
+
+		// Short-circuit if there's nothing to decompress
+		if (!this.pendingDeltas.length) {
+			const callbacks =
+				this.pendingTransactions[this.pendingTransactions.length - 1];
+			while (callbacks.length) callbacks.pop()();
 			return;
 		}
 
-		this.transactionCallbacks.push(callback);
-		if (this.inTransaction !== 0) return;
-
 		try {
+			this.pendingTransactions.push([]);
 			this.decompressPendingDeltas('endTransaction');
 		} catch (e) {
 			window.app.console.error('Failed to decompress pending deltas');
@@ -982,7 +1019,7 @@ class TileManager {
 		if (e) window.app.console.error('Worker-related error encountered', e);
 		if (!this.worker) return;
 
-		window.app.console.log('Disabling worker thread');
+		window.app.console.warn('Disabling worker thread');
 		try {
 			this.worker.terminate();
 		} catch (e) {
@@ -990,41 +1027,38 @@ class TileManager {
 		}
 
 		this.pendingDeltas.length = 0;
-		this.pendingTransactions = 0;
 		this.worker = null;
-		while (this.transactionCallbacks.length) {
-			var callback = this.transactionCallbacks.pop();
-			if (callback) callback();
+		while (this.pendingTransactions.length) {
+			const callbacks = this.pendingTransactions.shift();
+			while (callbacks.length) callbacks.pop()();
 		}
+		this.pendingTransactions.push([]);
 		this.redraw();
 	}
 
 	private static applyDelta(
 		tile: Tile,
-		rawDelta: any,
+		rawDeltas: any[],
 		deltas: any,
 		keyframeDeltaSize: any,
 		keyframeImage: any,
 		wireMessage: any,
 	) {
-		// 'Uint8Array' rawDelta
+		const rawDeltaSize = tile.rawDeltas.reduce((a, c) => a + c.length, 0);
 
-		if (this.debugDeltas)
+		if (this.debugDeltas) {
+			const hexStrings = [];
+			for (const rawDelta of rawDeltas)
+				hexStrings.push(hex2string(rawDelta, rawDelta.length));
+			const hexString = hexStrings.join('');
+
 			window.app.console.log(
 				'Applying a raw ' +
 					(keyframeDeltaSize ? 'keyframe' : 'delta') +
 					' of length ' +
-					rawDelta.length +
-					(this.debugDeltasDetail
-						? ' hex: ' + hex2string(rawDelta, rawDelta.length)
-						: ''),
+					rawDeltaSize +
+					(this.debugDeltasDetail ? ' hex: ' + hexString : ''),
 			);
-
-		if (keyframeDeltaSize) {
-			// Important to do this before ensuring the context, or we'll needlessly
-			// reconstitute the old keyframe from compressed data.
-			tile.rawDeltas = null;
-			tile.imgDataCache = null;
 		}
 
 		// if re-creating ImageData from rawDeltas, don't update counts
@@ -1036,7 +1070,7 @@ class TileManager {
 				if (app.map._debug.tileDataOn) {
 					app.map._debug.tileDataAddLoad();
 				}
-			} else if (rawDelta.length === 0) {
+			} else if (rawDeltas.length === 0) {
 				tile.updateCount++;
 				this.nullDeltaUpdate++;
 				if (app.map._docLayer._emptyDeltaDiv) {
@@ -1057,27 +1091,8 @@ class TileManager {
 
 		var traceEvent = app.socket.createCompleteTraceEvent(
 			'L.CanvasTileLayer.applyDelta',
-			{ keyFrame: !!keyframeDeltaSize, length: rawDelta.length },
+			{ keyFrame: !!keyframeDeltaSize, length: rawDeltaSize },
 		);
-
-		// store the compressed version for later in its current
-		// form as byte arrays, so that we can manage our bitmaps
-		// better.
-		if (keyframeDeltaSize) {
-			tile.rawDeltas = rawDelta; // overwrite
-		} else if (!tile.hasKeyframe()) {
-			window.app.console.warn(
-				'Unusual: attempt to append a delta when we have no keyframe.',
-			);
-			return;
-		} // assume we already have a delta.
-		else {
-			// FIXME: this is not beautiful; but no concatenate here.
-			var tmp = new Uint8Array(tile.rawDeltas.byteLength + rawDelta.byteLength);
-			tmp.set(tile.rawDeltas, 0);
-			tmp.set(rawDelta, tile.rawDeltas.byteLength);
-			tile.rawDeltas = tmp;
-		}
 
 		// apply potentially several deltas in turn.
 		var i = 0;
@@ -1146,23 +1161,19 @@ class TileManager {
 	}
 
 	private static removeTile(key: string) {
-		var tile = this.tiles[key];
+		const tile = this.tiles.get(key);
 		if (!tile) return;
 
-		if (
-			!tile.hasContent() &&
-			tile.hasPendingKeyframe === 0 &&
-			this.emptyTilesCount > 0
-		)
+		if (!tile.hasContent() && this.emptyTilesCount > 0)
 			this.emptyTilesCount -= 1;
 
 		this.reclaimTileBitmapMemory(tile);
-		delete this.tiles[key];
+		this.tiles.delete(key);
 	}
 
 	private static removeAllTiles() {
 		this.tileBitmapList = [];
-		for (var key in this.tiles) {
+		for (const key in Array.from(this.tiles.keys())) {
 			this.removeTile(key);
 		}
 	}
@@ -1200,6 +1211,9 @@ class TileManager {
 			tile.image.close();
 			tile.image = null;
 			tile.imgDataCache = null;
+
+			tile.decompressedId = 0;
+			tile.lastPendingId = 0;
 
 			const n = this.tileBitmapList.findIndex((it) => it == tile);
 			if (n !== -1) this.tileBitmapList.splice(n, 1);
@@ -1310,7 +1324,7 @@ class TileManager {
 			for (var i = 0; i < partTileQueue.length; ++i) {
 				var coords = partTileQueue[i];
 				var key = coords.key();
-				var tile = this.tiles[key];
+				const tile = this.tiles.get(key);
 
 				// don't send lots of duplicate, fast tilecombines
 				if (tile && tile.requestingTooFast(now)) continue;
@@ -1367,7 +1381,7 @@ class TileManager {
 	}
 
 	private static tileNeedsFetch(key: string) {
-		const tile: Tile = this.tiles[key];
+		const tile: Tile = this.tiles.get(key);
 		return !tile || tile.needsFetch();
 	}
 
@@ -1420,8 +1434,9 @@ class TileManager {
 			const currentBounds = app.map._docLayer._splitPanesContext
 				? app.map._docLayer._splitPanesContext.getPxBoundList(pixelBounds)
 				: [pixelBounds];
-			for (const key in this.tiles)
-				this.updateTileDistance(this.tiles[key], zoom, currentBounds);
+			for (const tile of this.tiles.values()) {
+				this.updateTileDistance(tile, zoom, currentBounds);
+			}
 			this.sortTileBitmapList();
 		}
 
@@ -1432,9 +1447,10 @@ class TileManager {
 		for (var rangeIdx = 0; rangeIdx < tileRanges.length; ++rangeIdx) {
 			// Expand the 'current' area to add a small buffer around the visible area that
 			// helps us avoid visible tile updates.
-			const tileRange = isCurrent
-				? this.expandTileRange(tileRanges[rangeIdx])
-				: tileRanges[rangeIdx];
+			const tileRange =
+				isCurrent && !this.shrinkCurrentId
+					? this.expandTileRange(tileRanges[rangeIdx])
+					: tileRanges[rangeIdx];
 
 			for (var j = tileRange.min.y; j <= tileRange.max.y; ++j) {
 				for (var i = tileRange.min.x; i <= tileRange.max.x; ++i) {
@@ -1449,7 +1465,7 @@ class TileManager {
 					if (!this.isValidTile(coords)) continue;
 
 					var key = coords.key();
-					var tile = this.tiles[key];
+					const tile = this.tiles.get(key);
 
 					if (!tile || tile.needsFetch()) queue.push(coords);
 					else if (isCurrent && this.makeTileCurrent(tile)) {
@@ -1465,12 +1481,11 @@ class TileManager {
 		}
 
 		// If we dehydrated a visible tile, wait for it to be ready before drawing
-		if (dehydratedVisible) {
+		if (dehydratedVisible && !this.pausedForDehydration) {
 			app.sectionContainer.pauseDrawing();
-			this.endTransaction(() => {
-				app.sectionContainer.resumeDrawing();
-			});
-		} else this.endTransaction(null);
+			this.pausedForDehydration = true;
+		}
+		this.endTransaction(null);
 
 		return queue;
 	}
@@ -1514,7 +1529,7 @@ class TileManager {
 		// Ensure tiles exist for requested coordinates
 		for (let i = 0; i < coordsQueue.length; i++) {
 			const key = coordsQueue[i].key();
-			let tile: Tile = this.tiles[key];
+			let tile: Tile = this.tiles.get(key);
 
 			if (!tile) {
 				tile = this.createTile(coordsQueue[i], key);
@@ -1592,7 +1607,9 @@ class TileManager {
 	}
 
 	public static refreshTilesInBackground() {
-		for (const key in this.tiles) this.tiles[key].forceKeyframe();
+		for (const tile of this.tiles.values()) {
+			tile.forceKeyframe();
+		}
 	}
 
 	public static setDebugDeltas(state: boolean) {
@@ -1601,7 +1618,7 @@ class TileManager {
 	}
 
 	public static get(key: string): Tile {
-		return this.tiles[key];
+		return this.tiles.get(key);
 	}
 
 	private static pixelCoordsToTwipTileBounds(coords: TileCoordData): number[] {
@@ -1625,8 +1642,8 @@ class TileManager {
 		let needsNewTiles = false;
 		const calc = app.map._docLayer.isCalc();
 
-		for (const key in this.tiles) {
-			const coords: TileCoordData = this.tiles[key].coords;
+		this.tiles.forEach((tile, key) => {
+			const coords: TileCoordData = tile.coords;
 			const tileRectangle = this.pixelCoordsToTwipTileBounds(coords);
 
 			if (
@@ -1635,11 +1652,11 @@ class TileManager {
 				(invalidatedRectangle.intersectsRectangle(tileRectangle) ||
 					(calc && !this.tileZoomIsCurrent(coords))) // In calc, we invalidate all tiles with different zoom levels.
 			) {
-				if (this.tiles[key].distanceFromView === 0) needsNewTiles = true;
+				if (tile.distanceFromView === 0) needsNewTiles = true;
 
 				this.invalidateTile(key, wireId);
 			}
-		}
+		});
 
 		if (
 			app.map._docLayer._debug.tileInvalidationsOn &&
@@ -1935,7 +1952,7 @@ class TileManager {
 
 		var coords = this.tileMsgToCoords(tileMsgObj);
 		var key = coords.key();
-		var tile = this.tiles[key];
+		let tile = this.tiles.get(key);
 
 		if (!tile) {
 			tile = this.createTile(coords, key);
@@ -1948,18 +1965,13 @@ class TileManager {
 		if (tile.invalidFrom == tile.wireId)
 			window.app.console.debug('Nasty - updated wireId matches old one');
 
-		var hasContent = img != null;
+		var hasContent = img != null && img.rawData.length > 0;
 
 		// obscure case: we could have garbage collected the
 		// keyframe content in JS but coolwsd still thinks we have
 		// it and now we just have a delta with nothing to apply
 		// it to; if so, mark it bad to re-fetch.
-		if (
-			img &&
-			!img.isKeyframe &&
-			!tile.hasKeyframe() &&
-			tile.hasPendingKeyframe === 0
-		) {
+		if (img && !img.isKeyframe && !tile.hasKeyframe()) {
 			window.app.console.debug(
 				'Unusual: Delta sent - but we have no keyframe for ' + key,
 			);
@@ -1976,27 +1988,25 @@ class TileManager {
 
 		// updates don't need more chattiness with a tileprocessed
 		if (hasContent) {
-			// Only decompress deltas for tiles that are either current, have image data or
-			// have a pending update (so will imminently have image data). This stops
-			// prefetching from blowing past GC limits.
-			const shouldDecompressDelta =
-				tile.distanceFromView === 0 ||
-				tile.imgDataCache ||
-				tile.hasPendingUpdate();
-
-			if (shouldDecompressDelta) {
-				this.applyCompressedDelta(tile, img.rawData, img.isKeyframe, true);
-			} else if (img.isKeyframe) {
-				tile.rawDeltas = img.rawData;
+			// Store the compressed tile data for later decompression and
+			// display. This lets us store many more tiles than if we were
+			// to only store the decompressed tile data.
+			const rawDelta = new RawDelta(
+				img.rawData,
+				++tile.deltaId,
+				img.isKeyframe,
+			);
+			if (img.isKeyframe || tile.hasKeyframe()) {
+				tile.rawDeltas.push(rawDelta);
 			} else {
-				// FIXME: this is not beautiful; but no concatenate here.
-				const tmp = new Uint8Array(
-					tile.rawDeltas.byteLength + img.rawData.byteLength,
+				window.app.console.warn(
+					'Unusual: attempt to append a delta when we have no keyframe.',
 				);
-				tmp.set(tile.rawDeltas, 0);
-				tmp.set(img.rawData, tile.rawDeltas.byteLength);
-				tile.rawDeltas = tmp;
 			}
+
+			// Only decompress deltas for tiles that are current. This stops
+			// prefetching from blowing past GC limits.
+			if (tile.distanceFromView === 0) this.rehydrateTile(tile, true);
 		}
 
 		this.queueAcknowledgement(tileMsgObj);
@@ -2068,8 +2078,7 @@ class TileManager {
 		if (app.map._docLayer.isCalc() && !app.map._docLayer._gotFirstCellCursor)
 			return;
 
-		// be sure canvas is initialized already, has correct size and that we aren't
-		// currently processing a transaction
+		// be sure canvas is initialized already and has the correct size.
 		const size: any = map.getSize();
 		if (size.x === 0 || size.y === 0) {
 			setTimeout(
@@ -2079,6 +2088,16 @@ class TileManager {
 				1,
 			);
 			return;
+		}
+
+		// If an update occurs while we're paused for dehydration, we haven't been able to
+		// keep up with scrolling. In this case, we should stop expanding the current area
+		// so that it takes less time to dehydrate it.
+		if (this.pausedForDehydration) {
+			if (this.shrinkCurrentId) clearTimeout(this.shrinkCurrentId);
+			this.shrinkCurrentId = setTimeout(() => {
+				this.shrinkCurrentId = null;
+			}, 100);
 		}
 
 		if (app.file.fileBasedView) {
@@ -2111,39 +2130,75 @@ class TileManager {
 		switch (e.data.message) {
 			case 'endTransaction':
 				for (const x of e.data.deltas) {
-					const tile = this.tiles[x.key];
+					const tile = this.tiles.get(x.key);
 
 					if (!tile) {
-						window.app.console.warn(
-							'Tile deleted during rawDelta decompression.',
-						);
+						if (this.debugDeltas)
+							window.app.console.warn(
+								'Tile deleted during rawDelta decompression.',
+							);
 						continue;
 					}
 
+					if (!x.deltas) {
+						// This path is taken when this is called on the DOM thread (i.e. the worker
+						// hasn't decompressed the raw delta)
+						x.deltas = (window as any).fzstd.decompress(x.rawDelta);
+						if (x.isKeyframe) {
+							x.keyframeBuffer = new Uint8ClampedArray(
+								e.data.tileSize * e.data.tileSize * 4,
+							);
+							x.keyframeDeltaSize = L.CanvasTileUtils.unrle(
+								x.deltas,
+								e.data.tileSize,
+								e.data.tileSize,
+								x.keyframeBuffer,
+							);
+						} else x.keyframeDeltaSize = 0;
+					}
+
+					let rawDeltas: any[] = [];
+					const firstDelta = tile.rawDeltas.findIndex((d) => d.id === x.ids[0]);
+					const lastDelta = tile.rawDeltas.findIndex((d) => d.id === x.ids[1]);
+					if (firstDelta !== -1 && lastDelta !== -1)
+						rawDeltas = tile.rawDeltas.slice(firstDelta, lastDelta + 1);
+					else
+						window.app.console.warn(
+							'Unusual: Received unknown decompressed keyframe delta(s)',
+						);
+
 					let keyframeImage = null;
-					if (x.isKeyframe)
+					if (x.isKeyframe) {
 						keyframeImage = new ImageData(
 							x.keyframeBuffer,
 							e.data.tileSize,
 							e.data.tileSize,
 						);
+					} else if (tile.decompressedId !== 0) {
+						if (x.ids[0] !== tile.decompressedId + 1) {
+							window.app.console.warn(
+								'Unusual: Received discontiguous decompressed delta',
+							);
+						}
+					} else {
+						if (this.debugDeltas)
+							window.app.console.warn(
+								"Decompressed delta received on GC'd tile",
+							);
+						continue;
+					}
+
 					this.applyDelta(
 						tile,
-						x.rawDelta,
+						rawDeltas,
 						x.deltas,
 						x.keyframeDeltaSize,
 						keyframeImage,
 						x.wireMessage,
 					);
 
-					if (tile.imgDataCache) {
-						bitmaps.push(
-							createImageBitmap(tile.imgDataCache, {
-								premultiplyAlpha: 'none',
-							}),
-						);
-						pendingDeltas.push(x);
-					}
+					this.createTileBitmap(tile, x, pendingDeltas, bitmaps);
+					tile.decompressedId = x.ids[1];
 				}
 
 				Promise.all(bitmaps).then((bitmaps) => {
@@ -2174,7 +2229,7 @@ class TileManager {
 			for (let i = 0; i < queue.length; i++) {
 				coords = queue[i];
 				key = coords.key();
-				if (!this.tiles[key]) this.createTile(coords, key);
+				if (!this.tiles.has(key)) this.createTile(coords, key);
 			}
 
 			this.sendTileCombineRequest(queue);
@@ -2230,8 +2285,8 @@ class TileManager {
 		const coordList = Array<TileCoordData>();
 		const zoom = app.map.getZoom();
 
-		for (const [, value] of Object.entries(this.tiles)) {
-			const coords = (value as Tile).coords;
+		for (const tile of this.tiles.values()) {
+			const coords = tile.coords;
 			if (
 				coords.z === zoom &&
 				rectangle.intersectsRectangle([
@@ -2341,14 +2396,14 @@ class TileManager {
 
 			this.sortFileBasedQueue(queue);
 
-			for (const key in this.tiles) {
+			for (const tile of this.tiles.values()) {
 				// Visible tiles' distance property will be set zero below by makeTileCurrent.
-				this.tiles[key].distanceFromView = Number.MAX_SAFE_INTEGER;
+				tile.distanceFromView = Number.MAX_SAFE_INTEGER;
 			}
 
 			this.beginTransaction();
 			for (i = 0; i < queue.length; i++) {
-				const tempTile = this.tiles[queue[i].key()];
+				const tempTile = this.tiles.get(queue[i].key());
 
 				if (tempTile) this.makeTileCurrent(tempTile);
 			}
@@ -2364,7 +2419,7 @@ class TileManager {
 			var tileCombineQueue = [];
 			for (var i = 0; i < queue.length; i++) {
 				var key = queue[i].key();
-				var tile = this.tiles[key];
+				let tile = this.tiles.get(key);
 				if (!tile) tile = this.createTile(queue[i], key);
 				if (tile.needsFetch()) tileCombineQueue.push(queue[i]);
 			}
@@ -2378,7 +2433,7 @@ class TileManager {
 	// so we match this to a new incoming tile to unset
 	// the invalid state later.
 	public static invalidateTile(key: any, wireId: number) {
-		const tile: Tile = this.tiles[key];
+		const tile: Tile = this.tiles.get(key);
 		if (!tile) return;
 
 		tile.invalidateCount++;
@@ -2387,8 +2442,7 @@ class TileManager {
 			app.map._debug.tileDataAddInvalidate();
 		}
 
-		if (!tile.hasContent() && tile.hasPendingKeyframe === 0)
-			this.removeTile(key);
+		if (!tile.hasContent()) this.removeTile(key);
 		else {
 			if (this.debugDeltas)
 				window.app.console.debug(

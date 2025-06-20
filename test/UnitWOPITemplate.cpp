@@ -38,8 +38,8 @@ public:
     }
 
     virtual bool handleHttpRequest(const Poco::Net::HTTPRequest& request,
-                                   Poco::MemoryInputStream& /*message*/,
-                                   std::shared_ptr<StreamSocket>& socket) override
+                                   std::istream& /*message*/,
+                                   const std::shared_ptr<StreamSocket>& socket) override
     {
         const Poco::URI uriReq(request.getURI());
         LOG_TST("FakeWOPIHost: " << request.getMethod() << " request: " << uriReq.toString());

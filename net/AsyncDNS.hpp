@@ -45,8 +45,7 @@ public:
     typedef std::function<void(const HostEntry& hostEntry)> DNSThreadFn;
     typedef std::function<std::string()> DNSThreadDumpStateFn;
 
-    static void lookup(const std::string& searchEntry,
-                       const DNSThreadFn& cb,
+    static void lookup(std::string searchEntry, DNSThreadFn cb,
                        const DNSThreadDumpStateFn& dumpState);
 
 private:
@@ -61,14 +60,22 @@ private:
         std::string query;
         AsyncDNS::DNSThreadFn cb;
         AsyncDNS::DNSThreadDumpStateFn dumpState;
+
+        Lookup()
+        {
+        }
+        Lookup(const std::string& q, const AsyncDNS::DNSThreadFn& c, const AsyncDNS::DNSThreadDumpStateFn& d)
+            : query(q),
+            cb(c),
+            dumpState(d)
+        {
+        }
     };
     std::queue<Lookup> _lookups;
     Lookup _activeLookup;
 
     void resolveDNS();
-    void addLookup(const std::string& lookup,
-                   const DNSThreadFn& cb,
-                   const DNSThreadDumpStateFn& dumpState);
+    void addLookup(std::string lookup, DNSThreadFn cb, const DNSThreadDumpStateFn& dumpState);
 
     void startThread();
     void joinThread();

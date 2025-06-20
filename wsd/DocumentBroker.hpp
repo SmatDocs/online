@@ -14,9 +14,9 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <filesystem>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -419,7 +419,7 @@ public:
     };
     void handleClipboardRequest(ClipboardRequest type,  const std::shared_ptr<StreamSocket> &socket,
                                 const std::string &viewId, const std::string &tag,
-                                const std::shared_ptr<std::string> &data);
+                                const std::string &clipFile);
     static bool lookupSendClipboardTag(const std::shared_ptr<StreamSocket> &socket,
                                        const std::string &tag, bool sendError = false);
 
@@ -584,7 +584,7 @@ public:
                                    const std::function<void(const std::string&, bool)>& finishedCB,
                                    const std::shared_ptr<ClientSession>& session);
 
-    static Poco::URI getPresetUploadBaseUrl(Poco::URI uri);
+    static Poco::URI getPresetUploadBaseUrl(const Poco::URI& uri);
 
     static std::shared_ptr<const http::Response> sendHttpSyncRequest(const std::string& url,
                                                                      const std::string& logContext);
@@ -1654,6 +1654,12 @@ private:
     /// Called when document conflict is detected (i.e. it changed in storage).
     void handleDocumentConflict();
 
+    /// if _isViewSettingsAccessibilityEnabled is set then set
+    /// accessibilityState=true in @message and force-enable
+    /// accessibility on for viewId
+    std::string applyViewAccessibility(const std::string& message,
+                                       const std::string& viewId);
+
     /// What type are we: affects priority.
     const Poco::URI _uriPublic;
 
@@ -1784,6 +1790,8 @@ private:
     /// True for file that COOLWSD::IsViewFileExtension return true.
     /// These files, such as PDF, don't have a reliable ModifiedStatus.
     bool _isViewFileExtension;
+
+    bool _isViewSettingsAccessibilityEnabled;
 
     /// True iff the config per_document.always_save_on_exit is true.
     const bool _alwaysSaveOnExit : 1;

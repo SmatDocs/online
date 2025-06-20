@@ -95,9 +95,11 @@ public:
     /// Parameters:
     /// socket: the TCP socket which received the upgrade request
     /// request: the HTTP upgrade request to WebSocket
+    /// expectedOrigin: derived from serverurl
+    /// allowedOrigin: if origin is allowed using setting "indirection_endpoint.geolocation_setup.allowed_websocket_origins"
     template <typename T>
     WebSocketHandler(const std::shared_ptr<StreamSocket>& socket, const T& request,
-                     const std::string& expectedOrigin = "")
+                     const std::string& expectedOrigin = "", bool allowedOrigin = false)
         : WebSocketHandler(/*isClient=*/false, /*isMasking=*/false)
     {
         if (!socket)
@@ -108,7 +110,7 @@ public:
 
         // As a server, respond with 101 protocol-upgrade.
         assert(!_isClient);
-        upgradeToWebSocket(socket, request, expectedOrigin);
+        upgradeToWebSocket(socket, request, expectedOrigin, allowedOrigin);
     }
 
     /// Status codes sent to peer on shutdown.
@@ -200,9 +202,9 @@ protected:
             return;
         }
 
-        if (socket->isShutdown())
+        if (!socket->isOpen())
         {
-            LOG_DBG("Socket is shut down. Cannot send Close Frame");
+            LOG_DBG("Socket is not open. Cannot send Close Frame");
             return;
         }
 
@@ -269,7 +271,7 @@ public:
     bool isConnected() const
     {
         std::shared_ptr<StreamSocket> socket = _socket.lock();
-        return socket && !socket->isShutdown();
+        return socket && socket->isOpen();
     }
 
 private:
@@ -292,7 +294,7 @@ private:
             LOGA_TRC(WebSocket, "Shutdown: Closing Connection " << (silent ? "(silent)" : "(coop)"));
             if (!silent)
                 sendCloseFrame(statusCode, statusMessage);
-            socket->shutdown();
+            socket->asyncShutdown();
             socket->ignoreInput();
             assert(socket->getInBuffer().empty() &&
                    "Socket buffer must be empty after ignoreInput");
@@ -755,7 +757,7 @@ public:
     {
         std::shared_ptr<StreamSocket> socket = _socket.lock();
         if (socket)
-            socket->flush();
+            socket->attemptWrites();
     }
 
 protected:
@@ -841,9 +843,9 @@ protected:
             return -1;
         }
 
-        if (socket->isShutdown())
+        if (!socket->isOpen())
         {
-            LOG_DBG("Socket is shut down. Cannot send WS frame");
+            LOG_DBG("Socket is not open. Cannot send WS frame");
             return 0;
         }
 
@@ -1009,7 +1011,7 @@ protected:
     template <typename T>
     void upgradeToWebSocket(const std::shared_ptr<StreamSocket>& socket,
                             [[maybe_unused]] const T& req,
-                            [[maybe_unused]] const std::string& expectedOrigin)
+                            [[maybe_unused]] const std::string& expectedOrigin, bool allowedOrigin)
     {
         assert(socket && "Must have a valid socket");
         LOGA_TRC(WebSocket, "Upgrading to WebSocket");
@@ -1030,10 +1032,10 @@ protected:
          * 403 Forbidden status code.
          */
         const std::string origin = req.get("Origin", "");
-        if (origin != expectedOrigin)
+        if (!allowedOrigin && origin != expectedOrigin)
         {
-            LOG_ERR("Rejecting WebSocket upgrade with: origin [" << origin << ']' <<
-                    " expected [" << expectedOrigin << "] instead");
+            LOG_ERR("Rejecting WebSocket upgrade with: origin [" << origin << "] expected ["
+                                                                 << expectedOrigin << "] instead");
             HttpHelper::sendErrorAndShutdown(http::StatusCode::Forbidden, socket);
             return;
         }
@@ -1079,7 +1081,7 @@ protected:
                 else
                 {
                     LOG_ERR("Server returned invalid accept token during handshake. Disconnecting");
-                    socket->shutdown();
+                    socket->asyncShutdown();
                 }
             },
             socket->getFD());
@@ -1089,7 +1091,7 @@ protected:
         {
             // Error: Interrupt the transfer.
             LOG_ERR("Error in client websocket upgrade response. Disconnecting");
-            socket->shutdown();
+            socket->asyncShutdown();
             return;
         }
 

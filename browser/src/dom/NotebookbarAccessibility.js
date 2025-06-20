@@ -3,7 +3,7 @@
 	This class is used for managing the accessibility keys of notebookbar control.
 */
 
-/* global app NotebookbarAccessibilityDefinitions _ */
+/* global JSDialog app NotebookbarAccessibilityDefinitions _ */
 
 /*
 	This class relies on following id convention (example for "Home" tab):
@@ -61,11 +61,11 @@ var NotebookbarAccessibility = function() {
 
 		for (var i = 0; i < this.activeTabPointers.contentList.length; i++) {
 			var element = document.getElementById(this.activeTabPointers.contentList[i].id);
-			if (element) {
+			if (element && element.offsetParent !== null) {
 				element.accessKey = this.activeTabPointers.contentList[i].combination;
 				this.activeTabPointers.infoBoxList.push(this.addInfoBox(element));
 			}
-			else
+			else if(!element) // element is null
 				console.warn('NotebookbarAccessibility: Element with id ' + this.activeTabPointers.contentList[i].id + ' doesn\'t exist.');
 		}
 	};
@@ -76,15 +76,9 @@ var NotebookbarAccessibility = function() {
 	*/
 	this.mayShowAcceleratorInfoBoxes = false;
 	this.onDocumentKeyDown = function(event) {
-		if (this.initialized) {
-			if (app.map && app.map.jsdialog && app.map.jsdialog.hasDialogOpened()) {
-				if (event.keyCode === 18)
-					document.body.classList.add('activate-underlines');
-			}
-			else if (event.keyCode === 18 || (event.keyCode === 18 && event.shiftKey)) {
+			 if (this.initialized && (event.keyCode === 18 || (event.keyCode === 18 && event.shiftKey))) {
 				this.mayShowAcceleratorInfoBoxes = true;
 			}
-		}
 	};
 
 	this.onDocumentKeyUp = function(event) {
@@ -301,7 +295,7 @@ var NotebookbarAccessibility = function() {
 		else if (key === 'ARROWDOWN') {
 			// Try to set focus on the first button of the tab content.
 			var currentSelectedTabPage = this.getCurrentSelectedTabPage();
-			var firstSelectableElement = currentSelectedTabPage.querySelector('.unobutton');
+			var firstSelectableElement = JSDialog.FindFocusableElement(currentSelectedTabPage,'next');
 			firstSelectableElement.focus();
 		}
 		else if (key === 'ARROWRIGHT') {

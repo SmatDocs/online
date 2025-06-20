@@ -105,14 +105,15 @@ public:
 
     std::map<std::string, std::string>
         parallelizeCheckInfo(const Poco::Net::HTTPRequest& request,
-                             Poco::MemoryInputStream& /*message*/,
-                             std::shared_ptr<StreamSocket>& /*socket*/) override
+                             std::istream& /*message*/,
+                             const std::shared_ptr<StreamSocket>& /*socket*/) override
     {
         std::string uri = Uri::decode(request.getURI());
         LOG_TST("parallelizeCheckInfo requested: " << uri);
         return std::map<std::string, std::string>{
             {"wopiSrc", "/wopi/files/0"},
             {"accessToken", "anything"},
+            {"noAuthHeader", ""},
             {"permission", ""},
             {"configid", _configId}
         };

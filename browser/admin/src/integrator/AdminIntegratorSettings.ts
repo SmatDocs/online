@@ -21,6 +21,7 @@ var _: any = (s) => s.toLocaleString();
 interface Window {
 	accessToken?: string;
 	accessTokenTTL?: string;
+	enableAccessibility?: boolean;
 	enableDebug?: boolean;
 	wopiSettingBaseUrl?: string;
 	iframeType?: string;
@@ -37,6 +38,7 @@ interface ConfigData {
 	autotext: ConfigItem[] | null;
 	wordbook: ConfigItem[] | null;
 	browsersetting: ConfigItem[] | null;
+	viewsetting: ConfigItem[] | null;
 	xcu: ConfigItem[] | null;
 }
 
@@ -66,6 +68,10 @@ const initTranslationStr = () => {
 class SettingIframe {
 	private wordbook;
 	private xcuEditor;
+	private _viewSetting;
+	private _viewSettingLabels = {
+		accessibilityState: _('Accessibility'),
+	};
 
 	private API_ENDPOINTS = {
 		uploadSettings: window.enableDebug
@@ -81,6 +87,7 @@ class SettingIframe {
 		wordBookUpload: () => this.settingConfigBasePath() + '/wordbook/',
 		browserSettingsUpload: () =>
 			this.settingConfigBasePath() + '/browsersetting/',
+		viewSettingsUpload: () => this.settingConfigBasePath() + '/viewsetting/',
 		XcuUpload: () => this.settingConfigBasePath() + '/xcu/',
 	};
 
@@ -101,6 +108,14 @@ class SettingIframe {
 		await this.uploadFile(this.PATH.wordBookUpload(), file);
 	}
 
+	async uploadViewSettingFile(
+		filename: string,
+		content: string,
+	): Promise<void> {
+		const file = new File([content], filename, { type: 'text/plain' });
+		await this.uploadFile(this.PATH.viewSettingsUpload(), file);
+	}
+
 	private initWindowVariables(): void {
 		const element = document.getElementById('initial-variables');
 		if (!element) return;
@@ -108,6 +123,7 @@ class SettingIframe {
 		window.accessToken = element.dataset.accessToken;
 		window.accessTokenTTL = element.dataset.accessTokenTtl;
 		window.enableDebug = element.dataset.enableDebug === 'true';
+		window.enableAccessibility = element.dataset.enableAccessibility === 'true';
 		window.wopiSettingBaseUrl = element.dataset.wopiSettingBaseUrl;
 		window.iframeType = element.dataset.iframeType;
 		window.cssVars = element.dataset.cssVars;
@@ -119,6 +135,25 @@ class SettingIframe {
 				(document as any).adoptedStyleSheets.push(sheet);
 			}
 		}
+	}
+
+	private validateJsonFile(file: File): Promise<any> {
+		return new Promise((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = (event) => {
+				try {
+					const content = event.target?.result as string;
+					const jsonData = JSON.parse(content);
+					resolve(jsonData);
+				} catch (error) {
+					reject(new Error(_('Invalid JSON file')));
+				}
+			};
+			reader.onerror = () => {
+				reject(new Error(_('Error reading file')));
+			};
+			reader.readAsText(file);
+		});
 	}
 
 	private insertConfigSections(): void {
@@ -139,7 +174,7 @@ class SettingIframe {
 				uploadPath: this.PATH.autoTextUpload(),
 			},
 			{
-				sectionTitle: _('Custom Dictionaries'),
+				sectionTitle: _('Custom dictionaries'),
 				sectionDesc: _(
 					'Add or edit words in a spell check dictionary. Words in your wordbook (.dic) will be available for spelling checks.',
 				),
@@ -163,7 +198,7 @@ class SettingIframe {
 				enabledFor: 'userconfig',
 			},
 			{
-				sectionTitle: _('Document Settings'),
+				sectionTitle: _('Document settings'),
 				sectionDesc: _('Adjust how office documents behave.'),
 				listId: 'XcuList',
 				inputId: 'XcuFile',
@@ -198,7 +233,7 @@ class SettingIframe {
 					fileInput.click();
 				});
 
-				fileInput.addEventListener('change', () => {
+				fileInput.addEventListener('change', async () => {
 					if (fileInput.files?.length) {
 						if (cfg.uploadPath === this.PATH.wordBookUpload()) {
 							this.wordbook.wordbookValidation(
@@ -206,7 +241,31 @@ class SettingIframe {
 								fileInput.files[0],
 							);
 						} else {
-							this.uploadFile(cfg.uploadPath, fileInput.files[0]);
+							let file = fileInput.files[0];
+
+							if (cfg.uploadPath === this.PATH.browserSettingsUpload()) {
+								try {
+									await this.validateJsonFile(file);
+								} catch (error) {
+									SettingIframe.showErrorModal(
+										_(
+											'Interface settings file is not valid JSON. Please check the file and try again.',
+										),
+									);
+
+									return;
+								}
+
+								// We don't allow users to upload the Interface (browser) settings file with a different name,
+								// as we use the static name 'browsersetting.json' on the coolwsd side to upload/update browser settings.
+								if (file.name !== 'browsersetting.json') {
+									file = new File([file], 'browsersetting.json', {
+										type: file.type,
+										lastModified: file.lastModified,
+									});
+								}
+							}
+							this.uploadFile(cfg.uploadPath, file);
 						}
 						fileInput.value = '';
 					}
@@ -555,6 +614,204 @@ class SettingIframe {
 		});
 	}
 
+	private generateViewSettingUI(data: any) {
+		this._viewSetting = data;
+		const settingsContainer = document.getElementById('allConfigSection');
+		if (!settingsContainer) {
+			return;
+		}
+
+		let viewContainer = document.getElementById('view-section');
+		if (viewContainer) {
+			viewContainer.remove();
+		}
+
+		viewContainer = document.createElement('div');
+		viewContainer.id = 'view-section';
+		viewContainer.classList.add('section');
+
+		let elem = document.createElement('h3');
+		elem.textContent = _('View Settings');
+		viewContainer.appendChild(elem);
+
+		elem = document.createElement('p');
+		elem.textContent = _('Adjust view settings.');
+		viewContainer.appendChild(elem);
+
+		const divContainer = document.createElement('div');
+		divContainer.id = 'view-editor';
+		viewContainer.appendChild(divContainer);
+
+		const fieldset = document.createElement('fieldset');
+		fieldset.classList.add('view-settings-fieldset');
+		divContainer.appendChild(fieldset);
+
+		elem = document.createElement('legend');
+		elem.textContent = _('Option');
+		fieldset.appendChild(elem);
+
+		for (const key in data) {
+			if (typeof data[key] === 'boolean') {
+				const label = this._viewSettingLabels[key];
+				if (!label) {
+					continue;
+				}
+
+				const checkboxContainer = document.createElement('span');
+				checkboxContainer.className =
+					'checkbox-radio-switch checkbox-radio-switch-checkbox checkbox-wrapper';
+				fieldset.appendChild(checkboxContainer);
+
+				const checkbox = document.createElement('input');
+				checkbox.type = 'checkbox';
+				checkbox.className = 'checkbox-radio-switch-input';
+				checkbox.checked = data[key];
+				if (key === 'accessibilityState') {
+					checkbox.checked = checkbox.checked && window.enableAccessibility;
+					checkbox.disabled = !window.enableAccessibility;
+				}
+				checkboxContainer.appendChild(checkbox);
+
+				const checkboxContent = document.createElement('span');
+				checkboxContent.className =
+					'checkbox-content checkbox-content-checkbox checkbox-content--has-text checkbox-radio-switch__content';
+				checkboxContainer.appendChild(checkboxContent);
+
+				const checkboxIcon = document.createElement('span');
+				checkboxIcon.className = `checkbox-content-icon checkbox-radio-switch__icon`;
+				checkboxIcon.ariaHidden = 'true';
+				checkboxContent.appendChild(checkboxIcon);
+
+				const materialIcon = document.createElement('span');
+				materialIcon.className = 'material-design-icon checkbox-marked-icon';
+				materialIcon.ariaHidden = 'true';
+
+				const iconSvg = `
+					<svg fill="currentColor" class="material-design-icon__svg" width="24" height="24" viewBox="0 0 24 24">
+					${
+						checkbox.checked
+							? `<path d="M10,17L5,12L6.41,10.58L10,14.17L17.59,6.58L19,8M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3Z">
+						  </path>`
+							: `<path d="M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3M19,5V19H5V5H19Z">
+						  </path>`
+					}
+					</svg>`;
+
+				materialIcon.innerHTML = iconSvg;
+				checkboxIcon.appendChild(materialIcon);
+
+				const checkboxText = document.createElement('span');
+				checkboxText.className =
+					'checkbox-content__text checkbox-radio-switch__text';
+				checkboxText.textContent = label;
+				checkboxContent.appendChild(checkboxText);
+
+				if (checkbox.disabled) {
+					if (key === 'accessibilityState') {
+						// This has no effect if coolwsd accessibility.enable is not set. So present as disabled,
+						// and warn that it cannot be toggled unless coolwsd accessibility is on so we don't have
+						// a situation of a checkbox that doesn't actually do anything.
+						const warningText = document.createElement('span');
+						warningText.className = 'ui-state-error-text';
+						warningText.textContent = _(
+							'(Warning: Server accessibility must be enabled to toggle)',
+						);
+						checkboxContent.appendChild(warningText);
+					}
+				} else {
+					checkboxContainer.addEventListener(
+						'click',
+						function () {
+							const currentChecked = !this.checked;
+							this.checked = currentChecked;
+							if (currentChecked) {
+								checkboxContainer.classList.remove(
+									'checkbox-radio-switch--checked',
+								);
+							} else {
+								checkboxContainer.classList.add(
+									'checkbox-radio-switch--checked',
+								);
+							}
+							materialIcon.innerHTML = `
+	<svg fill="currentColor" class="material-design-icon__svg" width="24" height="24" viewBox="0 0 24 24">
+	${
+		currentChecked
+			? `<path d="M10,17L5,12L6.41,10.58L10,14.17L17.59,6.58L19,8M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3Z">
+							</path>`
+			: `<path d="M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3M19,5V19H5V5H19Z">
+							</path>`
+	}
+	</svg>`;
+							data[key] = currentChecked;
+						}.bind(checkbox),
+					);
+				}
+			}
+		}
+
+		const actionsContainer = document.createElement('div');
+		actionsContainer.classList.add('xcu-editor-actions');
+
+		const resetButton = document.createElement('button');
+		resetButton.type = 'button';
+		resetButton.id = 'xcu-reset-button';
+		resetButton.classList.add('button', 'button--vue-secondary');
+		resetButton.title = _('Reset to default View settings');
+		resetButton.innerHTML = `
+			<span class="button__wrapper">
+				<span class="button__icon xcu-reset-icon">
+				<svg fill="currentColor" width="24" height="24" viewBox="0 0 24 24">
+					<!-- Replace with your Reset icon SVG path -->
+					<path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 .34-.03.67-.08 1h2.02c.05-.33.06-.66.06-1 0-4.42-3.58-8-8-8zm-6 7c0-.34.03-.67.08-1H4.06c-.05.33-.06.66-.06 1 0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z"></path>
+				</svg>
+				</span>
+			</span>
+			`;
+
+		resetButton.addEventListener('click', async () => {
+			const confirmed = window.confirm(
+				_('Are you sure you want to reset View Settings?'),
+			);
+			if (!confirmed) {
+				return;
+			}
+			resetButton.disabled = true;
+			const defaultViewSetting = { accessibilityState: false };
+			this.uploadViewSettingFile(
+				'viewsetting.json',
+				JSON.stringify(defaultViewSetting),
+			);
+			resetButton.disabled = false;
+		});
+
+		const saveButton = document.createElement('button');
+		saveButton.type = 'button';
+		saveButton.id = 'xcu-save-button';
+		saveButton.classList.add('button', 'button-primary');
+		saveButton.title = _('Save View Settings');
+		saveButton.innerHTML = `
+			<span class="button__wrapper">
+				<span class="button--text-only">Save</span>
+			</span>
+			`;
+
+		saveButton.addEventListener('click', async () => {
+			saveButton.disabled = true;
+			this.uploadViewSettingFile(
+				'viewsetting.json',
+				JSON.stringify(this._viewSetting),
+			);
+			saveButton.disabled = false;
+		});
+
+		actionsContainer.appendChild(resetButton);
+		actionsContainer.appendChild(saveButton);
+		viewContainer.appendChild(actionsContainer);
+
+		settingsContainer.appendChild(viewContainer);
+	}
+
 	private async populateSharedConfigUI(data: ConfigData): Promise<void> {
 		const browserSettingButton = document.getElementById(
 			'uploadBrowserSettingsButton',
@@ -577,6 +834,17 @@ class SettingIframe {
 				xcuSettingButton.style.display = 'none';
 			} else {
 				xcuSettingButton.style.removeProperty('display');
+			}
+		}
+
+		if (data.kind === 'user') {
+			if (data.viewsetting && data.viewsetting.length > 0) {
+				const fileId = data.viewsetting[0].uri;
+				const fetchContent = await this.fetchSettingFile(fileId);
+				this.generateViewSettingUI(JSON.parse(fetchContent));
+			} else {
+				const defaultViewSetting = { accessibilityState: false };
+				this.generateViewSettingUI(defaultViewSetting);
 			}
 		}
 
@@ -682,6 +950,32 @@ document.addEventListener('DOMContentLoaded', () => {
 		initTranslationStr();
 		(window as any).settingIframe = new SettingIframe();
 		(window as any).settingIframe.init();
+		const postHeight = () => {
+			window.parent.postMessage(
+				{
+					MessageId: 'Iframe_Height',
+					SendTime: Date.now(),
+					Values: {
+						ContentHeight: document.documentElement.offsetHeight + 'px',
+					},
+				},
+				'*',
+			);
+		};
+
+		let timeout: any;
+		const debouncePostHeight = () => {
+			clearTimeout(timeout);
+			timeout = setTimeout(postHeight, 100);
+		};
+
+		const mutationObserver = new MutationObserver(debouncePostHeight);
+		mutationObserver.observe(document.body, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+			characterData: true,
+		});
 	}
 });
 

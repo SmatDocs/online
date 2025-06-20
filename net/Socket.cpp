@@ -716,7 +716,7 @@ int SocketPoll::poll(int64_t timeoutMaxMicroS, bool justPoll)
                     rc = -1;
                 }
 
-                if (_pollSockets[i]->isShutdown() || !disposition.isContinue())
+                if (!_pollSockets[i]->isOpen() || !disposition.isContinue())
                 {
                     ++itemsErased;
                     LOGA_TRC(Socket, '#' << _pollFds[i].fd << ": Removing socket (at " << i
@@ -805,12 +805,10 @@ void SocketPoll::closeAllSockets()
     removeFromWakeupArray();
     for (std::shared_ptr<Socket> &it : _pollSockets)
     {
-        // first close the underlying socket
-#if !MOBILEAPP
+        // first close the underlying socket/fakeSocket
         it->closeFD(*this);
-#else
-        fakeSocketClose(it->getFD());
-#endif
+        assert(!it->isOpen() && "Socket is still open after closing");
+
         // avoid the socketHandler' getting an onDisconnect
         auto stream = dynamic_cast<StreamSocket *>(it.get());
         if (stream)
@@ -1073,13 +1071,19 @@ void SocketDisposition::execute()
             // Ensure the thread is running before adding callback.
             _toPoll->startThread();
         }
-        _toPoll->addCallback([pollCopy = _toPoll, socket = _socket, socketMoveFn = std::move(_socketMove)]()
-            {
-                pollCopy->insertNewSocket(socket);
-                socketMoveFn(socket);
-            });
 
+        auto callback = [pollCopy = _toPoll, socket = std::move(_socket),
+                         socketMoveFn = std::move(_socketMove)]() mutable
+        {
+            pollCopy->insertNewSocket(socket);
+            socketMoveFn(socket);
+            // Clear lambda's socket capture while in the polling thread
+            socket.reset();
+        };
         _socketMove = nullptr;
+        assert(!_socket && "should be unset after move");
+
+        _toPoll->addCallback(std::move(callback));
         _toPoll = nullptr;
     }
 }
@@ -1122,11 +1126,11 @@ bool StreamSocket::send(const http::Response& response)
 {
     if (response.writeData(_outBuffer))
     {
-        flush();
+        attemptWrites();
         return true;
     }
 
-    shutdown();
+    asyncShutdown();
     return false;
 }
 
@@ -1134,11 +1138,11 @@ bool StreamSocket::send(http::Request& request)
 {
     if (request.writeData(_outBuffer, getSendBufferCapacity()))
     {
-        flush();
+        attemptWrites();
         return true;
     }
 
-    shutdown();
+    asyncShutdown();
     return false;
 }
 
@@ -1147,7 +1151,7 @@ bool StreamSocket::sendAndShutdown(http::Response& response)
     response.header().setConnectionToken(http::Header::ConnectionToken::Close);
     if (send(response))
     {
-        shutdown();
+        asyncShutdown();
         return true;
     }
 
@@ -1583,24 +1587,15 @@ bool StreamSocket::checkRemoval(std::chrono::steady_clock::time_point now)
         LOG_WRN("CheckRemoval: Timeout: {Inactive " << isInactive << ", Termination "
                                                     << isTermination << "}, " << getStatsString(now)
                                                     << ", " << *this);
-        if (_socketHandler)
+        ensureDisconnected();
+        if (!isShutdown())
         {
-            ensureDisconnected();
-            if (!isShutdown())
-            {
-                // Note: Ensure proper semantics of onDisconnect()
-                LOG_WRN("Socket still open post onDisconnect(), forced shutdown.");
-                shutdown(); // signal
-                shutdownConnection(); // real -> setShutdown()
-            }
-        }
-        else
-        {
-            shutdown(); // signal
+            asyncShutdown(); // signal
             shutdownConnection(); // real -> setShutdown()
         }
 
         assert(isShutdown() && "Should have issued shutdown");
+        assert(!isOpen() && "Socket is still open after closing");
         return true;
     }
 
@@ -1611,7 +1606,7 @@ bool StreamSocket::checkRemoval(std::chrono::steady_clock::time_point now)
 
 bool StreamSocket::parseHeader(const std::string_view clientName, std::istream& message,
                                Poco::Net::HTTPRequest& request,
-                               std::chrono::steady_clock::time_point lastHTTPHeader,
+                               std::chrono::steady_clock::time_point& lastHTTPHeader,
                                MessageMap& map)
 {
     assert(map._headerSize == 0 && map._messageSize == 0);
@@ -1734,7 +1729,7 @@ bool StreamSocket::parseHeader(const std::string_view clientName, std::istream& 
                     LOG_ERR("parseHeader: Missing \\r\\n at end of chunk " << chunk << " of length " << chunkLen << ", delay " << delayMs.count() << "ms");
                     LOG_CHUNK("Chunk " << chunk << " is: \n"
                                        << HexUtil::dumpHex("", "", chunkStart, itBody + 1, false));
-                    shutdown();
+                    asyncShutdown();
                     return false; // TODO: throw something sensible in this case
                 }
 
@@ -1754,7 +1749,7 @@ bool StreamSocket::parseHeader(const std::string_view clientName, std::istream& 
         LOG_DBG("parseHeader: Exception caught with "
                 << _inBuffer.size() << " bytes, shutdown: " << exc.displayText() << ", delay "
                 << delayMs.count() << "ms");
-        shutdown();
+        asyncShutdown();
         return false;
     }
     catch (const Poco::Net::UnsupportedRedirectException& exc)
@@ -1762,7 +1757,7 @@ bool StreamSocket::parseHeader(const std::string_view clientName, std::istream& 
         LOG_DBG("parseHeader: Exception caught with "
                 << _inBuffer.size() << " bytes, shutdown: " << exc.displayText() << ", delay "
                 << delayMs.count() << "ms");
-        shutdown();
+        asyncShutdown();
         return false;
     }
     catch (const Poco::Net::HTTPException& exc)
@@ -1770,7 +1765,7 @@ bool StreamSocket::parseHeader(const std::string_view clientName, std::istream& 
         LOG_DBG("parseHeader: Exception caught with "
                 << _inBuffer.size() << " bytes, shutdown: " << exc.displayText() << ", delay "
                 << delayMs.count() << "ms");
-        shutdown();
+        asyncShutdown();
         return false;
     }
     catch (const Poco::Exception& exc)
@@ -1780,7 +1775,7 @@ bool StreamSocket::parseHeader(const std::string_view clientName, std::istream& 
             LOG_DBG("parseHeader: Exception caught with "
                     << _inBuffer.size() << " bytes, shutdown: " << exc.displayText() << ", delay "
                     << delayMs.count() << "ms");
-            shutdown();
+            asyncShutdown();
         }
         else
         {
@@ -1797,7 +1792,7 @@ bool StreamSocket::parseHeader(const std::string_view clientName, std::istream& 
             LOG_DBG("parseHeader: Exception caught with "
                     << _inBuffer.size() << " bytes, shutdown: " << exc.what() << ", delay "
                     << delayMs.count() << "ms");
-            shutdown();
+            asyncShutdown();
         }
         else
         {

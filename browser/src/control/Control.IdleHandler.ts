@@ -14,7 +14,7 @@
  * Class for idle handling of the view.
  */
 
-/* global app L */
+/* global app L TileManager */
 
 declare var mode: any;
 declare var ThisIsTheAndroidApp: any;
@@ -87,6 +87,7 @@ class IdleHandler {
 				  requirements to position them.
 				*/
 				if (this.map._docLayer) {
+					this.map._docLayer.allowDrawing();
 					this.refreshAnnotations();
 				}
 				else {
@@ -205,6 +206,8 @@ class IdleHandler {
 		});
 
 		this._sendInactiveMessage();
+
+		TileManager.clearPreFetch();
 	}
 
 	notifyActive() {

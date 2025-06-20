@@ -99,11 +99,27 @@ class ShapeHandlesSection extends CanvasSectionObject {
 
 	public refreshInfo(info: any) {
 		this.sectionProperties.info = info;
+		this.convertToTileTwipsIfNeeded();
 		this.getHandles();
 		this.updateSize();
 		this.addSubSections();
 		this.sectionProperties.shapeRectangleProperties = this.getShapeRectangleProperties();
 		this.calculateInitialAnglesOfShapeHandlers();
+	}
+
+	private convertToTileTwipsIfNeeded() {
+		if (app.map._docLayer._docType === 'spreadsheet' && this.sectionProperties.info?.handles?.kinds?.rectangle) {
+			const kindList = ['1', '2', '3', '4', '5', '6', '7', '8', '16', '22', '9'];
+
+			for (let i = 0; i < kindList.length; i++) {
+				if (this.sectionProperties.info.handles.kinds.rectangle[kindList[i]]) {
+					const point = new cool.SimplePoint(parseInt(this.sectionProperties.info.handles.kinds.rectangle[kindList[i]][0].point.x), parseInt(this.sectionProperties.info.handles.kinds.rectangle[kindList[i]][0].point.y));
+					app.map._docLayer.sheetGeometry.convertToTileTwips(point);
+					this.sectionProperties.info.handles.kinds.rectangle[kindList[i]][0].point.x = point.x;
+					this.sectionProperties.info.handles.kinds.rectangle[kindList[i]][0].point.y = point.y;
+				}
+			}
+		}
 	}
 
 	public calculateInitialAnglesOfShapeHandlers(shapeRecProps?: any) {
@@ -170,24 +186,30 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		sourceElement.addEventListener('touchcancel', function (e) { app.sectionContainer.onTouchCancel(e); e.stopPropagation(); }, true);
 	}
 
-	getShapeWidth() {
+	getShapeWidth(twips = true) {
 		let middleLeft = this.sectionProperties.info.handles.kinds.rectangle['4'][0];
 		middleLeft = new cool.SimplePoint(parseInt(middleLeft.point.x), parseInt(middleLeft.point.y));
 
 		let middleRight = this.sectionProperties.info.handles.kinds.rectangle['5'][0];
 		middleRight = new cool.SimplePoint(parseInt(middleRight.point.x), parseInt(middleRight.point.y));
 
-		return Math.abs(middleLeft.distanceTo(middleRight.toArray()));
+		if (twips)
+			return Math.abs(middleLeft.distanceTo(middleRight.toArray()));
+		else
+			return Math.abs(middleLeft.pDistanceTo(middleRight.pToArray()));
 	}
 
-	getShapeHeight() {
+	getShapeHeight(twips = true) {
 		let topMiddle = this.sectionProperties.info.handles.kinds.rectangle['2'][0];
 		topMiddle = new cool.SimplePoint(parseInt(topMiddle.point.x), parseInt(topMiddle.point.y));
 
 		let bottomMiddle = this.sectionProperties.info.handles.kinds.rectangle['7'][0];
 		bottomMiddle = new cool.SimplePoint(parseInt(bottomMiddle.point.x), parseInt(bottomMiddle.point.y));
 
-		return Math.abs(topMiddle.distanceTo(bottomMiddle.toArray()));
+		if (twips)
+			return Math.abs(topMiddle.distanceTo(bottomMiddle.toArray()));
+		else
+			return Math.abs(topMiddle.pDistanceTo(bottomMiddle.pToArray()))
 	}
 
 	/*
@@ -197,10 +219,23 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		let topMiddle = this.sectionProperties.info.handles.kinds.rectangle['2'][0];
 		topMiddle = new cool.SimplePoint(parseInt(topMiddle.point.x), parseInt(topMiddle.point.y));
 
-		const center = GraphicSelection.rectangle.center; // number array in twips.
+		const center = this.getShapeCenter();
 
 		const radians = Math.atan2((center[1] - topMiddle.y), (topMiddle.x - center[0]));
 		return radians - Math.PI * 0.5;
+	}
+
+	getShapeCenter(twips = true) {
+		let topLeft = this.sectionProperties.info.handles.kinds.rectangle['1'][0];
+		topLeft = new cool.SimplePoint(parseInt(topLeft.point.x), parseInt(topLeft.point.y));
+
+		let bottomRight = this.sectionProperties.info.handles.kinds.rectangle['8'][0];
+		bottomRight = new cool.SimplePoint(parseInt(bottomRight.point.x), parseInt(bottomRight.point.y));
+
+		if (twips)
+			return [Math.round((topLeft.x + bottomRight.x) / 2), Math.round((topLeft.y + bottomRight.y) / 2)]; // number array in twips.
+		else
+			return [Math.round((topLeft.pX + bottomRight.pX) / 2), Math.round((topLeft.pY + bottomRight.pY) / 2)]; // number array in core pixels.
 	}
 
 	/*
@@ -213,13 +248,13 @@ class ShapeHandlesSection extends CanvasSectionObject {
 
 		return {
 			angleRadian: this.getShapeAngleRadians(),
-			center: GraphicSelection.rectangle.pCenter.slice(),
-			height: this.getShapeHeight() * app.twipsToPixels,
-			width: this.getShapeWidth() * app.twipsToPixels
+			center: this.getShapeCenter(false),
+			height: this.getShapeHeight(false),
+			width: this.getShapeWidth(false)
 		};
 	}
 
-	getScalingHandles(halfWidth: number, halfHeight: number) {
+	private getScalingHandles(halfWidth: number, halfHeight: number) {
 		if (this.sectionProperties.info?.handles?.kinds?.rectangle) {
 			const topLeft = this.sectionProperties.info.handles.kinds.rectangle['1'][0];
 			const topMiddle = this.sectionProperties.info.handles.kinds.rectangle['2'][0];
@@ -241,7 +276,7 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		}
 	}
 
-	getAnchorHandle(halfWidth: number, halfHeight: number) {
+	private getAnchorHandle(halfWidth: number, halfHeight: number) {
 		if (this.sectionProperties.info?.handles?.kinds?.anchor) {
 			const anchor = this.sectionProperties.info.handles.kinds.anchor['16'][0];
 			this.sectionProperties.handles.push({ info: anchor, point: new app.definitions.simplePoint(anchor.point.x - halfWidth, anchor.point.y - halfHeight) });
@@ -288,7 +323,7 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		return new app.definitions.simplePoint((this.position[0] + x) * app.pixelsToTwips, (this.position[1] + y) * app.pixelsToTwips);
 	}
 
-	getRotationHandle() {
+	private getRotationHandle() {
 		if (this.sectionProperties.info?.handles?.kinds?.rectangle && !this.sectionProperties.hasVideo) {
 			const rotationInfo = this.getRotationInfo(); // Rotation section will read the information from this (parent) class.
 			const rotationHandlePosition: cool.SimplePoint = this.getRotationHandlePosition(rotationInfo);
@@ -299,7 +334,7 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		}
 	}
 
-	getCustomHandles(halfWidth: number, halfHeight: number) {
+	private getCustomHandles(halfWidth: number, halfHeight: number) {
 		if (this.sectionProperties.info?.handles?.kinds?.custom) {
 			const customHandleList = this.sectionProperties.info.handles.kinds.custom['22'];
 
@@ -312,7 +347,7 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		}
 	}
 
-	getPolyHandles(halfWidth: number, halfHeight: number) {
+	private getPolyHandles(halfWidth: number, halfHeight: number) {
 		if (this.sectionProperties.info?.handles?.kinds?.poly) {
 			if (Array.isArray(this.sectionProperties.info.handles.kinds.poly['9'])) {
 				const polyArray = this.sectionProperties.info.handles.kinds.poly['9'];
@@ -325,7 +360,7 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		}
 	}
 
-	getGluePoints() {
+	private getGluePoints() {
 		if (this.sectionProperties.info?.GluePoints?.shapes) {
 			if (Array.isArray(this.sectionProperties.info.GluePoints.shapes)) {
 				const shapeArray = this.sectionProperties.info.GluePoints.shapes;
@@ -346,7 +381,7 @@ class ShapeHandlesSection extends CanvasSectionObject {
 	}
 
 	// Get the handle positions and other information from the info that core side sent us.
-	getHandles() {
+	private getHandles() {
 		this.sectionProperties.handles = [];
 
 		const halfWidth = app.pixelsToTwips * (this.sectionProperties.handleWidth * 0.5);
@@ -358,11 +393,6 @@ class ShapeHandlesSection extends CanvasSectionObject {
 		this.getCustomHandles(halfWidth, halfHeight);
 		this.getPolyHandles(halfWidth, halfHeight);
 		this.getGluePoints();
-
-		if (app.map._docLayer._docType === 'spreadsheet') {
-			for (let i = 0; i < this.sectionProperties.handles.length; i++)
-				app.map._docLayer.sheetGeometry.convertToTileTwips(this.sectionProperties.handles[i].point);
-		}
 	}
 
 	// Update this section's size according to handle coordinates.
@@ -937,46 +967,33 @@ class ShapeHandlesSection extends CanvasSectionObject {
 
 	adjustSVGProperties() {
 		if (this.sectionProperties.svg && this.sectionProperties.svg.style.display === '' && GraphicSelection.hasActiveSelection()) {
-
-			const clientRect = (this.sectionProperties.svg.children[0] as SVGElement).getBoundingClientRect();
-			let width: number = clientRect.width;
-			let height: number = clientRect.height;
-
-			if (app.map._docLayer._docType !== 'presentation') {
-				width *= app.getScale();
-				height *= app.getScale();
-			}
-
-			let left = 0, top = 0;
+			const widthText = GraphicSelection.rectangle.cWidth + 'px';
+			const heightText = GraphicSelection.rectangle.cHeight + 'px';
 
 			const viewBox: number[] = this.getViewBox(this.sectionProperties.svg.children[0]);
 			const isImage = this.sectionProperties.svg.querySelectorAll('.Graphic').length > 0;
-			if (viewBox && clientRect.width > 0 && clientRect.height > 0 && !isImage) {
-				this.sectionProperties.svg.children[0].style.width = (width / app.dpiScale) + 'px';
-				this.sectionProperties.svg.children[0].style.height = (height / app.dpiScale) + 'px';
 
-				const widthPixelRatio = viewBox[2] / width;
-				const heightPixelRatio = viewBox[3] / height;
+			const clientRect = (this.sectionProperties.svg.children[0] as SVGElement).getBoundingClientRect();
 
-				left = (viewBox[0] / widthPixelRatio) / app.dpiScale;
-				top = (viewBox[1] / heightPixelRatio) / app.dpiScale;
+			if (viewBox && !isImage && clientRect.width > 0 && clientRect.height > 0) {
+				this.sectionProperties.svg.children[0].style.width = widthText;
+				this.sectionProperties.svg.children[0].style.height = heightText;
 			}
 			else {
-				left = (this.position[0] / app.dpiScale);
-				top = (this.position[1] / app.dpiScale);
-				const widthText = (this.size[0] / app.dpiScale) + 'px';
-				const heightText = (this.size[1] / app.dpiScale) + 'px';
-
 				this.sectionProperties.svg.style.width = widthText;
 				this.sectionProperties.svg.style.height = heightText;
+
 				if (isImage) {
-					this.sectionProperties.svg.children[0].setAttribute('width', widthText);
-					this.sectionProperties.svg.children[0].setAttribute('height', heightText);
+					this.sectionProperties.svg.children[0].style.width = widthText;
+					this.sectionProperties.svg.children[0].style.height = heightText;
 				}
 			}
 
-			this.sectionProperties.svg.style.left = (left - (this.documentTopLeft[0] - this.containerObject.getDocumentAnchor()[0]) / app.dpiScale) + 'px';
-			this.sectionProperties.svg.style.top = (top - (this.documentTopLeft[1] - this.containerObject.getDocumentAnchor()[1]) / app.dpiScale) + 'px';
+			const left = GraphicSelection.rectangle.pX1;
+			const top = GraphicSelection.rectangle.pY1;
+
+			this.sectionProperties.svg.style.left = Math.round((left - this.documentTopLeft[0] + this.containerObject.getDocumentAnchor()[0]) / app.dpiScale) + 'px';
+			this.sectionProperties.svg.style.top = Math.round((top - this.documentTopLeft[1] + this.containerObject.getDocumentAnchor()[1]) / app.dpiScale) + 'px';
 			this.sectionProperties.svgPosition = [left, top];
 		}
 		this.hideSVG();

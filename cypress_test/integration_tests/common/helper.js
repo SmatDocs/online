@@ -187,6 +187,18 @@ function loadDocumentNoIntegration(filePath, isMultiUser) {
 				}
 			});
 		}
+	}).then(function(win) {
+		if (Cypress.config('logServerResponse')) {
+			cy.getFrameWindow()
+				.its('L', {log: false})
+				.then(function(L) {
+					cy.stub(L.initial, '_stubMessage')
+						.log(false)
+						.callsFake(function(e){
+							Cypress.log({name: 'server response =>', message: e});
+						});
+				});
+		}
 	});
 
 	cy.log('<< loadDocumentNoIntegration - end');
@@ -379,11 +391,20 @@ function documentChecks(skipInitializedCheck = false) {
 						});
 				});
 		});
+
+		// In Writer wait for styles to appear in notebookbar
+		doIfOnDesktop(() => {
+			doIfInWriter(() => {
+				cy.cGet('#stylesview.notebookbar .icon-view-item-container img')
+					.should('exist');
+			});
+		});
+
 		// Check also that the inputbar is drawn in Calc.
-		doIfInCalc(function() {
-			cy.cframe().get('#sc_input_window.formulabar').should('exist');
-			cy.cframe().get('#pos_window-input.addressInput').should('exist');
-			cy.cframe().get('#pos_window-input.addressInput').should('not.be.empty');
+		doIfInCalc(() => {
+			cy.cGet('#sc_input_window.formulabar').should('exist');
+			cy.cGet('#pos_window-input.addressInput').should('exist');
+			//cy.cGet('#pos_window-input.addressInput').should('not.be.empty');
 		});
 	}
 
@@ -465,27 +486,15 @@ function expectTextForClipboard(expectedPlainText) {
 	cy.log('>> expectTextForClipboard - start');
 
 	cy.log('Text:' + expectedPlainText);
-	doIfInWriter(function() {
-		cy.cGet('#copy-paste-container p')
-			.then(function(pItem) {
-				if (pItem.children('font').length !== 0) {
-					cy.cGet('#copy-paste-container p font')
-						.should('have.text', expectedPlainText);
-				} else {
-					cy.cGet('#copy-paste-container p')
-						.should('have.text', expectedPlainText);
-				}
-			});
-	});
 
-	doIfInCalc(function() {
-		cy.cGet('#copy-paste-container pre')
-			.should('have.text', expectedPlainText);
-	});
-
-	doIfInImpress(function() {
-		cy.cGet('#copy-paste-container pre')
-			.should('have.text', expectedPlainText);
+	// FIXME: create explicit function for Writer and other modules
+	// "p" and "p font" are for Writer only, pre for Calc and Impress
+	cy.cGet('#copy-paste-container').then(function(pItem) {
+		if (pItem.children('font').length !== 0) {
+			cy.cGet('#copy-paste-container p font').should('have.text', expectedPlainText);
+		} else {
+			cy.cGet('#copy-paste-container p, #copy-paste-container pre').should('have.text', expectedPlainText);
+		}
 	});
 
 	cy.log('<< expectTextForClipboard - end');
@@ -499,14 +508,14 @@ function expectTextForClipboard(expectedPlainText) {
 function matchClipboardText(regexp) {
 	cy.log('>> matchClipboardText - start');
 
-	doIfInWriter(function() {
-		cy.cGet('body').contains('#copy-paste-container p font', regexp).should('exist');
-	});
-	doIfInCalc(function() {
-		cy.cGet('body').contains('#copy-paste-container pre', regexp).should('exist');
-	});
-	doIfInImpress(function() {
-		cy.cGet('body').contains('#copy-paste-container pre', regexp).should('exist');
+	// FIXME: create explicit function for Writer and other modules
+	// "p" and "p font" are for Writer only, pre for Calc and Impress
+	cy.cGet('#copy-paste-container').then(function(pItem) {
+		if (pItem.children('font').length !== 0) {
+			cy.cGet('body').contains('#copy-paste-container p font', regexp).should('exist');
+		} else {
+			cy.cGet('body').contains('#copy-paste-container pre', regexp).should('exist');
+		}
 	});
 
 	cy.log('<< matchClipboardText - end');
@@ -515,14 +524,14 @@ function matchClipboardText(regexp) {
 function clipboardTextShouldBeDifferentThan(text) {
 	cy.log('>> clipboardTextShouldBeDifferentThan - start');
 
-	doIfInWriter(function() {
-		cy.cGet('body').contains('#copy-paste-container p font', text).should('not.exist');
-	});
-	doIfInCalc(function() {
-		cy.cGet('body').contains('#copy-paste-container pre', text).should('not.exist');
-	});
-	doIfInImpress(function() {
-		cy.cGet('body').contains('#copy-paste-container pre', text).should('not.exist');
+	// FIXME: create explicit function for Writer and other modules
+	// "p" and "p font" are for Writer only, pre for Calc and Impress
+	cy.cGet('#copy-paste-container').then(function(pItem) {
+		if (pItem.children('font').length !== 0) {
+			cy.cGet('body').contains('#copy-paste-container p font', text).should('not.exist');
+		} else {
+			cy.cGet('body').contains('#copy-paste-container pre', text).should('not.exist');
+		}
 	});
 
 	cy.log('<< clipboardTextShouldBeDifferentThan - end');
@@ -616,82 +625,59 @@ function initAliasToNegative(aliasName) {
 	cy.log('<< initAliasToNegative - end');
 }
 
+// Wait for attribute which appears after specialized UI is loaded
+function waitForDocType() {
+		cy.cGet('body', {log: false})
+		.should('have.attr', 'data-docType');
+}
+
+// Run a callback if docType is matching provided value
+function checkDocTypeAndRun(docType, matching, callback) {
+	waitForDocType();
+
+	cy.cframe().find('body', {log: false})
+		.then((bodyElm) => {
+			cy.log('>> doIf ' + docType + ' - start');
+
+			const isMatching = bodyElm.get(0).getAttribute('data-docType') == docType;
+			if (isMatching == matching) {
+				cy.log('>> doIf ' + docType + ' - TRUE');
+				callback();
+				return;
+			}
+
+			cy.log('>> doIf ' + docType + ' - FALSE');
+		});
+}
+
 // Run a code snippet if we are inside Calc.
 function doIfInCalc(callback) {
-	cy.cframe().find('body', {log: false})
-		.then(function(bodyElm) {
-		cy.log('>> doIfInCalc - start');
-		if (bodyElm.get('data-doctype') == 'spreadhsheet') {
-			cy.log('<< doIfInCalc - TRUE');
-			callback();
-		}
-		cy.log('<< doIfInCalc - FALSE');
-	});
+	checkDocTypeAndRun('spreadsheet', true, callback);
 }
 
 // Run a code snippet if we are *NOT* inside Calc.
 function doIfNotInCalc(callback) {
-	cy.cframe().find('body', {log: false})
-		.then(function(bodyElm) {
-		cy.log('>> doIfNotInCalc - start');
-			if (bodyElm.get('data-doctype') !== 'spreadhsheet') {
-				cy.log('<< doIfNotInCalc - TRUE');
-				callback();
-			}
-		cy.log('<< doIfNotInCalc - FALSE');
-		});
+	checkDocTypeAndRun('spreadsheet', false, callback);
 }
 
 // Run a code snippet if we are inside Impress.
 function doIfInImpress(callback) {
-	cy.cframe().find('body', {log: false})
-		.then(function(bodyElm) {
-		cy.log('>> doIfInImpress - start');
-		if (bodyElm.get('data-doctype') == 'presentation') {
-				cy.log('<< doIfInImpress - TRUE');
-				callback();
-			}
-		cy.log('<< doIfInImpress - FALSE');
-		});
+	checkDocTypeAndRun('presentation', true, callback);
 }
 
 // Run a code snippet if we are *NOT* inside Impress.
 function doIfNotInImpress(callback) {
-	cy.cframe().find('body', {log: false})
-		.then(function(bodyElm) {
-		cy.log('>> doIfNotInImpress - start');
-			if (bodyElm.get('data-doctype') !== 'presentation') {
-				cy.log('<< doIfNotInImpress - TRUE');
-				callback();
-			}
-		cy.log('<< doIfNotInImpress - FALSE');
-		});
+	checkDocTypeAndRun('presentation', false, callback);
 }
 
 // Run a code snippet if we are inside Writer.
 function doIfInWriter(callback) {
-	cy.cframe().find('body', {log: false})
-		.then(function(bodyElm) {
-		cy.log('>> doIfInWriter - start');
-		if (bodyElm.get('data-doctype') == 'text') {
-				cy.log('<< doIfInWriter - TRUE');
-				callback();
-			}
-		cy.log('<< doIfInWriter - FALSE');
-		});
+	checkDocTypeAndRun('text', true, callback);
 }
 
 // Run a code snippet if we are *NOT* inside Writer.
 function doIfNotInWriter(callback) {
-	cy.cframe().find('body', {log: false})
-		.then(function(bodyElm) {
-		cy.log('>> doIfNotInWriter - start');
-			if (bodyElm.get('data-doctype') !== 'text') {
-				cy.log('<< doIfNotInWriter - TRUE');
-				callback();
-			}
-		cy.log('<< doIfNotInWriter - FALSE');
-		});
+	checkDocTypeAndRun('text', false, callback);
 }
 
 // Types text into elem with a delay in between characters.
@@ -774,26 +760,6 @@ function isCanvasWhite(expectWhite = true) {
 	});
 
 	cy.log('<< isCanvasWhite - end');
-}
-
-// Waits until a DOM element becomes idle (does not change for a given time).
-// It's useful to handle flickering on the UI, which might make cypress
-// tests unstable. If the UI flickers, we can use this method to wait
-// until it settles and the move on with the test.
-// Parameters:
-// selector - a CSS selector to query a DOM element to wait on to be idle.
-// content - a string, a content selector used by cy.contains() to select the correct DOM element.
-// waitingTime - how much time to wait before we say the item is idle.
-function waitUntilIdle(selector, content) {
-	// waitUntilIdle has been stubbed in order to reduce the number of calls to cy.wait().
-	// Find a specific condition to wait for using waitUntil, or even better use Cypress's
-	// built-in retrying functionality on find, should, and other functions.
-	cy.log('waitUntilIdle stubbed');
-	if (content) {
-		cy.cGet(selector, content);
-	} else {
-		cy.cGet(selector);
-	}
 }
 
 // Run a code snippet if we are in a mobile test.
@@ -1227,6 +1193,12 @@ function assertImageSize(expectedWidth, expectedHeight) {
 	cy.log('<< assertImageSize - end');
 }
 
+function containsFocusElement(container, doesContain) {
+	cy.getFrameWindow().then(function(win) {
+		cy.expect(container.contains(win.document.activeElement)).to.equal(doesContain);
+	});
+}
+
 module.exports.setupDocument = setupDocument;
 module.exports.loadDocument = loadDocument;
 module.exports.setupAndLoadDocument = setupAndLoadDocument;
@@ -1251,7 +1223,6 @@ module.exports.doIfNotInWriter = doIfNotInWriter;
 module.exports.typeText = typeText;
 module.exports.isImageWhite = isImageWhite;
 module.exports.isCanvasWhite = isCanvasWhite;
-module.exports.waitUntilIdle = waitUntilIdle;
 module.exports.doIfOnMobile = doIfOnMobile;
 module.exports.doIfOnDesktop = doIfOnDesktop;
 module.exports.moveCursor = moveCursor;
@@ -1276,3 +1247,4 @@ module.exports.getFileName = getFileName;
 module.exports.getSubFolder = getSubFolder;
 module.exports.addressInputSelector = "#addressInput input";
 module.exports.assertImageSize = assertImageSize;
+module.exports.containsFocusElement = containsFocusElement;

@@ -151,10 +151,6 @@ int getCurrentThreadCount()
 
 _LibreOfficeKit* loKitPtr = nullptr;
 
-/// Used for test code to accelerating waiting until idle and to
-/// flush sockets with a 'processtoidle' -> 'idle' reply.
-static std::chrono::steady_clock::time_point ProcessToIdleDeadline;
-
 static bool EnableWebsocketURP = false;
 static int URPStartCount = 0;
 
@@ -509,8 +505,8 @@ namespace
             }
         }
 
-        assert(fpath[strlen(sourceForLinkOrCopy.c_str())] == '/');
-        const char *relativeOldPath = fpath + strlen(sourceForLinkOrCopy.c_str()) + 1;
+        assert(fpath[sourceForLinkOrCopy.size()] == '/');
+        const char* relativeOldPath = fpath + sourceForLinkOrCopy.size() + 1;
         const Poco::Path newPath(destinationForLinkOrCopy, Poco::Path(relativeOldPath));
 
         switch (typeflag)
@@ -648,8 +644,8 @@ namespace
         }
 
         assert(path.size() >= sourceForGCDAFiles.size());
-        assert(fpath[strlen(sourceForGCDAFiles.c_str())] == '/');
-        const char* relativeOldPath = fpath + strlen(sourceForGCDAFiles.c_str()) + 1;
+        assert(fpath[sourceForGCDAFiles.size()] == '/');
+        const char* relativeOldPath = fpath + sourceForGCDAFiles.size() + 1;
         const Poco::Path newPath(destForGCDAFiles, Poco::Path(relativeOldPath));
 
         switch (typeflag)
@@ -781,6 +777,7 @@ Document::Document(const std::shared_ptr<lok::Office>& loKit, const std::string&
     , _modified(ModifiedState::UnModified)
     , _isBgSaveProcess(false)
     , _isBgSaveDisabled(false)
+    , _trimIfInactivePostponed(false)
     , _haveDocPassword(false)
     , _isDocPasswordProtected(false)
     , _docPasswordType(DocumentPasswordType::ToView)
@@ -791,6 +788,7 @@ Document::Document(const std::shared_ptr<lok::Office>& loKit, const std::string&
     , _lastMemTrimTime(std::chrono::steady_clock::now())
     , _mobileAppDocId(mobileAppDocId)
     , _duringLoad(0)
+    , _bgSavesOngoing(0)
 {
     LOG_INF("Document ctor for [" << _docKey <<
             "] url [" << anonymizeUrl(_url) << "] on child [" << _jailId <<
@@ -1045,11 +1043,30 @@ bool Document::sendFrame(const char* buffer, int length, WSOpCode opCode)
     return false;
 }
 
+void Document::bgSaveEnded()
+{
+    _bgSavesOngoing--;
+    if (!_bgSavesOngoing)
+    {
+        // Delay the next trimAfterInactivity check to let our state
+        // settle before trimming.
+        _lastMemTrimTime = std::chrono::steady_clock::now();
+    }
+}
+
 void Document::trimIfInactive()
 {
     // Don't perturb memory un-necessarily
     if (_isBgSaveProcess)
         return;
+    if (_bgSavesOngoing)
+    {
+        // Postpone until trimAfterInactivity after bgsave has completed.
+        _trimIfInactivePostponed = true;
+        return;
+    }
+
+    _trimIfInactivePostponed = false;
 
     // FIXME: multi-document mobile optimization ?
     for (const auto& it : _sessions)
@@ -1071,12 +1088,19 @@ void Document::trimIfInactive()
 void Document::trimAfterInactivity()
 {
     // Don't perturb memory un-necessarily
-    if (_isBgSaveProcess)
+    if (_isBgSaveProcess || _bgSavesOngoing)
         return;
 
     if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() -
                                                          _lastMemTrimTime) < std::chrono::seconds(30))
     {
+        return;
+    }
+
+    // If a deep trim was missed due to an ongoing bg save then enable that to happen now.
+    if (_trimIfInactivePostponed)
+    {
+        trimIfInactive();
         return;
     }
 
@@ -1554,8 +1578,11 @@ bool Document::forkToSave(const std::function<void()>& childSave, int viewId)
         UnitKit::get().postBackgroundSaveFork();
 
         // Background save should run at a lower priority
+#if 0
+        // Disable changing priority for now
         int prio = ConfigUtil::getInt("per_document.bgsave_priority", 5);
         Util::setProcessAndThreadPriorities(getpid(), prio);
+#endif
 
         // other queued messages should be handled in the parent kit
         if (_queue)
@@ -1926,13 +1953,18 @@ std::shared_ptr<lok::Document> Document::load(const std::shared_ptr<ChildSession
     const std::string& userTimezone = session->getTimezone();
     const std::string& userPrivateInfo = session->getUserPrivateInfo();
     const std::string& docTemplate = session->getDocTemplate();
+    const std::string& filterOption = session->getInFilterOption();
 
     if constexpr (!Util::isMobileApp())
         consistencyCheckFileExists(uri);
 
     std::string options;
+
+    if (!filterOption.empty())
+        options = filterOption;
+
     if (!lang.empty())
-        options = "Language=" + lang;
+        options += ",Language=" + lang;
 
     if (!deviceFormFactor.empty())
         options += ",DeviceFormFactor=" + deviceFormFactor;
@@ -2176,7 +2208,12 @@ std::shared_ptr<lok::Document> Document::load(const std::shared_ptr<ChildSession
     return _loKitDocument;
 }
 
-bool Document::forwardToChild(const std::string& prefix, const std::vector<char>& payload)
+int Document::getViewsCount() const
+{
+    return _loKitDocument ? _loKitDocument->getViewsCount() : 0;
+}
+
+bool Document::forwardToChild(const std::string_view prefix, const std::vector<char>& payload)
 {
     assert(Util::isFuzzing() || payload.size() > prefix.size());
 
@@ -2389,23 +2426,6 @@ std::vector<TilePrioritizer::ViewIdInactivity> Document::getViewIdsByInactivity(
     return viewIds;
 }
 
-// poll is idle, are we ?
-void Document::checkIdle()
-{
-    // FIXME: can have Idle CallbackFlushHandler work in the core.
-
-    if (!processInputEnabled() || hasQueueItems())
-    {
-        LOG_TRC("Nearly idle - but have more queued items to process");
-        return; // more to do
-    }
-
-    sendTextFrame("idle");
-
-    // get rid of idle check for now.
-    ProcessToIdleDeadline = std::chrono::steady_clock::now() - std::chrono::milliseconds(10);
-}
-
 bool Document::processInputEnabled() const
 {
     bool enabled = !_websocketHandler || _websocketHandler->processInputEnabled();
@@ -2520,13 +2540,6 @@ void Document::drainQueue()
             else if (tokens.startsWith(0, "child-"))
             {
                 forwardToChild(tokens[0], input);
-            }
-            else if (tokens.equals(0, "processtoidle"))
-            {
-                ProcessToIdleDeadline = std::chrono::steady_clock::now();
-                uint32_t timeoutUs = 0;
-                if (tokens.getUInt32(1, "timeout", timeoutUs))
-                    ProcessToIdleDeadline += std::chrono::microseconds(timeoutUs);
             }
             else if (tokens.equals(0, "callback"))
             {
@@ -2709,6 +2722,8 @@ void Document::dumpState(std::ostream& oss)
         << "\n\tmodified: " << name(_modified)
         << "\n\tbgSaveProc: " << _isBgSaveProcess
         << "\n\tbgSaveDisabled: "<< _isBgSaveDisabled;
+    if (!_isBgSaveProcess)
+        oss << "\n\tbgSavesOnging: "<< _bgSavesOngoing;
 
     std::string smap;
     if (const ssize_t size = FileUtil::readFile("/proc/self/smaps_rollup", smap); size <= 0)
@@ -2985,9 +3000,6 @@ int KitSocketPoll::kitPoll(int timeoutMicroS)
 
     auto startTime = std::chrono::steady_clock::now();
 
-    // handle processtoidle waiting optimization
-    bool checkForIdle = ProcessToIdleDeadline >= startTime;
-
     if (timeoutMicroS < 0)
     {
         // Flush at most 1 + maxExtraEvents, or return when nothing left.
@@ -2996,9 +3008,6 @@ int KitSocketPoll::kitPoll(int timeoutMicroS)
     }
     else
     {
-        if (checkForIdle)
-            timeoutMicroS = 0;
-
         // Flush at most maxEvents+1, or return when nothing left.
         _pollEnd = startTime + std::chrono::microseconds(timeoutMicroS);
         do
@@ -3017,21 +3026,6 @@ int KitSocketPoll::kitPoll(int timeoutMicroS)
                 std::chrono::duration_cast<std::chrono::microseconds>(_pollEnd - now).count();
             ++eventsSignalled;
         } while (timeoutMicroS > 0 && !SigUtil::getTerminationFlag() && maxExtraEvents-- > 0);
-    }
-
-    if (_document && checkForIdle && eventsSignalled == 0 && timeoutMicroS > 0 &&
-        !hasCallbacks() && !hasBuffered())
-    {
-        auto remainingTime = ProcessToIdleDeadline - startTime;
-        LOG_TRC(
-            "Poll of "
-            << timeoutMicroS << " vs. remaining time of: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(remainingTime).count());
-        // would we poll until then if we could ?
-        if (remainingTime < std::chrono::microseconds(timeoutMicroS))
-            _document->checkIdle();
-        else
-            LOG_TRC("Poll of would not close gap - continuing");
     }
 
     drainQueue();

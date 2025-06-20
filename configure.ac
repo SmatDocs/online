@@ -3,7 +3,7 @@
 
 AC_PREREQ([2.63])
 
-AC_INIT([coolwsd], [25.04.1.1], [https://github.com/CollaboraOnline/online/issues], [coolwsd], [https://collaboraonline.github.io/])
+AC_INIT([coolwsd], [25.04.3.1], [https://github.com/CollaboraOnline/online/issues], [coolwsd], [https://collaboraonline.github.io/])
 LT_INIT([shared, disable-static, dlopen])
 
 AM_INIT_AUTOMAKE([1.10 foreign subdir-objects tar-pax -Wno-portability])
@@ -640,7 +640,13 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_a
       if test -z "$LOBUILDDIR_X86_64" ; then
          LOBUILDDIR_X86_64="$LOBUILDDIR"
       fi
+
+      LOBUILDDIR_ARM64_V8A=`readlink -f "$LOBUILDDIR_ARM64_V8A"`
+      LOBUILDDIR_X86=`readlink -f "$LOBUILDDIR_X86"`
+      LOBUILDDIR_X86_64=`readlink -f "$LOBUILDDIR_X86_64"`
    fi
+
+   LOBUILDDIR=`readlink -f "$LOBUILDDIR"`
 
    # Get the git hash of the core build
    CORE_VERSION_HASH=`cd $LOBUILDDIR && grep buildid instdir/program/setuprc | sed -e 's/buildid=//' -e 's/............................$//'`

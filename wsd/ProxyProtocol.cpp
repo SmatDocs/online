@@ -64,7 +64,7 @@ void DocumentBroker::handleProxyRequest(
         httpResponse.setBody(sessionId, "application/json; charset=utf-8");
 
         socket->send(httpResponse);
-        socket->shutdown();
+        socket->asyncShutdown();
         return;
     }
     else
@@ -87,8 +87,7 @@ void DocumentBroker::handleProxyRequest(
     }
 
     auto protocol = clientSession->getProtocol();
-    auto streamSocket = std::static_pointer_cast<StreamSocket>(socket);
-    streamSocket->setHandler(protocol);
+    socket->setHandler(protocol);
 
     // this DocumentBroker's poll handles reading & writing
     addSocketToPoll(socket);
@@ -169,12 +168,10 @@ bool ProxyProtocolHandler::parseEmitIncoming(
     return true;
 }
 
-void ProxyProtocolHandler::handleRequest(bool isWaiting, const std::shared_ptr<Socket> &socket)
+void ProxyProtocolHandler::handleRequest(bool isWaiting, const std::shared_ptr<StreamSocket> &streamSocket)
 {
-    auto streamSocket = std::static_pointer_cast<StreamSocket>(socket);
-
     LOG_INF("proxy: handle request type: " << (isWaiting ? "wait" : "respond") <<
-            " on socket #" << socket->getFD());
+            " on socket #" << streamSocket->getFD());
 
     if (!isWaiting)
     {
@@ -202,7 +199,7 @@ void ProxyProtocolHandler::handleRequest(bool isWaiting, const std::shared_ptr<S
             _outSockets.erase(_outSockets.begin());
             auto sock = sockWeak.lock();
             if (sock)
-                sock->shutdown();
+                sock->asyncShutdown();
         }
     }
     else
@@ -221,7 +218,7 @@ void ProxyProtocolHandler::handleRequest(bool isWaiting, const std::shared_ptr<S
         else
             LOG_TRC("Returned a reply immediately");
 
-        socket->shutdown();
+        streamSocket->asyncShutdown();
     }
 }
 
@@ -247,7 +244,7 @@ int ProxyProtocolHandler::sendMessage(const char *msg, const size_t len, bool te
         if (sock)
         {
             flushQueueTo(sock);
-            sock->shutdown();
+            sock->asyncShutdown();
         }
     }
 
@@ -324,7 +321,7 @@ void ProxyProtocolHandler::performWrites(std::size_t capacity)
     {
         LOG_TRC("proxy: performWrites");
         flushQueueTo(sock);
-        sock->shutdown();
+        sock->asyncShutdown();
     }
 }
 

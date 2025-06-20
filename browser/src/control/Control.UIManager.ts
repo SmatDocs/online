@@ -85,7 +85,19 @@ class UIManager extends L.Control {
 				target.parentElement?.id === 'document-titlebar') { // checks if clicked on the document titlebar container
 				this.map.fire('editorgotfocus');}
 		});
+		const mainNav = document.querySelector('.main-nav') as HTMLElement;
+		mainNav.addEventListener('wheel', function(e: WheelEvent) {
+			const el = this as HTMLElement;
 
+			// Allow default scroll for Shift + scroll or if not horizontally scrollable
+			if (e.shiftKey || el.scrollWidth <= el.clientWidth) return;
+	  
+			// Scroll horizontally
+			this.scrollLeft += e.deltaY;
+	  
+			// Prevent vertical scroll only within this element
+			e.preventDefault();
+		  }, { passive: false });
 		this.map.on('updateviewslist', this.onUpdateViews, this);
 
 		this.map['stateChangeHandler'].setItemValue('toggledarktheme', 'false');
@@ -560,11 +572,7 @@ class UIManager extends L.Control {
 					app.socket.sendMessage('uno .uno:SidebarShow');
 					app.socket.sendMessage('uno .uno:MasterSlidesPanel');
 					this.map.sidebar.setupTargetDeck('.uno:MasterSlidesPanel');
-				} else if (this.getBooleanDocTypePref('NavigatorDeck', false)) {
-					app.socket.sendMessage('uno .uno:SidebarShow');
 				}
-			} else if (this.getBooleanDocTypePref('NavigatorDeck', false)) {
-				app.socket.sendMessage('uno .uno:SidebarShow');
 			} else if (this.getBooleanDocTypePref('StyleListDeck', false)) {
 				app.socket.sendMessage('uno .uno:SidebarShow');
 				app.socket.sendMessage('uno .uno:SidebarDeck.StyleListDeck');
@@ -1502,6 +1510,7 @@ class UIManager extends L.Control {
 	 * @param timeout - Duration before auto-dismiss.
 	 * @param hasProgress - Whether to show a progress bar.
 	 * @param withDismiss - Whether a dismiss button is included.
+	 * @param infinite - If true, shows an indeterminate progress bar.
 	 */
 	showSnackbar(
 		label: string,
@@ -1523,16 +1532,18 @@ class UIManager extends L.Control {
 		callback: any,
 		timeout?: number,
 		withDismiss?: boolean,
+		infinite?: boolean,
 	): void {
-		JSDialog.SnackbarController.showSnackbar(message, buttonText, callback, timeout ? timeout : -1, true, withDismiss);
+		JSDialog.SnackbarController.showSnackbar(message, buttonText, callback, timeout ? timeout : -1, true, withDismiss, infinite);
 	}
 
 	/**
 	 * Updates the progress value on the snackbar.
 	 * @param value - Progress value (0–100).
+	 * @param infinite - If true, shows an indeterminate progress bar.
 	 */
-	setSnackbarProgress(value: number): void {
-		JSDialog.SnackbarController.setSnackbarProgress(value);
+	setSnackbarProgress(value: number, infinite?: boolean): void {
+		JSDialog.SnackbarController.setSnackbarProgress(value, infinite);
 	}
 
 	// Modals
@@ -1736,6 +1747,7 @@ class UIManager extends L.Control {
 		callback: any,
 		value?: number,
 		cancelCallback?: any,
+		infinite: boolean = false,
 	): void {
 		var dialogId = this.generateModalId(id);
 		var responseButtonId = id + '-response';
@@ -1757,7 +1769,8 @@ class UIManager extends L.Control {
 				id: dialogId + '-progressbar',
 				type: 'progressbar',
 				value: (value !== undefined && value !== null ? value: 0),
-				maxValue: 100
+				maxValue: 100,
+				infinite: infinite
 			},
 			{
 				id: '',
@@ -1801,8 +1814,9 @@ class UIManager extends L.Control {
 	/**
 	 * Updates the progress value in a progress dialog.
 	 * @param value - Progress value (0–100).
+	 * @param infinite - If true, shows an indeterminate progress bar.
 	 */
-	setDialogProgress(id: string, value: number): void {
+	setDialogProgress(id: string, value: number, infinite: boolean): void {
 		if (!app.socket)
 			return;
 
@@ -1817,7 +1831,8 @@ class UIManager extends L.Control {
 				id: dialogId + '-progressbar',
 				type: 'progressbar',
 				value: value,
-				maxValue: 100
+				maxValue: 100,
+				infinite: infinite
 			}
 		};
 

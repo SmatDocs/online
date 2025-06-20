@@ -232,7 +232,8 @@ class InitializerBase {
 			} // else jsdom
 		}
 
-		const element = document.getElementById("initial-variables");
+		const element = window.L.initial = document.getElementById("initial-variables");
+		window.L.initial._stubMessage = function () {};
 
 		window.host = "";
 		window.serviceRoot = "";
@@ -240,6 +241,7 @@ class InitializerBase {
 		window.versionPath = "";
 		window.accessToken = element.dataset.accessToken;
 		window.accessTokenTTL = element.dataset.accessTokenTtl;
+		window.noAuthHeader = element.dataset.noAuthHeader;
 		window.accessHeader = element.dataset.accessHeader;
 		window.postMessageOriginExt = "";
 		window.coolwsdVersion = "";
@@ -610,12 +612,30 @@ function getInitializerClass() {
 
 	global.setLogging(global.coolLogging != '');
 
+	function parseBool(val) {
+		if (typeof val !== 'string') return false;
+		switch (val.toLowerCase().trim()) {
+		case '1':
+		case 'true':
+		case 'yes':
+		case 'on':
+			return true;
+		case '0':
+		case 'false':
+		case 'no':
+		case 'off':
+			return false;
+		default:
+			return false;
+		}
+	}
+
 	global.L.Params = {
 		/// Shows close button if non-zero value provided
-		closeButtonEnabled: global.coolParams.get('closebutton'),
+		closeButtonEnabled: parseBool(global.coolParams.get('closebutton')),
 
 		/// Shows revision history file menu option
-		revHistoryEnabled: global.coolParams.get('revisionhistory'),
+		revHistoryEnabled: parseBool(global.coolParams.get('revisionhistory')),
 	};
 
 	global.prefs = {
@@ -1204,7 +1224,13 @@ function getInitializerClass() {
 					global.app.console.debug('Error: serial mismatch ' + serial + ' vs. ' + (that.inSerial + 1));
 				}
 				that.inSerial = serial;
-				this.onmessage({ data: data });
+				try {
+					this.onmessage({ data: data });
+				} catch (e) {
+					global.app.console.error(e);
+					global.app.console.warn(`Failed processing a ProxySocket message (due to ${e}), ignoring`);
+					// It's better to ignore any failures rather than to lose the rest of the messages in this packet
+				}
 
 				i += size; // skip trailing '\n' in loop-increment
 			}
@@ -1432,6 +1458,22 @@ function getInitializerClass() {
 		this.getSessionId();
 	};
 
+	class MobileSocket extends global.ProxySocket {
+		constructor(url) {
+			super("cool:/cool/mobilesocket" + url);
+
+			delete this.send;
+			delete this._setPollInterval;
+			// HACK: We need this to complete the override because ProxySocket messed up the protoype chain... evenually I want to convert it to a Real Class which will fix it
+		}
+
+		send(data) {
+			global.postMobileMessage(data);
+		}
+
+		_setPollInterval() {} // This is a no-op on mobile since as we will be calling from the native part to notify when we get a message
+	}
+
 	global.iterateCSSImages = function(visitor) {
 		var visitUrls = function(rules, visitor, base) {
 			if (!rules)
@@ -1607,7 +1649,9 @@ function getInitializerClass() {
 			uri = global.processCoolUrl({ url: uri, type: 'ws' });
 		}
 
-		if (global.socketProxy) {
+		if (global.ThisIsAMobileApp) {
+			return new MobileSocket(uri);
+		} else if (global.socketProxy) {
 			return new global.ProxySocket(uri);
 		} else if (global.indirectionUrl != '' && !global.migrating) {
 			global.indirectSocket = true;
@@ -1654,7 +1698,7 @@ function getInitializerClass() {
 	if (global.wopiSrc != '') {
 		global.docURL = decodeURIComponent(global.wopiSrc);
 		if (global.accessToken !== '') {
-			wopiParams = { 'access_token': global.accessToken, 'access_token_ttl': global.accessTokenTTL };
+			wopiParams = { 'access_token': global.accessToken, 'access_token_ttl': global.accessTokenTTL, 'no_auth_header': global.noAuthHeader };
 		}
 		else if (global.accessHeader !== '') {
 			wopiParams = { 'access_header': global.accessHeader };
@@ -1674,7 +1718,9 @@ function getInitializerClass() {
 
 	// Form a valid WS URL to the host with the given path.
 	global.makeWsUrl = function (path) {
-		global.app.console.assert(global.host.startsWith('ws'), 'host is not ws: ' + global.host);
+		if (!global.ThisIsAMobileApp) {
+			global.app.console.assert(global.host.startsWith('ws'), 'host is not ws: ' + global.host);
+		}
 		return global.host + global.serviceRoot + path;
 	};
 
@@ -1751,7 +1797,7 @@ function getInitializerClass() {
 		return new TextDecoder().decode(bytes);
 	};
 
-	if (global.ThisIsAMobileApp) {
+	if (global.ThisIsTheGtkApp) {
 		global.socket = new global.FakeWebSocket();
 		global.TheFakeWebSocket = global.socket;
 	} else {

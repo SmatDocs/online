@@ -48,7 +48,7 @@
 }
 
 #AcceptRejectChangesDialog {
-	width: 100%;
+	width: max-content;
 	max-width: 1000px;
 }
 #AcceptRejectChangesDialog #RedlineViewPage.jsdialog.ui-grid-cell {
@@ -56,32 +56,8 @@
 	flex-direction: column;
 	gap: 8px;
 }
-
-#AcceptRejectChangesDialog #grid3.jsdialog.ui-grid {
-	margin-top: 8px;
-	grid-gap: 8px;
-}
-
-#AcceptRejectChangesDialog #writerchanges.jsdialog.ui-treeview {
-	display: grid;
-	grid-template-columns: repeat(2, 1fr) repeat(2, minmax(min-content, auto));
-	column-gap: 8px;
-}
-
-#AcceptRejectChangesDialog .jsdialog.ui-grid .has-img,
-#AcceptRejectChangesDialog .jsdialog.ui-grid .menubutton {
-	margin: 0 !important;
-	width: 100% !important;
-}
-
-#AcceptRejectChangesDialog .ui-treeview-headers,
-#AcceptRejectChangesDialog .jsdialog.ui-treeview-entry { 
-	display: contents;
-}
-
-#AcceptRejectChangesDialog .jsdialog.ui-treeview-entry > div:nth-child(2),
-#AcceptRejectChangesDialog .ui-treeview-headers .ui-treeview-icon-column {
-	display: none;
+#AcceptRejectChangesDialog #RedlineFilterPage .ui-timefield {
+	margin: 5px;
 }
 .jsdialog.one-child-popup {
 	border: 0;
@@ -538,6 +514,10 @@ td.jsdialog > [id^='table-box']:not(.sidebar) {
 	justify-content: stretch;
 }
 
+.modalpopup .ui-treeview {
+	min-height: min-content;
+}
+
 .ui-treeview * {
 	border-radius: initial;
 }
@@ -964,7 +944,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	-webkit-appearance: none;
 	-moz-appearance: none;
 	appearance: none;
-	height: 24px;
+	height: 1.5rem;
 	line-height: normal;
 	font-size: var(--default-font-size);
 	font-family: var(--jquery-ui-font);
@@ -997,24 +977,26 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	display: none;
 }
 
+/* Draw vector border as downwards arrow. */
 .ui-listbox-arrow {
-	content: '';
-	background: url('images/jquery-ui-lightness/ui-icons_222222_256x240.png') no-repeat transparent;
-	background-position: -67px -17px !important;
-	display: inline-block;
-	position: relative;
-	width: 11px;
-	height: 11px;
-	cursor: pointer;
-	pointer-events: none;
+	width: auto !important;
+	height: 0px;
+	font-size: 0;
+	line-height: 0;
+	border: 4px solid transparent;
+	border-top: 5px solid var(--color-main-text);
+	display: inline-block !important;
 	margin-inline-start: -16px;
 	margin-inline-end: 4px;
+	margin-top: 4px;
+	cursor: pointer;
+	pointer-events: none;
 }
 
-[data-theme='dark'] .ui-listbox-arrow {
-	background: url('images/jquery-ui-lightness/ui-icons_ffffff_256x240.png') no-repeat transparent;
+:dir(rtl) .ui-listbox-arrow {
+	margin-inline-start: 4px;
+	margin-inline-end: -16px;
 }
-
 .ui-listbox[disabled='disabled'] ~ .ui-listbox-arrow,
 .ui-combobox[disabled='disabled'] ~ .ui-listbox-arrow {
 	opacity: 0.5;
@@ -1039,9 +1021,16 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	padding-inline: 5px;
 }
 
+/* Similar to .arrowbackground, centers the vector dropdown arrow. */
 .ui-combobox-button {
+	box-sizing: border-box;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-inline-start: 1px solid var(--color-border);
+	background-color: transparent;
 	padding-left: 20px;
-	border-left: 1px solid var(--color-border);
 }
 
 .ui-combobox-button:hover {
@@ -1493,7 +1482,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	border: 4px solid transparent;
 	border-top: 5px solid var(--color-main-text);
 	display: inline-block !important;
-	margin-left: 3px;
+	margin-inline-start: 3px;
 	margin-top: 4px;
 }
 
@@ -1512,7 +1501,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	grid-column: 3;
 	position: relative;
 	border: none;
-	padding: 0px;
+	padding: 1px;
 }
 
 .arrowbackground:hover {
@@ -1723,19 +1712,73 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	stop-opacity: 0.2;
 }
 
-/* progressbar */
+/* Regular ProgressBar */
 .ui-progressbar {
+	height: 5px !important;
 	display: flex;
 	align-items: center;
+	overflow: hidden;
 }
 
 .ui-progressbar progress {
 	width: 100%;
+	height: 5px;
+	background-color: rgba(var(--doc-type), 0.2);
+	border: none;
 }
 
-.snackbar .ui-progressbar progress {
-	min-width: 120px;
-	margin-right: 10px;
+[data-theme='dark'] .ui-progressbar progress {
+	background-color: #FFFF;
+}
+
+.ui-progressbar progress::-webkit-progress-bar {
+	background-color: rgba(var(--doc-type), 0.2);
+}
+
+.ui-progressbar progress::-webkit-progress-value,
+.ui-progressbar progress::-moz-progress-bar {
+	background-color: rgba(var(--doc-type));
+}
+
+/* Infinite Mode Styling */
+.ui-progressbar.infinite {
+	position: relative;
+	background-color: rgba(var(--doc-type), 0.2);
+	width: 100%;
+	overflow: hidden;
+}
+
+.ui-progressbar.infinite progress::-webkit-progress-bar,
+.ui-progressbar.infinite progress::-webkit-progress-value,
+.ui-progressbar.infinite progress::-moz-progress-bar {
+	background: transparent;
+}
+
+/* Indeterminate Animation Overlay */
+.ui-progressbar.infinite::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 100%;
+	width: 100%;
+	background-color: rgb(var(--doc-type));
+	animation: indeterminateAnimation 1s infinite linear;
+	transform-origin: 0% 50%;
+	z-index: 0;
+	pointer-events: none;
+}
+
+@keyframes indeterminateAnimation {
+	0% {
+		transform: translateX(0) scaleX(0);
+	}
+	40% {
+		transform: translateX(0) scaleX(0.4);
+	}
+	100% {
+		transform: translateX(100%) scaleX(0.5);
+	}
 }
 
 /* snackbar */
@@ -1749,7 +1792,18 @@ input[type='number']:hover::-webkit-outer-spin-button {
 .snackbar #snackbar-container-progress {
 	align-items: center;
 	max-width: calc(80vw);
+	row-gap: 4px;
 }
+
+.snackbar .ui-progressbar progress {
+	min-width: 120px;
+	margin-right: 10px;
+}
+
+.snackbar .ui-progressbar progress::-webkit-progress-bar {
+	background-color: #FFFF;
+}
+
 #mobile-wizard.popup.snackbar,
 .snackbar.jsdialog-container .ui-dialog-content {
 	min-width: 200px;
@@ -1813,6 +1867,8 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	font-weight: 600;
 	font-size: var(--header-font-size) !important;
 	padding: 8px;
+	display: flex;
+	align-items: center;
 }
 .snackbar.jsdialog-container [id$='button']:hover {
 	background-color: #ffffff15 !important;

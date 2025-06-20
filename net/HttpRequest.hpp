@@ -161,7 +161,7 @@ STATE_ENUM(FieldParseState,
 /// See https://en.wikipedia.org/wiki/List_of_HTTP_status_codes
 enum class StatusCode : unsigned
 {
-    None = 0, // Undefined status (unknown)
+    None = 0, // Undefined status (unknown); implies time-out.
 
     // Informational
     Continue = 100,
@@ -771,6 +771,13 @@ public:
         Util::joinPair(os, _header, indent + '\t');
     }
 
+    void setBasicAuth(std::string_view username, std::string_view password) {
+        std::string basicAuth{username};
+        basicAuth.append(":");
+        basicAuth.append(password);
+        _header.add("Authorization", "Basic " + Util::base64Encode(basicAuth));
+    }
+
 private:
     Header _header;
     std::string _url; ///< The URL to request, without hostname.
@@ -1013,9 +1020,14 @@ public:
     /// Append a chunk to the body. Must have Transfer-Encoding: chunked.
     void appendChunk(const std::string& chunk)
     {
+        _body.reserve(_body.size() + chunk.size() + 32);
+
         std::stringstream ss;
-        ss << std::hex << chunk.size() << "\r\n" << chunk << "\r\n";
+        ss << std::hex << chunk.size();
         _body.append(ss.str());
+        _body.append("\r\n");
+        _body.append(chunk);
+        _body.append("\r\n");
     }
 
     /// Handles incoming data (from the Server) in the Client.
@@ -1054,7 +1066,7 @@ public:
     }
 
     /// If not already in done state, finish with State::Error.
-    void finish()
+    void error()
     {
         // We expect to have completed successfully, or timed out,
         // anything else means we didn't get complete data.
@@ -1326,10 +1338,27 @@ public:
     /// Note: when reusing this Session, it is assumed that the socket
     /// is already added to the SocketPoll on a previous call (do not
     /// use multiple SocketPoll instances on the same Session).
-    void asyncRequest(const Request& req, const std::weak_ptr<SocketPoll>& poll)
+    /// Returns false when it fails to start the async request.
+    bool asyncRequest(const Request& req, const std::weak_ptr<SocketPoll>& poll)
     {
-        LOG_TRC("new asyncRequest: " << req.getVerb() << ' ' << host() << ':' << port() << ' '
-                                     << req.getUrl());
+        std::shared_ptr<SocketPoll> socketPoll(poll.lock());
+        if (!socketPoll)
+        {
+            LOG_ERR("Cannot start new asyncRequest without a valid SocketPoll: "
+                    << req.getVerb() << ' ' << host() << ':' << port() << ' ' << req.getUrl());
+
+            if (_onConnectFail)
+            {
+                // Call directly since we haven't started the async
+                // connect to pass the validation in callOnConnectFail().
+                _onConnectFail(shared_from_this());
+            }
+
+            return false;
+        }
+
+        LOG_TRC("New asyncRequest on [" << socketPoll->name() << "]: " << req.getVerb() << ' '
+                                        << host() << ':' << port() << ' ' << req.getUrl());
 
         newRequest(req);
 
@@ -1342,16 +1371,12 @@ public:
             // Technically, there is a race here. The socket can
             // get disconnected and removed right after isConnected.
             // In that case, we will timeout and no request will be sent.
-            std::shared_ptr<SocketPoll> socketPoll(poll.lock());
-            if (socketPoll)
-                socketPoll->wakeup();
-            else
-                LOG_ERR("Failed to acquire SocketPoll");
+            socketPoll->wakeup();
         }
 
-        LOG_DBG("starting asyncRequest: " << req.getVerb() << ' ' << host() << ':' << port() << ' '
-                                          << req.getUrl());
-
+        LOG_DBG("Starting asyncRequest on [" << socketPoll->name() << "]: " << req.getVerb() << ' '
+                                             << host() << ':' << port() << ' ' << req.getUrl());
+        return true;
     }
 
     void asyncShutdown()
@@ -1360,7 +1385,7 @@ public:
         std::shared_ptr<StreamSocket> socket = _socket.lock();
         if (socket)
         {
-            socket->shutdown();
+            socket->asyncShutdown();
         }
     }
 
@@ -1704,14 +1729,14 @@ private:
         if (socket)
         {
             LOG_TRC("onDisconnect");
-            socket->shutdown(); // Flag for shutdown for housekeeping in SocketPoll.
+            socket->asyncShutdown(); // Flag for shutdown for housekeeping in SocketPoll.
             socket->shutdownConnection(); // Immediately disconnect.
             _socket.reset();
         }
 
         _connected = false;
         if (_response)
-            _response->finish();
+            _response->error();
 
         _fd = -1; // No longer our socket fd.
     }
@@ -1901,12 +1926,14 @@ public:
     /// regardless of the reason (error, timeout, completion).
     void setFinishedHandler(FinishedCallback onFinished) { _onFinished = std::move(onFinished); }
 
+    using ResponseHeaders = http::Header::Container;
+
     /// Start an asynchronous upload from a file.
     /// Return true when it dispatches the socket to the SocketPoll.
     /// Note: when reusing this ServerSession, it is assumed that the socket
     /// is already added to the SocketPoll on a previous call (do not
     /// use multiple SocketPoll instances on the same ServerSession).
-    bool asyncUpload(std::string fromFile, std::string mimeType, int start, int end, bool startIsSuffix, http::StatusCode statusCode = http::StatusCode::OK)
+    bool asyncUpload(std::string fromFile, ResponseHeaders responseHeaders, int start, int end, bool startIsSuffix, http::StatusCode statusCode = http::StatusCode::OK)
     {
         _start = start;
         _end = end;
@@ -1933,13 +1960,14 @@ public:
         }
 
         _size = sb.st_size;
-        _data = std::move(fromFile);
-        _mimeType = std::move(mimeType);
+        _filename = std::move(fromFile);
+        _responseHeaders = std::move(responseHeaders);
+        LOG_ASSERT_MSG(!getMimeType().empty(), "Missing Content-Type");
 
         int firstBytePos = getStart();
 
         if (lseek(_fd, firstBytePos, SEEK_SET) < 0)
-            LOG_SYS("Failed to seek " << _data << " to " << firstBytePos << " because: " << strerror(errno));
+            LOG_SYS("Failed to seek " << _filename << " to " << firstBytePos << " because: " << strerror(errno));
         else
             _pos = firstBytePos;
 
@@ -1947,19 +1975,19 @@ public:
     }
 
     /// Start an asynchronous upload of a whole file
-    bool asyncUpload(std::string fromFile, std::string mimeType)
+    bool asyncUpload(std::string fromFile, ResponseHeaders responseHeaders)
     {
-        return asyncUpload(std::move(fromFile), std::move(mimeType), 0, -1, false);
+        return asyncUpload(std::move(fromFile), std::move(responseHeaders), 0, -1, false);
     }
 
     /// Start a partial asynchronous upload from a file based on the contents of a "Range" header
-    bool asyncUpload(std::string fromFile, std::string mimeType, const std::string_view rangeHeader)
+    bool asyncUpload(std::string fromFile, ResponseHeaders responseHeaders, const std::string_view rangeHeader)
     {
         const size_t equalsPos = rangeHeader.find('=');
-        if (equalsPos == std::string::npos) return asyncUpload(std::move(fromFile), std::move(mimeType));
+        if (equalsPos == std::string::npos) return asyncUpload(std::move(fromFile), std::move(responseHeaders));
 
         const std::string_view unit = rangeHeader.substr(0, equalsPos);
-        if (unit != "bytes") return asyncUpload(std::move(fromFile), std::move(mimeType));
+        if (unit != "bytes") return asyncUpload(std::move(fromFile), std::move(responseHeaders));
 
         const std::string_view range = rangeHeader.substr(equalsPos + 1);
 
@@ -1985,7 +2013,7 @@ public:
             catch (std::invalid_argument&) {}
             catch (std::out_of_range&) {}
 
-            return asyncUpload(std::move(fromFile), std::move(mimeType), start, end,
+            return asyncUpload(std::move(fromFile), std::move(responseHeaders), start, end,
                                startIsSuffix, http::StatusCode::PartialContent);
         }
 
@@ -1998,7 +2026,7 @@ public:
 
         // FIXME: does not support ranges that specify multiple comma-separated values
 
-        return asyncUpload(std::move(fromFile), std::move(mimeType), start, end,
+        return asyncUpload(std::move(fromFile), std::move(responseHeaders), start, end,
                            startIsSuffix, http::StatusCode::PartialContent);
     }
 
@@ -2031,7 +2059,7 @@ public:
         std::shared_ptr<StreamSocket> socket = _socket.lock();
         if (socket)
         {
-            socket->shutdown();
+            socket->asyncShutdown();
         }
     }
 
@@ -2042,15 +2070,14 @@ public:
            << " socket)";
         os << indent << "\tconnected: " << _connected;
         os << indent << "\tstartTime: " << Util::getTimeForLog(now, _startTime);
-        os << indent << "\tmimeType: " << _mimeType;
+        os << indent << "\tmimeType: " << getMimeType();
         os << indent << "\tstatusCode: " << getReasonPhraseForCode(_statusCode);
         os << indent << "\tsize: " << _size;
         os << indent << "\tpos: " << _pos;
         os << indent << "\tstart: " << _start;
         os << indent << "\tend: " << _end;
         os << indent << "\tstartIsSuffix: " << _startIsSuffix;
-        os << indent;
-        HexUtil::dumpHex(os, _data, "\tdata:\n", Util::replace(indent + '\t', "\n", "").c_str());
+        os << indent << "\tfilename: " << _filename;
         os << '\n';
 
         // We are typically called from the StreamSocket, so don't
@@ -2073,8 +2100,9 @@ private:
 
                 LOG_DBG("Sending header with size " << getSendSize());
                 http::Response httpResponse(_statusCode);
+                for (const auto& header : _responseHeaders)
+                    httpResponse.set(header.first, header.second);
                 httpResponse.set("Content-Length", std::to_string(getSendSize()));
-                httpResponse.set("Content-Type", _mimeType);
                 httpResponse.set("Accept-Ranges", "bytes");
                 httpResponse.set("Content-Range", "bytes " + std::to_string(getStart()) + "-" + std::to_string(getEnd() - 1) + '/' +
                                     std::to_string(_size));
@@ -2154,7 +2182,7 @@ private:
                 const auto size = std::min({sizeof(buffer), capacity, (size_t)(getEnd() - _pos)});
                 int n;
                 while ((n = ::read(_fd, buffer, size)) < 0 && errno == EINTR)
-                    LOG_TRC("EINTR reading from " << _data);
+                    LOG_TRC("EINTR reading from " << _filename);
 
                 if (n <= 0 || _pos >= getEnd())
                 {
@@ -2169,7 +2197,7 @@ private:
 
                     close(_fd);
                     _fd = -1;
-                    onDisconnect();
+                    socket->asyncShutdown(); // Trigger async shutdown.
                     break;
                 }
 
@@ -2190,7 +2218,7 @@ private:
         if (socket)
         {
             LOG_TRC("onDisconnect");
-            socket->shutdown(); // Flag for shutdown for housekeeping in SocketPoll.
+            socket->asyncShutdown(); // Flag for shutdown for housekeeping in SocketPoll.
             socket->shutdownConnection(); // Immediately disconnect.
             _socket.reset();
         }
@@ -2201,11 +2229,22 @@ private:
     int sendTextMessage(const char*, const size_t, bool) const override { return 0; }
     int sendBinaryMessage(const char*, const size_t, bool) const override { return 0; }
 
+    std::string getMimeType() const
+    {
+        const auto it = std::find_if(_responseHeaders.begin(), _responseHeaders.end(),
+                                     [](const Header::Pair& pair) -> bool {
+                                        return Util::iequal(pair.first, "Content-Type");
+                                     });
+        if (it != _responseHeaders.end())
+            return it->second;
+        return std::string();
+    }
+
 private:
+    http::Header::Container _responseHeaders; ///< The data Content-Type.
     std::chrono::microseconds _timeout;
     std::chrono::steady_clock::time_point _startTime;
-    std::string _data; ///< Data to upload, if not from a file, OR, the filename (if _pos == -1).
-    std::string _mimeType; ///< The data Content-Type.
+    std::string _filename; ///< The input filename.
     int _pos; ///< The current position in the data string.
     int _size; ///< The size of the data in bytes.
     int _fd; ///< The descriptor of the file to upload.

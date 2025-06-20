@@ -57,7 +57,7 @@ app.definitions.Socket = L.Class.extend({
 		}
 		if (socket && (socket.readyState === 1 || socket.readyState === 0)) {
 			this.socket = socket;
-		} else if (window.ThisIsAMobileApp) {
+		} else if (window.ThisIsTheGtkApp) {
 			// We have already opened the FakeWebSocket over in global.js
 			// But do we then set this.socket at all? Is this case ever reached?
 		} else	{
@@ -659,6 +659,10 @@ app.definitions.Socket = L.Class.extend({
 
 		textMsg = e.textMsg;
 		imgBytes = e.imgBytes;
+
+		if (window.L.Browser.cypressTest) {
+			window.L.initial._stubMessage(textMsg);
+		}
 
 		this._logSocket('INCOMING', textMsg);
 
@@ -1471,12 +1475,13 @@ app.definitions.Socket = L.Class.extend({
 			} else if (textMsg.startsWith('saveas:')) {
 				var accessToken = this._getParameterByName(url, 'access_token');
 				var accessTokenTtl = this._getParameterByName(url, 'access_token_ttl');
+				let noAuthHeader = this._getParameterByName(url, 'no_auth_header');
 
 				if (accessToken !== undefined) {
 					if (accessTokenTtl === undefined) {
 						accessTokenTtl = 0;
 					}
-					this._map.options.docParams = { 'access_token': accessToken, 'access_token_ttl': accessTokenTtl };
+					this._map.options.docParams = { 'access_token': accessToken, 'access_token_ttl': accessTokenTtl, 'no_auth_header': noAuthHeader };
 				}
 				else {
 					this._map.options.docParams = {};
@@ -1588,7 +1593,7 @@ app.definitions.Socket = L.Class.extend({
 			this._map.uiManager.setCanvasColorAfterModeChange();
 
 			var uiMode = this._map.uiManager.getCurrentMode();
-			if (uiMode === 'notebookbar') {
+			if (uiMode === 'notebookbar' && this._map.uiManager.notebookbar) {
 				this._map.uiManager.notebookbar.resetInCore();
 				this._map.uiManager.notebookbar.initializeInCore();
 			}
@@ -1646,8 +1651,8 @@ app.definitions.Socket = L.Class.extend({
 		this._map.fire('hyperlinkclicked', {url: link, coordinates: coords});
 	},
 
-	_onSocketError: function () {
-		window.app.console.debug('_onSocketError:');
+	_onSocketError: function (event) {
+		window.app.console.warn('_onSocketError:', event);
 		this._map.hideBusy();
 		// Let onclose (_onSocketClose) report errors.
 	},

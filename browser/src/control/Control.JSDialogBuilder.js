@@ -62,7 +62,11 @@ L.Control.JSDialogBuilder = L.Control.extend({
 	_currentDepth: 0,
 
 	rendersCache: {
-		fontnamecombobox: { persistent: true, images: [] }
+		fontnamecombobox: { persistent: true, images: [] },
+		layoutpanel_icons: { persistent: true, images: [] },
+		transitions_icons: { persistent: true, images: [] },
+		iconview_theme_colors: { persistent: true, images: [] },
+		ctlFavoriteswin: { persistent: true, images: [] },
 	}, // eg. custom renders for combobox entries
 
 	setWindowId: function (id) {
@@ -274,6 +278,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			// encode spaces
 			var encodedCommand = data.replace(' ', '%20');
 			builder.map.sendUnoCommand(encodedCommand);
+			// perform post-processing
+			builder.map.fire('jsdialog' + eventType, { uno: data });
 		} else if (object) {
 			// CSV and Macro Security Warning Dialogs are shown before the document load
 			// In that state the document is not really loaded and closing or cancelling it
@@ -282,7 +288,11 @@ L.Control.JSDialogBuilder = L.Control.extend({
 				 !window._firstDialogHandled &&
 				 (eventType === 'close' ||
 				 (objectType === 'responsebutton' && data == 7))) {
-				app.dispatcher.dispatch('closeapp');
+				let dispatcher = app.dispatcher;
+				if (!dispatcher)
+					dispatcher = new app.definitions['dispatcher']('global');
+
+				dispatcher.dispatch('closeapp');
 			}
 			switch (typeof data) {
 			case 'string':
@@ -425,7 +435,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 	},
 
 	_stressAccessKey: function(element, accessKey) {
-		if (!accessKey || window.mode.isMobile())
+		if (!accessKey || window.mode.isMobile() || window.getAccessibilityState())
 			return;
 
 		var text = element.textContent;
@@ -1057,44 +1067,33 @@ L.Control.JSDialogBuilder = L.Control.extend({
 					return !$(tab).hasClass('hidden');
 				};
 
-				var findNextVisibleTab = function (tab, backwards) {
-					var diff = (backwards ? -1 : 1);
-					var nextTab = tabs[tabs.indexOf(tab) + diff];
-
-					while (!isTabVisible(nextTab) && nextTab != tab) {
-						if (backwards && tabs.indexOf(nextTab) == 0)
-							nextTab = tabs[tabs.length - 1];
-						else if (!backwards && tabs.indexOf(nextTab) == tabs.length - 1)
-							nextTab = tabs[0];
-						else
-							nextTab = tabs[tabs.indexOf(nextTab) + diff];
+				var findNextVisibleTab = function(tab, backwards) {
+					const currentIndex = tabs.indexOf(tab);
+					const diff = backwards ? -1 : 1;
+					const total = tabs.length;
+				
+					for (let i = 1; i <= total; i++) {
+						const nextIndex = (currentIndex + diff * i + total) % total;
+						const nextTab = tabs[nextIndex];
+						if (isTabVisible(nextTab)) {
+							return nextTab;
+						}
 					}
-
-					return nextTab;
+				
+					// Fallback to current tab if no visible one is found (shouldn't happen)
+					return tab;
 				};
 
 				var moveFocusToPreviousTab = function(tab) {
-					if (tab === tabs[0]) {
-						tabs[tabs.length - 1].click();
-						tabs[tabs.length - 1].focus();
-					}
-					else {
-						var nextTab = findNextVisibleTab(tab, true);
-						nextTab.click();
-						nextTab.focus(); // We add this or document gets the focus.
-					}
+					const nextTab = findNextVisibleTab(tab, true);
+					nextTab.click();
+					nextTab.focus(); // Prevent document from taking focus
 				};
 
 				var moveFocusToNextTab = function(tab) {
-					if (tab === tabs[tabs.length - 1]) {
-						tabs[0].click();
-						tabs[0].focus();
-					}
-					else {
-						var nextTab = findNextVisibleTab(tab, false);
-						nextTab.click();
-						nextTab.focus(); // We add this or document gets the focus.
-					}
+					const nextTab = findNextVisibleTab(tab, false);
+					nextTab.click();
+					nextTab.focus(); // Prevent document from taking focus
 				};
 
 				var moveFocusIntoTabPage = function(tab) {
@@ -1353,29 +1352,29 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		checkboxLabel.htmlFor = data.id + '-input';
 
 		var toggleFunction = function() {
+			if (div.hasAttribute('disabled'))
+				return;
+
 			builder.callback('checkbox', 'change', div, this.checked, builder);
 		};
 
-		$(checkboxLabel).click(function () {
-			if (!div.hasAttribute('disabled')) {
-				var status = $(checkbox).is(':checked');
-				$(checkbox).prop('checked', !status);
-				toggleFunction.bind({checked: !status})();
-			}
-		});
-
 		const isDisabled = data.enabled === false;
 		if (isDisabled) {
+			div.setAttribute('disabled', 'true');
 			div.disabled = true;
+			checkbox.setAttribute('disabled', 'true');
 			checkbox.disabled = true;
 			checkbox.setAttribute('aria-disabled', true);
 		}
 
-		JSDialog.SynchronizeDisabledState(div, [checkbox]);
+		JSDialog.SynchronizeDisabledState(div, [checkbox, checkboxLabel]);
 
 		checkbox.addEventListener('change', toggleFunction);
 
 		var updateFunction = function() {
+			if (div.hasAttribute('disabled'))
+				return;
+
 			var state = data.checked;
 
 			if (state && state === 'true' || state === true || state === 1 || state === '1')
@@ -1612,6 +1611,12 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			builder._addAriaLabel(pushbutton, data, builder);
 		}
 
+		const tooltipText = (data.aria && data.aria.label) || data.text;
+		if (!pushbuttonText && tooltipText) {
+			pushbutton.setAttribute('data-cooltip', builder._cleanText(tooltipText));
+			L.control.attachTooltipEventListener(pushbutton, builder.map);
+		}
+
 		builder.map.hideRestrictedItems(data, wrapper, pushbutton);
 		builder.map.disableLockedItem(data, wrapper, pushbutton);
 		if (data.hidden)
@@ -1634,7 +1639,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		var accKey = builder._getAccessKeyFromText(data.text);
 		builder._stressAccessKey(textContent, accKey);
 
-		setTimeout(function () {
+		app.layoutingService.appendLayoutingTask(function () {
 			var labelledControl = document.getElementById(data.labelFor);
 			if (labelledControl) {
 				var target = labelledControl;
@@ -1647,7 +1652,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 
 				builder._setAccessKey(target, accKey);
 			}
-		}, 0);
+		});
 
 		textContent.id = data.id;
 		if (data.style && data.style.length) {
@@ -1694,6 +1699,8 @@ L.Control.JSDialogBuilder = L.Control.extend({
 
 		var listbox = L.DomUtil.create('select', builder.options.cssClass + ' ui-listbox ', container);
 		listbox.id = data.id + '-input';
+		if (data.labelledBy)
+			listbox.setAttribute('aria-labelledby', data.labelledBy);
 		var listboxArrow = L.DomUtil.create('span', builder.options.cssClass + ' ui-listbox-arrow', container);
 		listboxArrow.id = 'listbox-arrow-' + data.id;
 
@@ -1792,7 +1799,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		var accKey = builder._getAccessKeyFromText(data.text);
 		builder._stressAccessKey(fixedtext, accKey);
 
-		setTimeout(function () {
+		app.layoutingService.appendLayoutingTask(function () {
 			var labelledControl = document.getElementById(data.labelFor);
 			if (labelledControl) {
 				var target = labelledControl;
@@ -1805,7 +1812,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 
 				builder._setAccessKey(target, accKey);
 			}
-		}, 0);
+		});
 
 		fixedtext.id = data.id;
 		if (data.style && data.style.length) {
@@ -2138,14 +2145,19 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			}
 
 			controls['button'] = button;
-			if (builder.options.noLabelsForUnoButtons !== true) {
-				var span = L.DomUtil.create('span', 'ui-content unolabel', button);
+			var span;
+			if (builder.options.noLabelsForUnoButtons !== true && data.text) {
+				span = L.DomUtil.create('span', 'ui-content unolabel', button);
 				span.textContent = builder._cleanText(data.text);
 				builder._stressAccessKey(span, button.accessKey);
 				controls['label'] = span;
 				$(div).addClass('has-label');
-			} else if (builder.options.useInLineLabelsForUnoButtons === true) {
-				$(div).addClass('no-label');
+			} else if (builder.options.useInLineLabelsForUnoButtons === true && data.text) {
+				$(div).addClass('inline');
+				span = L.DomUtil.create('span', 'ui-content unolabel', div);
+				span.textContent = builder._cleanText(data.text);
+
+				controls['label'] = span;
 			} else {
 				$(div).addClass('no-label');
 			}
@@ -2165,13 +2177,6 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			const tooltip = builder._cleanText(data.tooltip) || builder._cleanText(data.text);
 			div.setAttribute('data-cooltip', tooltip);
 
-			if (builder.options.useInLineLabelsForUnoButtons === true) {
-				$(div).addClass('inline');
-				span = L.DomUtil.create('span', 'ui-content unolabel', div);
-				span.textContent = builder._cleanText(data.text);
-
-				controls['label'] = span;
-			}
 			var isDisabled = data.enabled === false;
 			if (data.command) {
 				var updateFunction = function() {
@@ -2307,6 +2312,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			e.stopPropagation();
 		};
 
+		const hasLabel = !!controls.label;
 		var mouseEnterFunction = window.touch.mouseOnly(function () {
 			if (builder.map.tooltip)
 				builder.map.tooltip.beginShow(div);
@@ -2323,9 +2329,11 @@ L.Control.JSDialogBuilder = L.Control.extend({
 		if (data.isCustomTooltip) {
 			this._handleCutomTooltip(div, builder);
 		}
-		else {
+		else if (!hasLabel) {
 			$(div).on('mouseenter', mouseEnterFunction);
 			$(div).on('mouseleave', mouseLeaveFunction);
+		} else {
+			div.removeAttribute('data-cooltip'); // If there is a label, we don't need the tooltip
 		}
 
 		div.addEventListener('keydown', function(e) {
@@ -2869,6 +2877,7 @@ L.Control.JSDialogBuilder = L.Control.extend({
 			&& data.type !== 'separator'
 			&& data.type !== 'spacer'
 			&& data.type !== 'edit'
+			&& data.type !== 'deck'
 			)
 			control.setAttribute('tabIndex', '0');
 	},

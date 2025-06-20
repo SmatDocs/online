@@ -24,7 +24,7 @@
 #include <common/JsonUtil.hpp>
 #include <Util.hpp>
 
-void CheckFileInfo::checkFileInfo(int redirectLimit)
+bool CheckFileInfo::checkFileInfo(int redirectLimit)
 {
     std::string uriAnonym = COOLWSD::anonymizeUrl(_url.toString());
 
@@ -87,6 +87,10 @@ void CheckFileInfo::checkFileInfo(int redirectLimit)
         // Note: we don't log the response if obfuscation is enabled, except for failures.
         const std::string& wopiResponse = httpResponse->getBody();
         const bool failed = (httpResponse->statusLine().statusCode() != http::StatusCode::OK);
+        const bool unauthorized =
+            (httpResponse->statusLine().statusCode() == http::StatusCode::Unauthorized ||
+             httpResponse->statusLine().statusCode() == http::StatusCode::Forbidden ||
+             httpResponse->statusLine().statusCode() == http::StatusCode::NotFound);
 
         if (Log::isEnabled(failed ? Log::Level::ERR : Log::Level::TRC))
         {
@@ -110,12 +114,11 @@ void CheckFileInfo::checkFileInfo(int redirectLimit)
 
         if (failed)
         {
-            _state = State::Fail;
-
-            if (httpResponse->statusLine().statusCode() == http::StatusCode::Forbidden)
-                LOG_ERR("Access denied to [" << uriAnonym << ']');
+            _state = unauthorized ? State::Unauthorized : State::Fail;
+            if (unauthorized)
+                LOG_ERR("Access denied to CheckFileInfo [" << uriAnonym << ']');
             else
-                LOG_ERR("Invalid URI or access denied to [" << uriAnonym << ']');
+                LOG_ERR("Failed or timed-out CheckFileInfo [" << uriAnonym << ']');
         }
         else
         {
@@ -169,7 +172,7 @@ void CheckFileInfo::checkFileInfo(int redirectLimit)
     _state = State::Active;
 
     // Run the CheckFileInfo request on the WebServer Poll.
-    _httpSession->asyncRequest(httpRequest, _poll);
+    return _httpSession->asyncRequest(httpRequest, _poll);
 }
 
 void CheckFileInfo::checkFileInfoSync(int redirectionLimit)

@@ -10,7 +10,31 @@ describe(['tagdesktop'], 'Editing Operations', function() {
 	function skipMessage() {
 		// FIXME: receiveMessage: {"MessageId":"Doc_ModifiedStatus","SendTime":1741357902023,"Values":{"Modified":true}}
 		// FIXME: that message seems to close blinking cursor
-		cy.wait(500);
+		cy.wait(1500);
+	}
+
+	function expectInitialText() {
+		impressHelper.triggerNewSVGForShapeInTheCenter();
+		impressHelper.dblclickOnSelectedShape();
+		helper.typeIntoDocument('{ctrl+a}');
+		helper.copy();
+		impressHelper.dblclickOnSelectedShape();
+		helper.clipboardTextShouldBeDifferentThan('Hello World');
+	}
+
+	function expectTypedText() {
+		cy.log('expectTypedText - START');
+
+		impressHelper.triggerNewSVGForShapeInTheCenter();
+		impressHelper.dblclickOnSelectedShape();
+		helper.typeIntoDocument('{ctrl+a}');
+		helper.copy();
+
+		impressHelper.dblclickOnSelectedShape();
+		helper.expectTextForClipboard('Hello World');
+		cy.wait(1000);
+
+		cy.log('expectTypedText - END');
 	}
 
 	beforeEach(function() {
@@ -19,19 +43,18 @@ describe(['tagdesktop'], 'Editing Operations', function() {
 		// close the default slide-sorter navigation sidebar
 		desktopHelper.closeNavigatorSidebar();
 		desktopHelper.selectZoomLevel('30', false);
-		impressHelper.selectTextShapeInTheCenter();
+
 		skipMessage();
+		impressHelper.selectTextShapeInTheCenter();
 		impressHelper.dblclickOnSelectedShape();
+		skipMessage();
 	});
 
 	function undo() {
 		helper.typeIntoDocument('Hello World');
-		skipMessage();
-		impressHelper.dblclickOnSelectedShape();
-		helper.typeIntoDocument('{ctrl}z');
-		impressHelper.dblclickOnSelectedShape();
-		helper.copy();
-		helper.clipboardTextShouldBeDifferentThan('Hello World');
+		expectTypedText();
+		helper.typeIntoDocument('{ctrl+z}');
+		expectInitialText();
 	}
 
 	it('Undo', function() {
@@ -42,10 +65,8 @@ describe(['tagdesktop'], 'Editing Operations', function() {
 	it('Redo', function() {
 		helper.setDummyClipboardForCopy();
 		undo();
-		helper.typeIntoDocument('{ctrl}y');
-		impressHelper.dblclickOnSelectedShape();
-		helper.copy();
-		helper.expectTextForClipboard('Hello World');
+		helper.typeIntoDocument('{ctrl+y}');
+		expectTypedText();
 	});
 
 	it('Repair Document', function() {
@@ -57,8 +78,6 @@ describe(['tagdesktop'], 'Editing Operations', function() {
 		impressHelper.triggerNewSVGForShapeInTheCenter();
 		repairHelper.rollbackPastChange('Undo');
 		impressHelper.triggerNewSVGForShapeInTheCenter();
-		impressHelper.dblclickOnSelectedShape();
-		helper.copy();
-		helper.expectTextForClipboard('Hello World');
+		expectTypedText();
 	});
 });

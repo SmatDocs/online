@@ -51,6 +51,9 @@ private:
     Admin* _admin;
     int _sessionId;
     bool _isAuthenticated;
+
+    /// The next unique session-ID.
+    static std::atomic<uint64_t> NextSessionId;
 };
 
 class MonitorSocketHandler : public AdminSocketHandler
@@ -104,6 +107,7 @@ public:
     /// available to us.
     size_t getTotalAvailableMemory() const { return _totalAvailMemKb; }
     size_t getTotalCpuUsage() const;
+    std::time_t getLastActivityTime() const;
 
     void modificationAlert(const std::string& dockey, pid_t pid, bool value);
 

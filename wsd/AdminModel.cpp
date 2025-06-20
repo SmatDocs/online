@@ -45,6 +45,15 @@ std::ostream& print(std::ostream& oss, const std::string_view prefix, const std:
     return oss;
 }
 
+
+std::string concat(const std::string_view &prefix, const std::string_view name,
+                    const std::string_view suffix)
+{
+    std::ostringstream oss;
+    print(oss, prefix, name, suffix);
+    return oss.str();
+}
+
 } // namespace
 
 void Document::addView(const std::string& sessionId, const std::string& userName,
@@ -496,6 +505,7 @@ void AdminModel::notify(const std::string& message)
         {
             if (!it->second.notify(message))
             {
+                LOG_INF("Failed to notify admin [" << it->first << "]; unsubscribing");
                 it = _subscribers.erase(it);
             }
             else
@@ -869,13 +879,15 @@ void AdminModel::updateLastActivityTime(const std::string& docKey)
 {
     ASSERT_CORRECT_THREAD_OWNER(_owner);
 
+    _lastActivity = std::time(nullptr);
+
     auto docIt = _documents.find(docKey);
     if (docIt != _documents.end())
     {
         if (docIt->second.getIdleTime() >= 10)
         {
             docIt->second.takeSnapshot(); // I would like to keep the idle time
-            docIt->second.updateLastActivityTime();
+            docIt->second.updateLastActivityTime(_lastActivity);
             notify("resetidle " + std::to_string(docIt->second.getPid()));
         }
     }
@@ -1013,10 +1025,10 @@ public:
 
     void Print(std::ostream& oss, const std::string_view prefix, const std::string_view unit) const
     {
-        print(oss, prefix, "total", unit) << _total << '\n';
-        print(oss, prefix, "average", unit) << getIntAverage() << '\n';
-        print(oss, prefix, "min", unit) << getMin() << '\n';
-        print(oss, prefix, "max", unit) << getMax() << '\n';
+        print(oss, prefix, "total", unit) << ' ' << _total << '\n';
+        print(oss, prefix, "average", unit) << ' ' << getIntAverage() << '\n';
+        print(oss, prefix, "min", unit) << ' ' << getMin() << '\n';
+        print(oss, prefix, "max", unit) << ' ' << getMax() << '\n';
     }
 
 private:
@@ -1042,9 +1054,9 @@ public:
 
     void Print(std::ostream& oss, const char* prefix, const char* name, const char* unit) const
     {
-        _all.Print(print(oss, prefix, "all", name), std::string_view(), unit);
-        _active.Print(print(oss, prefix, "active", name), std::string_view(), unit);
-        _expired.Print(print(oss, prefix, "expired", name), std::string_view(), unit);
+        _all.Print(oss, concat(prefix, "all", name), unit);
+        _active.Print(oss, concat(prefix, "active", name), unit);
+        _expired.Print(oss, concat(prefix, "expired", name), unit);
     }
 
 private:

@@ -103,6 +103,8 @@ class LayerDrawing {
 	private onSlideRenderingCompleteCallback: VoidFunction = null;
 	private layerRenderer: LayerRenderer;
 	private videoRenderers: Map<string, Array<VideoRenderer>> = new Map();
+	private isTransitionActive: boolean = false;
+	private queuedLayers: any[] = [];
 
 	constructor(mapObj: any, helper: LayersCompositor) {
 		this.map = mapObj;
@@ -180,6 +182,13 @@ class LayerDrawing {
 		if (!videosInfo || videosInfo.length === 0) return;
 		this.videoRenderers.set(slideHash, []);
 
+		if (
+			!this.layerRenderer.getRenderContext().is2dGl() &&
+			!VideoRendererGl.videoProgramInitialized
+		) {
+			VideoRendererGl.createProgram(this.layerRenderer.getRenderContext());
+		}
+
 		for (let i = 0; i < videosInfo.length; ++i) {
 			const videoInfo = videosInfo[i];
 			this.handleVideo(i, slideHash, videoInfo);
@@ -207,13 +216,6 @@ class LayerDrawing {
 	}
 
 	private drawVideos(slideHash: string) {
-		if (
-			!this.layerRenderer.getRenderContext().is2dGl() &&
-			!VideoRendererGl.videoProgramInitialized
-		) {
-			VideoRendererGl.createProgram(this.layerRenderer.getRenderContext());
-		}
-
 		const videoRenderers = this.videoRenderers.get(slideHash);
 		if (!videoRenderers) return;
 
@@ -426,6 +428,10 @@ class LayerDrawing {
 	onSlideLayerMsg(e: any) {
 		if (this.isDisposed()) return;
 
+		if (this.isTransitionActive) {
+			this.queuedLayers.push(e);
+			return;
+		}
 		const info = e.message;
 		if (!info) {
 			window.app.console.log(
@@ -762,7 +768,18 @@ class LayerDrawing {
 		return this.layerRenderer.getRenderContext();
 	}
 
+	public notifyTransitionStart() {
+		this.isTransitionActive = true;
+		this.queuedLayers = [];
+	}
+
 	public notifyTransitionEnd(slideHash: string) {
+		this.isTransitionActive = false;
+		while (this.queuedLayers.length > 0) {
+			const layer = this.queuedLayers.shift();
+			this.onSlideLayerMsg(layer);
+		}
+
 		this.handleVideos(slideHash);
 		if (this.videoRenderers.has(slideHash)) {
 			this.loadVideos(slideHash);

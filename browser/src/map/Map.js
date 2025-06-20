@@ -111,6 +111,7 @@ L.Map = L.Evented.extend({
 		this._previewRequestsOnFly = 0;
 		this._timeToEmptyQueue = new Date();
 		this._partsDirection = 1; // For pre-fetching the slides in the direction of travel.
+		this._lockAccessibilityOn = false;
 		// Focusing:
 		//
 		// Cursor is visible or hidden (e.g. for graphic selection).
@@ -291,7 +292,7 @@ L.Map = L.Evented.extend({
 				if (window.ThisIsTheAndroidApp) {
 					window.postMobileMessage('hideProgressbar');
 				}
-			} else if (this._docLayer) {
+			} else if (this._docLayer && app.sectionContainer) {
 				// remove the comments and changes
 				var commentSection = app.sectionContainer.getSectionWithName(L.CSections.CommentList.name);
 				if (commentSection)
@@ -357,6 +358,12 @@ L.Map = L.Evented.extend({
 		this._textInput.showCursor();
 	},
 
+	lockAccessibilityOn: function() {
+		this.setAccessibilityState(true);
+		this._lockAccessibilityOn = true;
+		this.fire('a11ystatechanged');
+	},
+
 	// end of A11y
 
 	loadDocument: function(socket) {
@@ -369,7 +376,6 @@ L.Map = L.Evented.extend({
 		// TODO: remove duplicated init code
 		app.socket.sendMessage('commandvalues command=.uno:LanguageStatus');
 		if (this._docLayer._docType === 'spreadsheet') {
-			this._docLayer._gotFirstCellCursor = false;
 			if (this._docLayer.options.sheetGeometryDataEnabled)
 				this._docLayer.requestSheetGeometryData();
 			this._docLayer.refreshViewData();
@@ -1499,7 +1505,7 @@ L.Map = L.Evented.extend({
 
 		if (!target) { return false; }
 
-		return (L.DomUtil.hasClass(target, 'leaflet-tile')
+		return ((target.id === 'map' || target.classList.contains('leaflet-layer'))
 			&& !(related && (L.DomUtil.hasClass(related, 'leaflet-tile')
 				|| L.DomUtil.hasClass(related, 'leaflet-cursor'))));
 	},

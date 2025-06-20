@@ -11,18 +11,16 @@
 
 #pragma once
 
+#include <common/Log.hpp>
+
 #include <cerrno>
 #include <chrono>
 #include <fcntl.h>
-#include <filesystem>
+#include <fstream>
+#include <string>
 #include <sys/stat.h>
 
-#include <string>
-#include <fstream>
-
 #include <Poco/Path.h>
-
-#include "Log.hpp"
 
 #if !defined(S_ISREG) && defined(S_IFMT) && defined(S_IFREG)
 #define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
@@ -207,7 +205,7 @@ namespace FileUtil
     template <typename T>
     ssize_t readFile(const std::string& path, T& data, int maxSize = 256 * 1024)
     {
-        const int fd = FileUtil::openFileAsFD(path.c_str(), O_RDONLY);
+        const int fd = FileUtil::openFileAsFD(path, O_RDONLY);
         if (fd < 0)
             return -1;
 
@@ -238,10 +236,9 @@ namespace FileUtil
     {
     public:
         /// Stat the given path. Symbolic links are stat'ed when @link is true.
-        Stat(std::string file, bool link = false)
-            : _path(std::move(file))
-            , _sb{}
-            , _res(link ? FileUtil::getLStatOfFile(_path, _sb) : FileUtil::getStatOfFile(_path, _sb))
+        Stat(const std::string& path, bool link = false)
+            : _sb{}
+            , _res(link ? FileUtil::getLStatOfFile(path, _sb) : FileUtil::getStatOfFile(path, _sb))
             , _stat_errno(errno)
         {
         }
@@ -249,8 +246,6 @@ namespace FileUtil
         bool good() const { return _res == 0; }
         bool bad() const { return !good(); }
         const struct ::stat& sb() const { return _sb; }
-
-        const std::string& path() const { return _path; }
 
         bool isDirectory() const { return S_ISDIR(_sb.st_mode); }
         bool isFile() const { return S_ISREG(_sb.st_mode); }
@@ -304,43 +299,63 @@ namespace FileUtil
 
         /// Returns true if both files exist and have
         /// the same size and same contents.
-        bool isIdenticalTo(const Stat& other) const
+        static inline bool isIdenticalTo(const Stat& l, const std::string& lPath,
+                                         const Stat& r, const std::string& rPath)
         {
             // No need to check whether they are linked or not,
             // since if they are, the following check will match,
             // and if they aren't, we still need to rely on the following.
             // Finally, compare the contents, to avoid costly copying if we fail to update.
-            return (exists() && other.exists() && !isDirectory() && !other.isDirectory() &&
-                    size() == other.size() && compareFileContents(_path, other._path));
+            return (l.exists() && r.exists() && !l.isDirectory() && !r.isDirectory() &&
+                    l.size() == r.size() && compareFileContents(lPath, rPath));
         }
 
         /// Returns true if both files exist and have
         /// the same size and modified timestamp.
-        bool isUpToDate(const Stat& other) const
+        static inline bool isUpToDate(const Stat& l, const std::string& lPath,
+                                      const Stat& r, const std::string& rPath)
         {
             // No need to check whether they are linked or not,
             // since if they are, the following check will match,
             // and if they aren't, we still need to rely on the following.
             // Finally, compare the contents, to avoid costly copying if we fail to update.
-            if (isIdenticalTo(other))
+            if (isIdenticalTo(l, lPath, r, rPath))
             {
                 return true;
             }
 
             // Clearly, no match. Log something informative.
             LOG_DBG("File contents mismatch: ["
-                    << _path << "] " << (exists() ? "exists" : "missing") << ", " << size()
-                    << " bytes, modified at " << modifiedTime().tv_sec << " =/= [" << other._path
-                    << "]: " << (other.exists() ? "exists" : "missing") << ", " << other.size()
-                    << " bytes, modified at " << other.modifiedTime().tv_sec);
+                    << lPath << "] " << (l.exists() ? "exists" : "missing") << ", " << l.size()
+                    << " bytes, modified at " << l.modifiedTime().tv_sec << " =/= [" << rPath
+                    << "]: " << (r.exists() ? "exists" : "missing") << ", " << r.size()
+                    << " bytes, modified at " << r.modifiedTime().tv_sec);
             return false;
         }
 
     private:
-        const std::string _path;
         struct ::stat _sb;
         const int _res;
         const int _stat_errno;
+    };
+
+    /// File owning helper that removes it on destruction.
+    struct OwnedFile final
+    {
+        std::string _file;
+
+        OwnedFile(std::string file)
+            : _file(std::move(file))
+        {
+        }
+
+        OwnedFile(const OwnedFile&) = delete;
+        OwnedFile& operator=(const OwnedFile&) = delete;
+
+        ~OwnedFile()
+        {
+            FileUtil::removeFile(_file);
+        }
     };
 
     void lslr(const std::string& dir);

@@ -33,7 +33,7 @@ class CheckFileInfo : public std::enable_shared_from_this<CheckFileInfo>
 {
 public:
     /// The CheckFileInfo State.
-    STATE_ENUM(State, None, Active, Timedout, Fail, Pass);
+    STATE_ENUM(State, None, Active, Timedout, Unauthorized, Fail, Pass);
 
     /// Create an instance with a SocketPoll and a RequestDetails instance.
     CheckFileInfo(const std::shared_ptr<TerminatingPoll>& poll, const Poco::URI& url,
@@ -67,7 +67,8 @@ public:
     std::unique_ptr<WopiStorage::WOPIFileInfo> wopiFileInfo(const Poco::URI& uriPublic) const;
 
     /// Start the actual request.
-    void checkFileInfo(int redirectionLimit);
+    /// Return false if we couldn't start it.
+    bool checkFileInfo(int redirectionLimit);
 
     /// Start the request and wait for the response.
     /// In some scenarios we can't proceed without CheckFileInfo results.

@@ -47,29 +47,30 @@ public:
     }
 
     bool handleHttpRequest(const Poco::Net::HTTPRequest& request,
-                           Poco::MemoryInputStream& message,
-                           std::shared_ptr<StreamSocket>& socket) override
+                           std::istream& message,
+                           const std::shared_ptr<StreamSocket>& socket) override
     {
         return WopiTestServer::handleHttpRequest(request, message, socket);
     }
 
     std::map<std::string, std::string>
         parallelizeCheckInfo(const Poco::Net::HTTPRequest& request,
-                             Poco::MemoryInputStream& /*message*/,
-                             std::shared_ptr<StreamSocket>& /*socket*/) override
+                             std::istream& /*message*/,
+                             const std::shared_ptr<StreamSocket>& /*socket*/) override
     {
         std::string uri = Uri::decode(request.getURI());
         LOG_TST("parallelizeCheckInfo requested: " << uri);
         return std::map<std::string, std::string>{
             {"wopiSrc", "/wopi/files/0"},
             {"accessToken", "anything"},
+            {"noAuthHeader", ""},
             {"permission", ""},
             {"configid", ""}
         };
     }
 
     bool handleGetFileRequest(const Poco::Net::HTTPRequest& request,
-                              std::shared_ptr<StreamSocket>& socket) override
+                              const std::shared_ptr<StreamSocket>& socket) override
     {
         if (_getFileCount++ == 0)
         {
@@ -156,8 +157,8 @@ public:
     // enables parallel checkFileInfo connection
     std::map<std::string, std::string>
         parallelizeCheckInfo(const Poco::Net::HTTPRequest& request,
-                             Poco::MemoryInputStream& /*message*/,
-                             std::shared_ptr<StreamSocket>& socket) override
+                             std::istream& /*message*/,
+                             const std::shared_ptr<StreamSocket>& socket) override
     {
         // We want to test that this socket dtor will get called when this
         // session is Unauthorized. Without the fix the test times out and
@@ -169,13 +170,14 @@ public:
         return std::map<std::string, std::string>{
             {"wopiSrc", "/wopi/files/0"},
             {"accessToken", "anything"},
+            {"noAuthHeader", ""},
             {"permission", ""},
             {"configid", ""}
         };
     }
 
     bool handleCheckFileInfoRequest(const Poco::Net::HTTPRequest& /*request*/,
-                                            std::shared_ptr<StreamSocket>& socket) override
+                                    const std::shared_ptr<StreamSocket>& socket) override
     {
         std::unique_ptr<http::Response> httpResponse =
             std::make_unique<http::Response>(http::StatusCode::Unauthorized);

@@ -228,11 +228,15 @@ export class Comment extends CanvasSectionObject {
 		this.sectionProperties.nodeModify = L.DomUtil.create('div', 'cool-annotation-edit' + ' modify-annotation', this.sectionProperties.wrapper);
 		this.sectionProperties.nodeModifyText = L.DomUtil.create('div', 'cool-annotation-textarea', this.sectionProperties.nodeModify);
 		this.sectionProperties.nodeModifyText.setAttribute('contenteditable', 'true');
+		this.sectionProperties.nodeModifyText.setAttribute('role', 'textbox');
+		this.sectionProperties.nodeModifyText.setAttribute('aria-label', _('Edit comment'));
 		this.sectionProperties.nodeModifyText.id = 'annotation-modify-textarea-' + this.sectionProperties.data.id;
 		this.sectionProperties.contentText = L.DomUtil.create('div', '', this.sectionProperties.contentNode);
 		this.sectionProperties.nodeReply = L.DomUtil.create('div', 'cool-annotation-edit' + ' reply-annotation', this.sectionProperties.wrapper);
 		this.sectionProperties.nodeReplyText = L.DomUtil.create('div', 'cool-annotation-textarea', this.sectionProperties.nodeReply);
 		this.sectionProperties.nodeReplyText.setAttribute('contenteditable', 'true');
+		this.sectionProperties.nodeReplyText.setAttribute('role', 'textbox');
+		this.sectionProperties.nodeReplyText.setAttribute('aria-label', _('Reply comment'));
 		this.sectionProperties.nodeReplyText.id = 'annotation-reply-textarea-' + this.sectionProperties.data.id;
 		this.createChildLinesNode();
 
@@ -285,6 +289,7 @@ export class Comment extends CanvasSectionObject {
 		var tdImg = L.DomUtil.create('td', 'cool-annotation-img', tr);
 		var tdAuthor = L.DomUtil.create('td', 'cool-annotation-author', tr);
 		var imgAuthor = L.DomUtil.create('img', 'avatar-img', tdImg);
+		imgAuthor.setAttribute('alt', this.sectionProperties.data.author);
 		var viewId = this.map.getViewId(this.sectionProperties.data.author);
 		app.LOUtil.setUserImage(imgAuthor, this.map, viewId);
 		imgAuthor.setAttribute('width', this.sectionProperties.imgSize[0]);
@@ -547,22 +552,6 @@ export class Comment extends CanvasSectionObject {
 			}
 			this.setShowSection(true);
 			var position: Array<number> = [Math.round(cellPos[0] * app.twipsToPixels), Math.round(cellPos[1] * app.twipsToPixels)];
-			var splitPosCore = {x: 0, y: 0};
-			if (app.map._docLayer.getSplitPanesContext())
-				splitPosCore = app.map._docLayer.getSplitPanesContext().getSplitPos();
-
-			splitPosCore.x *= app.dpiScale;
-			splitPosCore.y *= app.dpiScale;
-
-			if (position[0] < splitPosCore.x)
-				position[0] += this.documentTopLeft[0];
-			else if (position[0] - this.documentTopLeft[0] < splitPosCore.x)
-				this.setShowSection(false);
-
-			if (position[1] < splitPosCore.y)
-				position[1] += this.documentTopLeft[1];
-			else if (position[1] - this.documentTopLeft[1] < splitPosCore.y)
-				this.setShowSection(false);
 
 			this.setPosition(position[0], position[1]);
 		}

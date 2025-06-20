@@ -81,6 +81,9 @@ function _iconViewEntry(
 		parentContainer,
 	);
 
+	//id is needed to find the element to regain focus after widget is updated. see updateWidget in Control.JSDialogBuilder.js
+	entryContainer.id = parentData.id + '_' + entry.row;
+
 	// By default `aria-presed` should be false
 	entryContainer.setAttribute('aria-pressed', 'false');
 
@@ -89,17 +92,11 @@ function _iconViewEntry(
 		entryContainer.setAttribute('aria-pressed', 'true');
 	}
 
-	const icon = L.DomUtil.create(
-		'div',
-		builder.options.cssClass + ' ui-iconview-icon',
-		entryContainer,
-	);
-
 	if (entry.ondemand) {
 		const placeholder = L.DomUtil.create(
 			'span',
 			builder.options.cssClass,
-			icon,
+			entryContainer,
 		);
 		placeholder.innerText = entry.text;
 		if (entry.tooltip) placeholder.title = entry.tooltip;
@@ -113,18 +110,24 @@ function _iconViewEntry(
 			'iconview',
 			entry.row,
 			placeholder,
-			icon,
+			entryContainer,
 			entry.text,
 		);
 	} else {
-		_createEntryImage(icon, builder, entry, entry.image);
-		if (hasText) _createEntryText(icon, entry);
+		_createEntryImage(entryContainer, builder, entry, entry.image);
 	}
+
+	if (hasText) _createEntryText(entryContainer, entry);
 
 	if (!disabled) {
 		const singleClick = parentData.singleclickactivate === true;
 		$(entryContainer).click(function () {
-			$('#' + parentData.id + ' .ui-treeview-entry').removeClass('selected');
+			entryContainer.setAttribute('tabindex', '0');
+			entryContainer.focus();
+			//avoid re-selecting already selected entry
+			if ($(entryContainer).hasClass('selected')) return;
+
+			$('#' + parentData.id + ' .ui-iconview-entry').removeClass('selected');
 			builder.callback('iconview', 'select', parentData, entry.row, builder);
 			if (singleClick) {
 				builder.callback(
@@ -136,9 +139,23 @@ function _iconViewEntry(
 				);
 			}
 		});
+
+		entryContainer.addEventListener('contextmenu', function (e: Event) {
+			$('#' + parentData.id + ' .ui-iconview-entry').removeClass('selected');
+			builder.callback('iconview', 'select', parentData, entry.row, builder);
+			$(entryContainer).addClass('selected');
+			builder.callback(
+				'iconview',
+				'contextmenu',
+				parentData,
+				entry.row,
+				builder,
+			);
+			e.preventDefault();
+		});
+
 		if (!singleClick) {
 			$(entryContainer).dblclick(function () {
-				$('#' + parentData.id + ' .ui-treeview-entry').removeClass('selected');
 				builder.callback(
 					'iconview',
 					'activate',
@@ -225,6 +242,26 @@ JSDialog.iconView = function (
 			if (hasText) _createEntryText(container, entry);
 		}
 	};
+
+	JSDialog.KeyboardGridNavigation(container);
+	container.addEventListener('keydown', function (e: KeyboardEvent) {
+		if (e.key !== 'Enter' && e.key !== ' ' && e.code !== 'Space') return;
+
+		const active = document.activeElement as HTMLElement;
+		if (!active || !active.classList.contains('ui-iconview-entry')) return;
+
+		const iconViewEntries = Array.from(
+			container.querySelectorAll('.ui-iconview-entry'),
+		);
+		const selectedIndex = iconViewEntries.indexOf(active);
+
+		if (selectedIndex === -1) return;
+
+		if (e.key === ' ' || e.code === 'Space')
+			builder.callback('iconview', 'select', data, selectedIndex, builder);
+		else if (e.key === 'Enter')
+			builder.callback('iconview', 'activate', data, selectedIndex, builder);
+	});
 
 	return false;
 };

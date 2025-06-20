@@ -181,7 +181,7 @@ private:
     bool downloadAs(const StringVector& tokens);
     bool getChildId();
     bool getTextSelection(const StringVector& tokens);
-    bool setClipboard(const char* buffer, int length, const StringVector& tokens);
+    bool setClipboard(const StringVector& tokens);
     std::string getTextSelectionInternal(const std::string& mimeType);
     bool paste(const char* buffer, int length, const StringVector& tokens);
     bool insertFile(const StringVector& tokens);
@@ -193,7 +193,7 @@ private:
     bool dialogEvent(const StringVector& tokens);
     bool completeFunction(const StringVector& tokens);
     bool unoCommand(const StringVector& tokens);
-    bool unoSignatureCommand(const std::string& commandName);
+    bool unoSignatureCommand(const std::string_view commandName);
     bool selectText(const StringVector& tokens, LokEventTargetEnum target);
     bool selectGraphic(const StringVector& tokens);
     bool renderNextSlideLayer(SlideCompressor &scomp,

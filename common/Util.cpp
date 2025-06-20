@@ -49,6 +49,9 @@
 
 #if defined __GLIBC__
 #include <malloc.h>
+#if defined(M_TRIM_THRESHOLD)
+#include <dlfcn.h>
+#endif
 #endif
 
 #include <atomic>
@@ -88,10 +91,10 @@
 #include <png.h>
 #undef PNG_VERSION_INFO_ONLY
 
-
 #include "Log.hpp"
 #include "Protocol.hpp"
 #include "TraceEvent.hpp"
+#include "common/Common.hpp"
 
 namespace Util
 {
@@ -488,6 +491,74 @@ namespace Util
         return std::string::npos;
     }
 
+    // For copyToMatch/seekToMatch
+    bool processToMatch(std::istream& in, std::ostream* out, std::string_view search)
+    {
+        const size_t searchLen = search.length();
+        assert(searchLen && "need to search for something");
+
+        const std::streamsize overlap = searchLen - 1;
+        std::streamsize carrySize = 0;
+
+        std::vector<char> scratch(READ_BUFFER_SIZE + overlap);
+        char* buffer = scratch.data();
+
+        // Read READ_BUFFER_SIZE at a time, keep enough from last iteration to
+        // match 'search' against what existed at the end of the last window (but
+        // was too short to match) that might match now at the start of this
+        // new window.
+        while (in)
+        {
+            in.read(buffer + carrySize, READ_BUFFER_SIZE);
+            std::streamsize bytesRead = in.gcount();
+            if (!bytesRead)
+                break;
+
+            std::streamsize bytesInBuffer = carrySize + bytesRead;
+
+            std::string_view view(buffer, bytesInBuffer);
+            const auto match = view.find(search);
+
+            if (match != std::string_view::npos)
+            {
+                // Copy as far as match
+                if (out)
+                    out->write(buffer, match);
+                // Seek back to before match and return
+                in.clear();
+                in.seekg(-static_cast<std::streamoff>(bytesInBuffer - match), std::ios_base::cur);
+                return true;
+            }
+            else
+            {
+                if (out)
+                {
+                    // Copy what definitely doesn't match so far to output.
+                    std::streamsize bytesToWrite = bytesInBuffer > overlap ? bytesInBuffer - overlap : 0;
+                    out->write(buffer, bytesToWrite);
+                }
+                // Rotate <= overlap to start of buffer for next iteration
+                carrySize = std::min(overlap, bytesInBuffer);
+                std::memmove(buffer, buffer + bytesInBuffer - carrySize, carrySize);
+            }
+        }
+
+        // write left over
+        if (carrySize > 0 && out)
+            out->write(buffer, carrySize);
+        return false;
+    }
+
+    bool seekToMatch(std::istream& in, std::string_view search)
+    {
+        return processToMatch(in, nullptr, search);
+    }
+
+    bool copyToMatch(std::istream& in, std::ostream& out, std::string_view search)
+    {
+        return processToMatch(in, &out, search);
+    }
+
     std::string getIso8601FracformatTime(std::chrono::system_clock::time_point time){
         char time_modified[64];
         std::time_t lastModified_us_t = std::chrono::system_clock::to_time_t(time);
@@ -726,6 +797,24 @@ namespace Util
         return info;
     }
 
+    void trimMalloc()
+    {
+#if defined(M_TRIM_THRESHOLD)
+        // If platform supports glibc's malloc_trim, then attempt tcmalloc
+        // equivalents if that's in use as an alternative.
+        static auto releaseFreeMemory = [] {
+            auto symbol = reinterpret_cast<void(*)(void)>(dlsym(RTLD_NEXT, "MallocExtension_ReleaseFreeMemory"));
+            LOG_INF("Allocator is: " << (symbol ? "tcmalloc" : "glibc"));
+            return symbol;
+        }();
+
+        if (releaseFreeMemory)
+            releaseFreeMemory();
+        else
+            malloc_trim(0);
+#endif
+    }
+
     void assertCorrectThread(std::thread::id owner, const char* fileName, int lineNo)
     {
         // uninitialized owner means detached and can be invoked by any thread.
@@ -906,6 +995,15 @@ namespace Util
         {
             _x1 = _y1 = _x2 = _y2 = 0;
         }
+    }
+
+    std::string base64Encode(std::string_view input)
+    {
+        std::ostringstream oss;
+        Poco::Base64Encoder encoder(oss);
+        encoder << input;
+        encoder.close();
+        return oss.str();
     }
 
 } // namespace Util

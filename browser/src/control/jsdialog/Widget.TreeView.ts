@@ -316,6 +316,7 @@ class TreeViewControl {
 		);
 		colorPreviewButton.style.setProperty('vertical-align', 'middle');
 		colorPreviewButton.tabIndex = -1;
+		colorPreviewButton.alt = ''; //In this case, it is advisable to use an empty alt tag, as the information of the function is available in text form
 
 		return colorPreviewButton;
 	}
@@ -489,7 +490,9 @@ class TreeViewControl {
 			builder.options.cssClass + ' ui-treeview-cell-text',
 			parent,
 		);
-		cell.innerText = entry.columns[index].text || entry.text;
+		cell.innerText =
+			builder._cleanText(entry.columns[index].text) ||
+			builder._cleanText(entry.text);
 	}
 
 	createLinkCell(
@@ -506,6 +509,8 @@ class TreeViewControl {
 		const link = L.DomUtil.create('a', '', cell);
 		link.href = entry.columns[index].link || entry.columns[index].text;
 		link.innerText = entry.columns[index].text || entry.text;
+		link.target = '_blank';
+		link.rel = 'noopener';
 	}
 
 	fillCells(
@@ -540,8 +545,6 @@ class TreeViewControl {
 		// regular columns
 		for (const index in entry.columns) {
 			td = L.DomUtil.create('div', '', tr);
-			if (entry.text) td.setAttribute('data-cooltip', entry.text);
-			L.control.attachTooltipEventListener(td, builder.map);
 			rowElements.push(td);
 
 			span = L.DomUtil.create(

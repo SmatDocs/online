@@ -161,18 +161,12 @@ public:
     {
         LOG_TRC("Socket dtor");
 
-        // explicit closeFD called, or initial createSocket failure
-        if (_fd < 0)
-            return;
-
-        // Doesn't block on sockets; no error handling needed.
-#if !MOBILEAPP
-        ::close(_fd);
-        LOG_DBG("Closed socket " << toStringImpl());
-#else
-        fakeSocketClose(_fd);
-#endif
+        closeFD(); // In case we haven't closed yet.
     }
+
+    /// Returns true iff we have a valid FD and haven't called shutdown(2).
+    /// Note: this is needed because shutting down and closing are independent.
+    bool isOpen() const { return _fd >= 0 && !_isShutdown; }
 
     /// Returns true if this socket FD has been shutdown, but not necessarily closed.
     bool isShutdown() const { return _isShutdown; }
@@ -218,17 +212,20 @@ public:
 
     /// Shutdown the socket.
     /// TODO: Support separate read/write shutdown.
-    virtual void shutdown()
+    void syncShutdown()
     {
         if (!_noShutdown)
         {
             LOG_TRC("Socket shutdown RDWR. " << *this);
-            setShutdown();
+            if (!_isShutdown)
+            {
+                setShutdown();
 #if !MOBILEAPP
-            ::shutdown(_fd, SHUT_RDWR);
+                ::shutdown(_fd, SHUT_RDWR);
 #else
-            fakeSocketShutdown(_fd);
+                fakeSocketShutdown(_fd);
 #endif
+            }
         }
     }
 
@@ -396,19 +393,7 @@ public:
 
     // arg to emphasize what is allowed do this
     // close in advance of the ctor
-    void closeFD(const SocketPoll& /*rPoll*/)
-    {
-#if !MOBILEAPP
-        ::close(_fd);
-#else
-        fakeSocketClose(_fd);
-#endif
-        // Invalidate the FD by negating to preserve the original value.
-        if (_fd > 0)
-            _fd = -_fd;
-        else if (_fd == 0) // Unlikely, but technically possible.
-            _fd = -1;
-    }
+    void closeFD(const SocketPoll& /*rPoll*/) { closeFD(); }
 
 protected:
     /// Construct based on an existing socket fd.
@@ -496,6 +481,30 @@ private:
             }
 #endif
         }
+    }
+
+    /// Close the socket FD.
+    /// Internal implementation, always private.
+    void closeFD()
+    {
+        // explicit closeFD called, or initial createSocket failure
+        if (_fd < 0)
+            return;
+
+            // Doesn't block on sockets; no error handling needed.
+#if !MOBILEAPP
+        ::close(_fd);
+#else
+        fakeSocketClose(_fd);
+#endif
+
+        LOG_DBG("Closed socket " << toStringImpl()); // Should be logged exactly once.
+
+        // Invalidate the FD by negating to preserve the original value.
+        if (_fd > 0)
+            _fd = -_fd;
+        else if (_fd == 0) // Unlikely, but technically possible.
+            _fd = -1;
     }
 
     std::string _clientAddress;
@@ -991,11 +1000,11 @@ public:
     typedef std::function<void()> CallbackFn;
 
     /// Add a callback to be invoked in the polling thread
-    void addCallback(const CallbackFn& fn)
+    void addCallback(CallbackFn fn)
     {
         std::lock_guard<std::mutex> lock(_mutex);
         const bool wasEmpty = taskQueuesEmpty();
-        _newCallbacks.emplace_back(fn);
+        _newCallbacks.emplace_back(std::move(fn));
         if (wasEmpty)
             wakeup();
     }
@@ -1247,13 +1256,18 @@ public:
     /// Emit 'onDisconnect' if it has not been done
     void ensureDisconnected()
     {
+        ASSERT_CORRECT_SOCKET_THREAD(this);
         if (!_doneDisconnect)
         {
-            ASSERT_CORRECT_SOCKET_THREAD(this);
-
             _doneDisconnect = true;
             if (_socketHandler)
                 _socketHandler->onDisconnect();
+        }
+
+        if (isOpen())
+        {
+            // Note: Ensure proper semantics of onDisconnect()
+            LOG_WRN("Socket still open post onDisconnect(), forced shutdown.");
         }
     }
 
@@ -1270,8 +1284,7 @@ public:
     /// Returns true in case of forced removal, caller shall stop processing
     bool checkRemoval(std::chrono::steady_clock::time_point now);
 
-    /// Just trigger the async shutdown.
-    void shutdown() override
+    void asyncShutdown()
     {
         _shutdownSignalled = true;
         LOG_TRC("Async shutdown requested.");
@@ -1284,7 +1297,7 @@ public:
     }
 
     /// Perform the real shutdown.
-    virtual void shutdownConnection() { Socket::shutdown(); }
+    virtual void shutdownConnection() { syncShutdown(); }
 
     int getPollEvents(std::chrono::steady_clock::time_point now,
                       int64_t &timeoutMaxMicroS) override
@@ -1346,8 +1359,8 @@ public:
     /// Will always shutdown the socket.
     bool sendAndShutdown(http::Response& response);
 
-    /// Safely flush any outgoing data.
-    inline void flush()
+    /// Safely attempt to write any outgoing data.
+    inline void attemptWrites()
     {
         if (!_outBuffer.empty())
             writeOutgoingData();
@@ -1364,7 +1377,7 @@ public:
         // Flush existing non-ancillary data
         // so that our non-ancillary data will
         // match ancillary data.
-        flush();
+        attemptWrites();
 
         msghdr msg;
         iovec iov[1];
@@ -1581,7 +1594,7 @@ public:
     /// populates a request for that.
     bool parseHeader(const std::string_view clientName, std::istream& message,
                      Poco::Net::HTTPRequest& request,
-                     std::chrono::steady_clock::time_point lastHTTPHeader, MessageMap& map);
+                     std::chrono::steady_clock::time_point& lastHTTPHeader, MessageMap& map);
 
     Buffer& getInBuffer() { return _inBuffer; }
 
@@ -1639,7 +1652,7 @@ public:
             return;
         }
 
-        if (isShutdown() || checkRemoval(now))
+        if (!isOpen() || checkRemoval(now))
         {
             disposition.setClosed();
             return;
@@ -1763,7 +1776,7 @@ public:
             setShutdown();
             disposition.setClosed();
         }
-        else if (isShutdown())
+        else if (!isOpen())
             disposition.setClosed();
     }
 

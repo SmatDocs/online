@@ -415,6 +415,18 @@ namespace Util
 
     size_t findInVector(const std::vector<char>& tokens, const char *cstring, std::size_t offset = 0);
 
+    /// Copy from @in to @out until @search is found.
+    /// On a match return is true, the read position of @in will be at the
+    /// start of @search and @out has a copy of @in appended as far as @search.
+    /// On no match return is false, the read position of @in will be at eof
+    /// and @out is appended to @in.
+    bool copyToMatch(std::istream& in, std::ostream& out, std::string_view search);
+
+    /// On a match return is true, the read position of @in will be at the
+    /// start of @search.
+    /// On no match return is false, the read position of @ will be at eof.
+    bool seekToMatch(std::istream& in, std::string_view search);
+
     /// Trim trailing characters (on the right).
     inline std::string_view rtrim(const std::string_view s, const char ch)
     {
@@ -863,22 +875,16 @@ int main(int argc, char**argv)
         return std::string(message, size);
     }
 
-    /// Eliminates the prefix from str(if present) and returns a copy of the modified string
-    inline
-    std::string eliminatePrefix(const std::string& str, const std::string& prefix)
+    /// Eliminates the prefix from str (if present) and returns a string view.
+    inline std::string_view eliminatePrefix(const std::string_view str,
+                                            const std::string_view prefix)
     {
-        std::string::const_iterator prefix_pos;
-        std::string::const_iterator str_pos;
-
-        std::tie(prefix_pos,str_pos) = std::mismatch(prefix.begin(), prefix.end(), str.begin());
-
-        if (prefix_pos == prefix.end())
+        if (str.starts_with(prefix))
         {
-            // Non-Prefix part
-            return std::string(str_pos, str.end());
+            return str.substr(prefix.size());
         }
 
-        // Return the original string as it is
+        // Return the original string as-is.
         return str;
     }
 
@@ -1327,6 +1333,9 @@ int main(int argc, char**argv)
     /// Returns the result of malloc_info, which is an XML string with all the arenas.
     std::string getMallocInfo();
 
+    /// Call malloc_trim or alternative allocator equivalent
+    void trimMalloc();
+
     // std::size isn't available on our android baseline so use this
     // solution as a workaround
     template <typename T, size_t S> char (&n_array_size( T(&)[S] ))[S];
@@ -1336,6 +1345,8 @@ int main(int argc, char**argv)
     // Wrap localtime_r() and gmtime_t() which are not portable
     std::tm *time_t_to_localtime(std::time_t t, std::tm& tm);
     std::tm *time_t_to_gmtime(std::time_t t, std::tm& tm);
+
+    std::string base64Encode(std::string_view input);
 
 } // end namespace Util
 

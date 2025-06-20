@@ -52,10 +52,10 @@ class NavigatorPanel extends SidebarBase {
 	}
 
 	onDocLayerInit() {
+		const allowedDocTypes = ['presentation', 'drawing'];
 		// for presentation show slide sorter navigation panel by default
 		if (
-			app.map.getDocType() === 'presentation' &&
-			!app.map.isReadOnlyMode() &&
+			allowedDocTypes.includes(app.map.getDocType()) &&
 			!window.mode.isMobile()
 		) {
 			// Navigator panel should be visible and by default we should open slide sorter in case of impress/draw
@@ -102,14 +102,17 @@ class NavigatorPanel extends SidebarBase {
 			'close-navigation-button',
 			closeNavWrapper,
 		);
-		this.closeNavButton.setAttribute('aria-label', _('Close Navigation'));
+		const closeNavigationText = _('Close Navigation');
+		this.closeNavButton.setAttribute('aria-label', closeNavigationText);
+		this.closeNavButton.setAttribute('data-cooltip', closeNavigationText);
+		L.control.attachTooltipEventListener(this.closeNavButton, this.map);
 		this.closeNavButton.setAttribute('tabindex', '0');
 
 		this.closeNavButton.addEventListener(
 			'click',
 			function () {
 				this.closeNavigation();
-				if (app.map.uiManager.getBooleanDocTypePref('ShowNavigator')) {
+				if (app.showNavigator) {
 					app.map.sendUnoCommand('.uno:Navigator');
 				}
 			}.bind(this),
@@ -152,12 +155,14 @@ class NavigatorPanel extends SidebarBase {
 		this.floatingNavIcon.className =
 			'notebookbar unoNavigator unospan-view-navigator unotoolbutton visible';
 		this.floatingNavIcon.setAttribute('tabindex', '-1');
-		this.floatingNavIcon.setAttribute('data-cooltip', _('Navigator'));
+		const navigatorText = _('Navigator');
+		this.floatingNavIcon.setAttribute('data-cooltip', navigatorText);
+		L.control.attachTooltipEventListener(this.floatingNavIcon, this.map);
 
 		// Create the button wrapper (square container)
 		const buttonWrapper = document.createElement('div');
 		buttonWrapper.className = 'navigator-btn-wrapper'; // Class for styling
-		buttonWrapper.setAttribute('aria-label', _('Navigator'));
+		buttonWrapper.setAttribute('aria-label', navigatorText);
 
 		// Create the button
 		const button = document.createElement('button');
@@ -212,7 +217,7 @@ class NavigatorPanel extends SidebarBase {
 			// in that case we first show the navigation panel and then switch to tab view
 			this.showNavigationPanel();
 			$('#navigator-dock-wrapper').show(200);
-			app.map.uiManager.setDocTypePref('ShowNavigator', true);
+			app.showNavigator = true;
 			// this will update the indentation marks for elements like ruler
 			app.map.fire('fixruleroffset');
 			if (app.map.isPresentationOrDrawing()) {
@@ -225,7 +230,7 @@ class NavigatorPanel extends SidebarBase {
 
 	closeSidebar() {
 		this.closeNavigation();
-		this.map.uiManager.setDocTypePref('ShowNavigator', false);
+		app.showNavigator = false;
 		super.closeSidebar();
 	}
 
@@ -244,8 +249,7 @@ class NavigatorPanel extends SidebarBase {
 			this.presentationControlsWrapper.style.display = 'block';
 			this.navigatorDockWrapper.style.display = 'none';
 		} else {
-			if (!this.map.uiManager.getBooleanDocTypePref('ShowNavigator'))
-				app.map.sendUnoCommand('.uno:Navigator');
+			if (!app.showNavigator) app.map.sendUnoCommand('.uno:Navigator');
 			this.presentationControlsWrapper.style.display = 'none';
 			this.navigatorDockWrapper.style.display = 'block';
 		}

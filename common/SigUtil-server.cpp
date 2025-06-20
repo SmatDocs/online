@@ -474,6 +474,10 @@ void requestShutdown()
                     "Crashed in unattended run and won't wait for debugger. Re-run without "
                     "--unattended to attach a debugger.";
                 std::cerr << msg << std::endl;
+                char gdb[1024];
+                snprintf(gdb, sizeof(gdb), "gdb --pid %d -batch -ex='thread apply all backtrace full'", getpid());
+                if (system(gdb) != 0)
+                    std::cerr << "Error when executing command: " << gdb << std::endl;
             }
             else
             {
@@ -526,7 +530,7 @@ void requestShutdown()
                << "sudo gdb --q --n --ex 'thread apply all backtrace full' --batch --pid="
                << getpid() << '\n';
         std::string streamStr = stream.str();
-        assert (sizeof (FatalGdbString) > strlen(streamStr.c_str()) + 1);
+        assert(sizeof(FatalGdbString) > streamStr.size() + 1);
         strncpy(FatalGdbString, streamStr.c_str(), sizeof(FatalGdbString)-1);
         FatalGdbString[sizeof(FatalGdbString)-1] = '\0';
     }
