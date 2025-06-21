@@ -1,0 +1,10 @@
+services:
+  builder:
+    # Build the image from the Dockerfile in the current directory
+    build: .
+    # Mount the current directory on your machine to /app inside the container
+    volumes:
+      - ./:/app
+    # Keep the container running and allow for an interactive shell
+    tty: true
+    stdin_open: true
