@@ -332,7 +332,13 @@ class InitializerBase {
 		const theme_name = document.getElementById('init-branding-name').value;
 		let theme_prefix = '';
 
-		if(window.useIntegrationTheme && theme_name !== '')
+		// Prefer a ?theme=... query param from the host integration (WOPI URL)
+		const theme_from_qs = window.coolParams && typeof window.coolParams.get === 'function' ? window.coolParams.get('theme') : '';
+		if (theme_from_qs) {
+			window.useIntegrationTheme = true;
+			theme_prefix = theme_from_qs + '/';
+		}
+		else if(window.useIntegrationTheme && theme_name !== '')
 			theme_prefix = theme_name + '/';
 
 		if (window.mode.isMobile()) {
