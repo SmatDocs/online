@@ -84,7 +84,7 @@ using Poco::Util::Application;
 // We have files that are at least 2.5 MB already.
 // WASM files are in the order of 30 MB, however,
 constexpr auto MaxFileSizeToCacheInBytes = 50 * 1024 * 1024;
-constexpr std::string_view MetaViewPort = "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, minimum-scale=1\">";
+constexpr std::string_view MetaViewPort = "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, minimum-scale=1, interactive-widget=resizes-content\">";
 
 namespace
 {
@@ -586,7 +586,7 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
     }
 
     // pair consist of type and path of the item which usually resides test/data folder
-    typedef std::pair<std::string, std::string> asset;
+    using asset = std::pair<std::string, std::string>;
 
     //handle requests for settings.json contents
     void handlePresetRequest(const std::string& kind, const std::string& etagString,
@@ -1267,7 +1267,7 @@ void FileServerRequestHandler::readDirToHash(const std::string &basePath, const 
                        "Unexpected data in uncompressedFile after failed read");
                 if (size < 0)
                 {
-                    LOG_ERR("Failed to read file [" << basePath + relPath
+                    LOG_ERR("Failed to read file [" << basePath << relPath
                                                     << "] or is too large to cache and serve");
                 }
             }
@@ -1288,7 +1288,7 @@ void FileServerRequestHandler::readDirToHash(const std::string &basePath, const 
                        "Unexpected data in uncompressedFile after failed read");
                 if (size < 0)
                 {
-                    LOG_ERR("Failed to read file [" << basePath + relPath
+                    LOG_ERR("Failed to read file [" << basePath << relPath
                                                     << "] or is too large to cache and serve");
                 }
 
@@ -1305,7 +1305,7 @@ void FileServerRequestHandler::readDirToHash(const std::string &basePath, const 
             const int initResult = deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 31, 8, Z_DEFAULT_STRATEGY);
             if (initResult != Z_OK)
             {
-                LOG_ERR("Failed to deflateInit2 for file [" << basePath + relPath
+                LOG_ERR("Failed to deflateInit2 for file [" << basePath << relPath
                                                             << "], result: " << initResult);
                 // Add the uncompressed version; it's better to serve uncompressed than nothing at all.
                 FileHash.emplace(prefix + relPath,
@@ -1334,7 +1334,7 @@ void FileServerRequestHandler::readDirToHash(const std::string &basePath, const 
             const int deflateResult = deflate(&strm, Z_FINISH);
             if (deflateResult != Z_OK && deflateResult != Z_STREAM_END)
             {
-                LOG_ERR("Failed to deflate [" << basePath + relPath
+                LOG_ERR("Failed to deflate [" << basePath << relPath
                                               << "], result: " << deflateResult);
                 compressedFile.clear(); // Can't trust the compressed data, if any.
             }

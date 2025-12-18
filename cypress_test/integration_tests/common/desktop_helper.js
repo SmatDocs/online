@@ -34,10 +34,10 @@ function hideSidebar() {
 function hideSidebarImpress() {
 	cy.log('>> hideSidebarImpress - start');
 
-	cy.cGet('#modifypage').should('have.class', 'selected');
+	cy.cGet('.unoModifyPage').should('have.class', 'selected');
 	cy.cGet('#sidebar-dock-wrapper').should('be.visible').should('not.be.empty');
-	cy.cGet('#modifypage button').click();
-	cy.cGet('#modifypage').should('not.have.class', 'selected');
+	cy.cGet('.unoModifyPage button').click();
+	cy.cGet('.unoModifyPage').should('not.have.class', 'selected');
 	cy.cGet('#sidebar-dock-wrapper').should('not.be.visible');
 
 	cy.log('<< hideSidebarImpress - end');
@@ -284,7 +284,7 @@ function insertComment(text = 'some text0', save = true) {
 	var mode = Cypress.env('USER_INTERFACE');
 	if (mode === 'notebookbar') {
 		cy.cGet('#Insert-tab-label').click();
-		cy.cGet('#insert-insert-annotation').click();
+		cy.cGet('#Insert .unoInsertAnnotation').click();
 	} else {
 		cy.cGet('#menu-insert').click();
 		cy.cGet('#menu-insertcomment').click();
@@ -325,8 +325,8 @@ function toggleComments(resolved = false) {
 	var mode = Cypress.env('USER_INTERFACE');
 	if (mode === 'notebookbar') {
 		cy.cGet('#Review-tab-label').click();
-		if (resolved) cy.cGet('#review-show-resolved-annotations').click();
-		else cy.cGet('#showannotations').click();
+		if (resolved) getNbIcon('ShowResolvedAnnotations', 'Review').click();
+		else cy.cGet('.showannotations').click();
 		// to avoid notebookbar collapse in subsequent calls to toggleComments.
 		cy.cGet('#Home-tab-label').click();
 	} else {
@@ -360,7 +360,7 @@ function switchUIToCompact() {
 		var userInterfaceMode = win['0'].userInterfaceMode;
 		if (userInterfaceMode === 'notebookbar') {
 			cy.cGet('#View-tab-label').click();
-			cy.cGet('#toggleuimode').click();
+			getNbIcon('toggleuimode', 'View').click();
 		}
 	});
 
@@ -538,6 +538,31 @@ function assertVisiblePage(min, max, allPages) {
 	cy.cGet('#StatePageNumber').invoke('text').should('be.oneOf', expectedArray);
 }
 
+/// get icon for given uno command from classic toolbar
+function getCompactIcon(unoCommand) {
+	return cy.cGet('#toolbar-up .uno' + unoCommand + ':visible');
+}
+
+/// get icon for given uno command from notebookbar
+function getNbIcon(unoCommand, tabName) {
+	return cy.cGet((tabName ? '#' + tabName + '-container' : '') + '.notebookbar  .uno' + unoCommand + ' > button:visible');
+}
+
+/// get icon arrow for given uno command from classic toolbar to open the dropdown
+function getCompactIconArrow(unoCommand) {
+	return cy.cGet('#toolbar-up .uno' + unoCommand + ' > .arrowbackground:visible');
+}
+
+/// get icon arrow for given uno command from notebookbar to open the dropdown
+function getNbIconArrow(unoCommand, tabName) {
+	return cy.cGet((tabName ? '#' + tabName + '-container' : '') + '.notebookbar  .uno' + unoCommand + ' > .arrowbackground:visible');
+}
+
+/// get gropdown element for menu with given id
+function getDropdown(dropdownId) {
+	return cy.cGet('[id^="' + dropdownId + '"].modalpopup');
+}
+
 module.exports.showSidebar = showSidebar;
 module.exports.hideSidebar = hideSidebar;
 module.exports.hideSidebarImpress = hideSidebarImpress;
@@ -571,3 +596,8 @@ module.exports.updateFollowingUsers = updateFollowingUsers;
 module.exports.assertVisiblePage = assertVisiblePage;
 module.exports.closeNavigatorSidebar = closeNavigatorSidebar;
 module.exports.sidebarToggle = sidebarToggle;
+module.exports.getCompactIcon = getCompactIcon;
+module.exports.getNbIcon = getNbIcon;
+module.exports.getCompactIconArrow = getCompactIconArrow;
+module.exports.getNbIconArrow = getNbIconArrow;
+module.exports.getDropdown = getDropdown;

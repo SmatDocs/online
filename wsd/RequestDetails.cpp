@@ -25,6 +25,7 @@
 
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 
 namespace
 {
@@ -105,13 +106,13 @@ RequestDetails::RequestDetails(http::RequestParser& request, const std::string& 
     processURI();
 }
 
-RequestDetails::RequestDetails(const std::string &mobileURI)
-    : _method(Method::GET)
+RequestDetails::RequestDetails(std::string mobileURI)
+    : _uriString(std::move(mobileURI))
+    , _method(Method::GET)
     , _isProxy(false)
     , _isWebSocket(false)
     , _closeConnection(false)
 {
-    _uriString = mobileURI;
     dehexify();
     processURI();
 }
@@ -151,7 +152,8 @@ RequestDetails::RequestDetails(const std::string& wopiSrc, const std::vector<std
     processURI();
 }
 
-RequestDetails::Method RequestDetails::stringToMethod(std::string const & method) {
+RequestDetails::Method RequestDetails::stringToMethod(const std::string_view method)
+{
     if (method == "GET") {
         return Method::GET;
     } else if (method == "HEAD") {

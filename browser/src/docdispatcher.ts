@@ -127,23 +127,7 @@ class Dispatcher {
 				msgId: 'UI_InsertFile',
 				args: {
 					callback: 'Action_InsertMultimedia',
-					mimeTypeFilter: [
-						'video/MP2T',
-						'video/mp4',
-						'video/mpeg',
-						'video/ogg',
-						'video/quicktime',
-						'video/webm',
-						'video/x-matroska',
-						'video/x-ms-wmv',
-						'video/x-msvideo',
-						'audio/aac',
-						'audio/flac',
-						'audio/mp4',
-						'audio/mpeg',
-						'audio/ogg',
-						'audio/x-wav',
-					],
+					mimeTypeFilter: app.LOUtil.mediaMimeFilter,
 				},
 			});
 		};
@@ -290,7 +274,7 @@ class Dispatcher {
 			app.map.insertComment();
 		};
 
-		this.actionsMap['fold'] = this.actionsMap['hamburger-tablet'] = () => {
+		this.actionsMap['fold'] = () => {
 			app.map.uiManager.toggleMenubar();
 		};
 
@@ -323,28 +307,16 @@ class Dispatcher {
 			app.map.uiManager.toggleRuler();
 		};
 
+		this.actionsMap['showstylelistdeck'] = () => {
+			app.map.uiManager.showStyleListDeck();
+		};
+
 		this.actionsMap['showstatusbar'] = () => {
 			app.map.uiManager.toggleStatusBar();
 		};
 
 		this.actionsMap['collapsenotebookbar'] = () => {
 			app.map.uiManager.collapseNotebookbar();
-		};
-
-		this.actionsMap['scrollpreviewup'] = () => {
-			const stylePreview = document.getElementById('stylesview');
-			stylePreview.scrollBy({
-				top: -stylePreview.offsetHeight,
-				behavior: 'smooth',
-			}); // Scroll up based on stylepreview height
-		};
-
-		this.actionsMap['scrollpreviewdown'] = () => {
-			const stylePreview = document.getElementById('stylesview');
-			stylePreview.scrollBy({
-				top: stylePreview.offsetHeight,
-				behavior: 'smooth',
-			}); // Scroll up based on stylepreview height
 		};
 	}
 
@@ -714,6 +686,25 @@ class Dispatcher {
 
 		this.actionsMap['rejectTrackedChangeToNext'] = function () {
 			app.map.sendUnoCommand('.uno:RejectTrackedChangeToNext');
+		};
+
+		this.actionsMap['multipageview'] = function () {
+			if (app.activeDocument && app.activeDocument.activeLayout) {
+				let commandState = false;
+				if (app.activeDocument.activeLayout.type === 'ViewLayoutMultiPage') {
+					app.activeDocument.activeLayout = new ViewLayoutWriter();
+				} else {
+					app.activeDocument.activeLayout = new ViewLayoutMultiPage();
+					commandState = true;
+				}
+
+				app.map.fire('commandstatechanged', {
+					commandName: 'multipageview',
+					state: commandState ? 'true' : 'false',
+				});
+				app.activeDocument.activeLayout.sendClientVisibleArea();
+				app.sectionContainer.requestReDraw();
+			}
 		};
 	}
 

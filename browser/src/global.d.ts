@@ -110,6 +110,7 @@ declare namespace L {
 // Add the app declaration
 declare const app: {
 	sectionContainer: CanvasSectionContainer;
+	LOUtil: typeof LOUtil;
 	[key: string]: any; // other properties as needed
 };
 
@@ -177,6 +178,11 @@ interface ErrorMessages {
 	};
 }
 
+// Accessibility validator interface for Cypress tests
+interface A11yValidator {
+	checkWidget(type: string, element: HTMLElement): void;
+}
+
 // Extend the global Window interface
 // Defined in: js/global.js
 interface Window {
@@ -226,6 +232,8 @@ interface Window {
 				fromBrowser: string;
 				notebookbarAccessibility: any;
 			};
+			horizontalRuler: HRuler | null;
+			verticalRuler: VRuler | null;
 		};
 		colorPalettes: any; // TODO declare according to Widget.ColorPicker.ts
 		colorNames: any; // TODO declare according to Widget.ColorPicker.ts
@@ -245,7 +253,6 @@ interface Window {
 			fileBasedView: boolean;
 			writer: {
 				pageRectangleList: Array<any>;
-				multiPageView: boolean;
 			};
 			exportFormats: Array<any>;
 		};
@@ -264,6 +271,10 @@ interface Window {
 		serverAudit: any;
 		events: any;
 		showNavigator: boolean;
+
+		// Below are only used for Cypress tests
+		allDialogs?: string[];
+		a11yValidator?: A11yValidator;
 	};
 	// coolParams defined in: js/global.js
 	coolParams: {

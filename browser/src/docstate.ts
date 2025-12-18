@@ -12,8 +12,8 @@
 /*
 	Shouldn't have any functions defined. See "docstatefunctions.js" for state functions.
 	Class definitions can be added into "definitions" property and used like in below examples:
-		* app.sectionContainer.addSection(new app.definitions.AutoFillMarkerSection());
-		* var autoFillSection = new app.definitions.AutoFillMarkerSection();
+		* app.sectionContainer.addSection(new app.definitions.CellFillMarkerSection());
+		* var cellFillSection = new app.definitions.CellFillMarkerSection();
 */
 window.app = {
 	/*
@@ -27,8 +27,8 @@ window.app = {
 		CTRLMAC: 32768,
 	},
 	JSButtons: {
-		left: 0,
-		middle: 1,
+		left: 1,
+		middle: 4,
 		right: 2,
 	},
 	LOButtons: {
@@ -79,6 +79,8 @@ window.app = {
 			fromBrowser: window.L.Browser.lang, // Again in global.js.
 			notebookbarAccessibility: null,
 		},
+		horizontalRuler: null, // HRuler instance that is used in Writer, Impress and Draw.
+		verticalRuler: null, // VRuler instance that is used in Writer.
 	},
 	file: {
 		editComment: false,
@@ -100,7 +102,6 @@ window.app = {
 		fileBasedView: false, // (draw-impress only) Default is false. For read-only documents, user can view all parts at once. In that case, this variable is set to "true".
 		writer: {
 			pageRectangleList: [], // Array of arrays: [x, y, w, h] (as usual) // twips only. Pixels will be calculated on the fly. Corresponding pixels may change too often.
-			multiPageView: false,
 		},
 		exportFormats: [], // possible output formats
 	},
@@ -287,6 +288,10 @@ window.app = {
 	events: null, // See app/DocEvents.ts for details.
 
 	showNavigator: false, // ShowNavigator class instance is assigned to this.
+
+	// Below are only used for Cypress tests
+	allDialogs: undefined, // List of UNO commands for dialogs
+	a11yValidator: undefined, // Accessibility validator
 };
 
 var activateValidation = false;

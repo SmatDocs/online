@@ -68,6 +68,7 @@ var lastClickHelperId = '';
 
 class TreeViewControl {
 	_isRealTree: boolean;
+	_isListbox: boolean;
 	_container: HTMLElement;
 	_tbody: HTMLElement;
 	_thead: HTMLElement = null;
@@ -90,8 +91,11 @@ class TreeViewControl {
 		);
 		this._container.id = data.id;
 		this._rows = new Map<string, HTMLElement>();
-		if (data.labelledBy)
-			this._container.setAttribute('aria-labelledby', data.labelledBy);
+		JSDialog.SetupA11yLabelForNonLabelableElement(
+			this._container,
+			data,
+			builder,
+		);
 		if (data.ignoreFocus !== undefined) this._ignoreFocus = data.ignoreFocus;
 	}
 
@@ -360,7 +364,7 @@ class TreeViewControl {
 		);
 		this._rows.set(String(entry.row), tr);
 		tr.setAttribute('level', String(level));
-		tr.setAttribute('role', 'row');
+		tr.setAttribute('role', this._isListbox ? 'option' : 'row');
 
 		let dummyColumns = 0;
 		if (this._hasState) dummyColumns++;
@@ -473,7 +477,11 @@ class TreeViewControl {
 		index: any,
 		builder: JSBuilder,
 	) {
-		const icon = window.L.DomUtil.create('img', 'ui-treeview-icon', parent);
+		const icon = window.L.DomUtil.create(
+			'img',
+			'ui-treeview-icon ui-decorative-image',
+			parent,
+		);
 
 		if (this._isNavigator) icon.draggable = false;
 
@@ -496,14 +504,18 @@ class TreeViewControl {
 			builder._cleanText(entry.columns[index].text) ||
 			builder._cleanText(entry.text);
 
-		const hasRenderer = entry.columns[index].customEntryRenderer;
+		const hasRenderer =
+			entry.columns[index].customEntryRenderer ||
+			treeViewData.customEntryRenderer;
 		const hasCache = hasRenderer && builder.rendersCache[treeViewData.id];
 		const hasCachedImage =
 			hasCache && builder.rendersCache[treeViewData.id].images[entry.row];
+		let cell = null;
 
 		if (hasCachedImage) {
+			// if we rendered entry in the past already
 			const image = builder.rendersCache[treeViewData.id].images[entry.row];
-			const cell = window.L.DomUtil.create(
+			cell = window.L.DomUtil.create(
 				'span',
 				builder.options.cssClass +
 					` ui-treeview-cell-text ui-treeview-cell-text-content ui-treeview-${entry.row}-${index}`,
@@ -516,54 +528,50 @@ class TreeViewControl {
 			);
 			img.src = image;
 			img.alt = text;
+			cell = img; // use as placeholder only the image
+		} else if (
+			this.isPageDivider(entry, this.PAGE_ENTRY_PREFIX, this.PAGE_ENTRY_SUFFIX)
+		) {
+			// first time we want to render the entry
+			cell = window.L.DomUtil.create(
+				'span',
+				builder.options.cssClass +
+					` ui-treeview-cell-text-content page-divider`,
+				parent,
+			);
+			cell.innerText = this.getPageEntryText(
+				entry.text,
+				this.PAGE_ENTRY_PREFIX,
+				this.PAGE_ENTRY_SUFFIX,
+			);
+		} else if (treeViewData.highlightTerm !== undefined) {
+			cell = this.createHighlightedCell(
+				parent,
+				entry,
+				index,
+				builder,
+				treeViewData.highlightTerm,
+			);
 		} else {
-			let cell;
-			if (
-				this.isPageDivider(
-					entry,
-					this.PAGE_ENTRY_PREFIX,
-					this.PAGE_ENTRY_SUFFIX,
-				)
-			) {
-				cell = window.L.DomUtil.create(
-					'span',
-					builder.options.cssClass +
-						` ui-treeview-cell-text-content page-divider`,
-					parent,
-				);
-				cell.innerText = this.getPageEntryText(
-					entry.text,
-					this.PAGE_ENTRY_PREFIX,
-					this.PAGE_ENTRY_SUFFIX,
-				);
-			} else if (treeViewData.highlightTerm !== undefined) {
-				cell = this.createHighlightedCell(
-					parent,
-					entry,
-					index,
-					builder,
-					treeViewData.highlightTerm,
-				);
-			} else {
-				cell = window.L.DomUtil.create(
-					'span',
-					builder.options.cssClass + ` ui-treeview-cell-text-content`,
-					parent,
-				);
-				cell.innerText = text;
-			}
+			cell = window.L.DomUtil.create(
+				'span',
+				builder.options.cssClass + ` ui-treeview-cell-text-content`,
+				parent,
+			);
+			cell.innerText = text;
+		}
 
-			if (hasRenderer) {
-				JSDialog.OnDemandRenderer(
-					builder,
-					treeViewData.id,
-					'treeview',
-					entry.row,
-					cell,
-					parent,
-					entry.text,
-				);
-			}
+		// in case of non-persistent entries we want to re-render in case of change
+		if (hasRenderer) {
+			JSDialog.OnDemandRenderer(
+				builder,
+				treeViewData.id,
+				'treeview',
+				entry.row,
+				cell,
+				parent,
+				entry.text,
+			);
 		}
 	}
 
@@ -748,7 +756,9 @@ class TreeViewControl {
 				const element = rowElements[i];
 
 				// setup properties
-				element.setAttribute('role', 'gridcell');
+				if (!this._isListbox) {
+					element.setAttribute('role', 'gridcell');
+				}
 			}
 		}
 
@@ -1708,12 +1718,30 @@ class TreeViewControl {
 		});
 	}
 
+	isListbox(data: TreeWidgetJSON): boolean {
+		if (this.isRealTree(data)) return false;
+
+		const columns = TreeViewControl.countColumns(data);
+		if (columns !== 1) return false;
+
+		if (data.headers && data.headers.length > 0) return false;
+
+		if (data.entries) {
+			for (const entry of data.entries) {
+				if (entry.children && entry.children.length > 0) return false;
+			}
+		}
+
+		return true;
+	}
+
 	build(
 		data: TreeWidgetJSON,
 		builder: JSBuilder,
 		parentContainer: HTMLElement,
 	) {
 		this._isRealTree = this.isRealTree(data);
+		this._isListbox = this.isListbox(data);
 		this._columns = TreeViewControl.countColumns(data);
 		this._hasState = TreeViewControl.hasState(data);
 		this._hasIcon = TreeViewControl.hasIcon(data);
@@ -1741,7 +1769,8 @@ class TreeViewControl {
 			this._container.setAttribute('role', 'treegrid');
 			if (!data.headers || data.headers.length === 0)
 				window.L.DomUtil.addClass(this._container, 'ui-treeview-tree');
-		} else this._container.setAttribute('role', 'grid');
+		} else if (this._isListbox) this._container.setAttribute('role', 'listbox');
+		else this._container.setAttribute('role', 'grid');
 
 		this.preprocessColumnData(data.entries);
 		this.fillHeaders(data.headers, builder);
@@ -1792,6 +1821,7 @@ JSDialog.treeView = function (
 		}
 
 		treeView._rows.set(String(pos), newRow[0]);
+		app.console.debug('treeview: updated render for pos: ' + pos);
 	};
 
 	(treeView._container as any).updateRenders = updateRenders;

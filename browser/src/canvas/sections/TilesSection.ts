@@ -195,9 +195,8 @@ export class TilesSection extends CanvasSectionObject {
 	}
 
 	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-	private paintSimple (tile: any, ctx: any, async: boolean): void {
-		ctx.viewBounds.round();
-		var offset = new cool.Point(tile.coords.getPos().x - ctx.viewBounds.min.x, tile.coords.getPos().y - ctx.viewBounds.min.y);
+	private paintSimple (tile: any, async: boolean): void {
+		const tilePos: cool.SimplePoint = tile.coords.getPosSimplePoint();
 
 		if ((async || this.containerObject.isZoomChanged()) && !app.file.fileBasedView) {
 			// Non Calc tiles(handled by paintSimple) can have transparent pixels,
@@ -205,16 +204,16 @@ export class TilesSection extends CanvasSectionObject {
 			// For the full view area repaint, whole canvas is cleared by section container.
 			// Whole canvas is not cleared after zoom has changed, so clear it per tile as they arrive even if not async.
 			this.context.fillStyle = this.containerObject.getClearColor();
-			this.context.fillRect(offset.x, offset.y, TileManager.tileSize, TileManager.tileSize);
+			this.context.fillRect(tilePos.vX, tilePos.vY, TileManager.tileSize, TileManager.tileSize);
 		}
 
 		if (app.file.fileBasedView) {
-			var partHeightPixels = Math.round((this.sectionProperties.docLayer._partHeightTwips + this.sectionProperties.docLayer._spaceBetweenParts) * app.twipsToPixels);
+			const partHeightPixels = Math.round((this.sectionProperties.docLayer._partHeightTwips + this.sectionProperties.docLayer._spaceBetweenParts) * app.twipsToPixels);
 
-			offset.y = tile.coords.part * partHeightPixels + tile.coords.y - app.activeDocument.activeView.viewedRectangle.pY1;
+			tilePos.pY = tile.coords.part * partHeightPixels + tile.coords.y;
 		}
 
-		this.drawTileToCanvas(tile, this.context, offset.x, offset.y, TileManager.tileSize, TileManager.tileSize);
+		this.drawTileToCanvas(tile, this.context, tilePos.vX, tilePos.vY, TileManager.tileSize, TileManager.tileSize);
 	}
 
 	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
@@ -230,7 +229,7 @@ export class TilesSection extends CanvasSectionObject {
 		if (ctx.paneBoundsActive === true)
 			this.paintWithPanes(tile, ctx, async);
 		else
-			this.paintSimple(tile, ctx, async);
+			this.paintSimple(tile, async);
 	}
 
 	private forEachTileInView(zoom: number, part: number, mode: number, ctx: any,
@@ -288,24 +287,24 @@ export class TilesSection extends CanvasSectionObject {
 	}
 
 	private drawPageBackgroundWriter (ctx: any) {
-		let viewRectangleTwips = [app.activeDocument.activeView.viewedRectangle.pX1, app.activeDocument.activeView.viewedRectangle.pY1, this.containerObject.getDocumentAnchorSection().size[0], this.containerObject.getDocumentAnchorSection().size[1]];
-		viewRectangleTwips = viewRectangleTwips.map(function(element: number) {
-			return Math.round(element * app.pixelsToTwips);
-		});
-
+		const viewRectangleTwips = app.activeDocument.activeLayout.viewedRectangle.toArray();
 		this.context.fillStyle = this.containerObject.getDocumentBackgroundColor();
+
 		for (let i: number = 0; i < app.file.writer.pageRectangleList.length; i++) {
-			let rectangle: any = app.file.writer.pageRectangleList[i];
-			if ((rectangle[1] > viewRectangleTwips[1] && rectangle[1] < viewRectangleTwips[1] + viewRectangleTwips[3]) ||
-				(rectangle[1] + rectangle[3] > viewRectangleTwips[1] && rectangle[1] + rectangle[3] < viewRectangleTwips[1] + viewRectangleTwips[3]) ||
-				(rectangle[1] < viewRectangleTwips[1] && rectangle[1] + rectangle[3] > viewRectangleTwips[1] + viewRectangleTwips[3])) {
+			const simpleRectangle = new cool.SimpleRectangle(
+				app.file.writer.pageRectangleList[i][0],
+				app.file.writer.pageRectangleList[i][1],
+				app.file.writer.pageRectangleList[i][2],
+				app.file.writer.pageRectangleList[i][3]
+			);
 
-				rectangle = [Math.round(rectangle[0] * app.twipsToPixels), Math.round(rectangle[1] * app.twipsToPixels), Math.round(rectangle[2] * app.twipsToPixels), Math.round(rectangle[3] * app.twipsToPixels)];
-
-				this.context.fillRect(rectangle[0] - ctx.viewBounds.min.x + this.sectionProperties.pageBackgroundInnerMargin,
-					rectangle[1] - ctx.viewBounds.min.y + this.sectionProperties.pageBackgroundInnerMargin,
-					rectangle[2] - this.sectionProperties.pageBackgroundInnerMargin,
-					rectangle[3] - this.sectionProperties.pageBackgroundInnerMargin);
+			if (simpleRectangle.intersectsRectangle(viewRectangleTwips)) {
+				this.context.fillRect(
+					simpleRectangle.v1X + this.sectionProperties.pageBackgroundInnerMargin,
+					simpleRectangle.v1Y + this.sectionProperties.pageBackgroundInnerMargin,
+					simpleRectangle.v2X - simpleRectangle.v1X - this.sectionProperties.pageBackgroundInnerMargin,
+					simpleRectangle.v3Y - simpleRectangle.v1Y - this.sectionProperties.pageBackgroundInnerMargin
+				);
 			}
 		}
 	}
@@ -313,7 +312,7 @@ export class TilesSection extends CanvasSectionObject {
 	private drawPageBackgroundFileBasedView (ctx: any) {
 		// PDF view supports only same-sized pages for now. So we can use simple math instead of a loop.
 		var partHeightPixels: number = Math.round((this.map._docLayer._partHeightTwips + this.map._docLayer._spaceBetweenParts) * app.twipsToPixels);
-		var visibleBounds: Array<number> = app.activeDocument.activeView.viewedRectangle.pToArray();
+		var visibleBounds: Array<number> = app.activeDocument.activeLayout.viewedRectangle.pToArray();
 		var topVisible: number = Math.floor(visibleBounds[1] / partHeightPixels);
 		var bottomVisible: number = Math.ceil((visibleBounds[1] + visibleBounds[3]) / partHeightPixels);
 
@@ -347,20 +346,8 @@ export class TilesSection extends CanvasSectionObject {
 		}
 	}
 
-	private drawPageBackgroundsMultiPageView() {
-		this.context.fillStyle = this.containerObject.getDocumentBackgroundColor();
-		this.context.strokeStyle = "red";
-
-		for (let i = 0; i < app.activeDocument.activeView.layoutRectangles.length; i++) {
-			const rectangle = app.activeDocument.activeView.layoutRectangles[i];
-			const coords = [rectangle.layoutX - app.activeDocument.activeView.viewedRectangle.pX1, rectangle.layoutY - app.activeDocument.activeView.viewedRectangle.pY1, rectangle.pWidth, rectangle.pHeight];
-			this.context.strokeRect(coords[0], coords[1], coords[2], coords[3]);
-			this.context.fillRect(coords[0], coords[1], coords[2], coords[3]);
-		}
-	}
-
 	private drawPageBackgrounds (ctx: any) {
-		if (!app.file.fileBasedView && !app.file.writer.multiPageView && this.map._docLayer._docType !== 'text')
+		if (!app.file.fileBasedView && this.map._docLayer._docType !== 'text')
 			return;
 
 		if (!this.containerObject.getDocumentAnchorSection())
@@ -374,45 +361,37 @@ export class TilesSection extends CanvasSectionObject {
 
 		if (app.file.fileBasedView)
 			this.drawPageBackgroundFileBasedView(ctx);
-		else if (app.file.writer.multiPageView)
-			this.drawPageBackgroundsMultiPageView();
 		else if (this.map._docLayer._docType === 'text')
 			this.drawPageBackgroundWriter(ctx);
 	}
 
-	private drawForMultiPageView() {
-		const visibleCoordList: Array<TileCoordData> = TileManager.getVisibleCoordList(app.activeDocument.activeView.getVisibleAreaRectangle());
+	private drawForViewLayoutMultiPage() {
+		if (!app.activeDocument.activeLayout.areViewTilesReady()) return; // Draw after we have all the tiles.
+
+		const view = app.activeDocument.activeLayout as ViewLayoutMultiPage;
+
+		const visibleCoordList: Array<TileCoordData> = view.getCurrentCoordList();
 
 		for (let i = 0; i < visibleCoordList.length; i++) {
-			const coords = visibleCoordList[i];
+			const tile = TileManager.get(visibleCoordList[i]);
 
-			let firstIntersection = -1;
-			for (let j = 0; j < app.activeDocument.activeView.layoutRectangles.length; j++) {
-				const layoutRectangle = app.activeDocument.activeView.layoutRectangles[j];
-				const coordsRectangle = [coords.x, coords.y, TileManager.tileSize, TileManager.tileSize];
-				const intersection = LOUtil._getIntersectionRectangle(layoutRectangle.pToArray(), coordsRectangle);
+			if (tile && tile.isReadyToDraw()) {
+				const tilePos = tile.coords.getPosSimplePoint();
 
-				if (intersection) {
-					firstIntersection = j;
+				const layoutRectangle1 = view.documentRectangles[view.getClosestRectangleIndex(tilePos)];
+				const layoutRectangle2 = view.documentRectangles[view.getClosestRectangleIndex(cool.SimplePoint.fromCorePixels([tilePos.pX, tilePos.pY + TileManager.tileSize]))];
 
-					const viewX = Math.round(layoutRectangle.layoutX + (intersection[0] - layoutRectangle.pX1) - app.activeDocument.activeView.viewedRectangle.pX1);
-					const viewY = Math.round(layoutRectangle.layoutY + (intersection[1] - layoutRectangle.pY1) - app.activeDocument.activeView.viewedRectangle.pY1);
-					const sX = Math.round(intersection[0] - coords.x);
-					const sY = Math.round(intersection[1] - coords.y);
+				if (layoutRectangle1.part === layoutRectangle2.part)
+					this.drawTileToCanvas(tile, this.context, tilePos.vX, tilePos.vY, TileManager.tileSize, TileManager.tileSize);
+				else {
+					// A tile in Writer may intersect 2 pages.
+					const height1 = layoutRectangle1.pY2 - tilePos.pY;
+					this.drawTileToCanvasCrop(tile, this.context, 0, 0, TileManager.tileSize, height1, tilePos.vX, tilePos.vY, TileManager.tileSize, height1);
 
-					this.drawTileToCanvasCrop(
-						TileManager.get(coords),
-						this.context,
-						sX, sY,
-						intersection[2],
-						intersection[3],
-						viewX,
-						viewY,
-						intersection[2],
-						intersection[3]);
+					tilePos.pY += TileManager.tileSize;
+					const height2 = TileManager.tileSize - height1;
+					this.drawTileToCanvasCrop(tile, this.context, 0, height1, TileManager.tileSize, height2, tilePos.vX, tilePos.vY - height2, TileManager.tileSize, height2);
 				}
-
-				if (firstIntersection > -1 && j - firstIntersection > 1) break; // Check only the next page rectangle (one tile may intersect 2 pages).
 			}
 		}
 	}
@@ -425,18 +404,18 @@ export class TilesSection extends CanvasSectionObject {
 			this.containerObject.createUpdateSingleDivElement(this);
 		}
 
-		if (app.file.writer.multiPageView === true) {
-			this.drawPageBackgroundsMultiPageView();
-			this.drawForMultiPageView();
+		// Calculate all this here instead of doing it per tile.
+		var ctx = this.sectionProperties.tsManager._paintContext();
+
+		if (app.activeDocument && app.activeDocument.activeLayout.type === 'ViewLayoutMultiPage') {
+			this.drawPageBackgrounds(ctx);
+			this.drawForViewLayoutMultiPage();
 			return;
 		}
 
 		var zoom = Math.round(this.map.getZoom());
 		var part = this.sectionProperties.docLayer._selectedPart;
 		var mode = this.sectionProperties.docLayer._selectedMode;
-
-		// Calculate all this here instead of doing it per tile.
-		var ctx = this.sectionProperties.tsManager._paintContext();
 
 		if (this.sectionProperties.tsManager.waitForTiles()) {
 			if (!this.haveAllTilesInView(zoom, part, mode, ctx))
@@ -447,7 +426,6 @@ export class TilesSection extends CanvasSectionObject {
 			this.drawPageBackgrounds(ctx);
 		}
 
-		var docLayer = this.sectionProperties.docLayer;
 		var doneTiles = new Set();
 		this.forEachTileInView(zoom, part, mode, ctx, function (tile: any, coords: TileCoordData): boolean {
 

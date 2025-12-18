@@ -2,9 +2,15 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: core-de\n"
+"PO-Revision-Date: 2025-12-04 17:00+0000\n"
+"Last-Translator: Ettore Atalan <atalanttore@googlemail.com>\n"
+"Language-Team: German <https://hosted.weblate.org/projects/collabora-online/"
+"lokit/de/>\n"
 "Language: de\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: Weblate 5.15-dev\n"
 
 #. ygDfy
 #: module_graphicfilter.ulf
@@ -13,7 +19,7 @@ msgctxt ""
 "STR_NAME_MODULE_OPTIONAL_GRFFLT_FLASH\n"
 "LngText.text"
 msgid "Macromedia Flash (SWF)"
-msgstr ""
+msgstr "Macromedia Flash (SWF)"
 
 #. qAk8E
 #: module_graphicfilter.ulf
@@ -22,7 +28,7 @@ msgctxt ""
 "STR_DESC_MODULE_OPTIONAL_GRFFLT_FLASH\n"
 "LngText.text"
 msgid "Macromedia Flash (SWF) Export Filter"
-msgstr ""
+msgstr "Macromedia Flash (SWF) Exportfilter"
 
 #. vcMGk
 #: folderitem_ooo.ulf
@@ -35,42 +41,45 @@ msgid ""
 "Technology, provided by Collabora Productivity. See https://collaboraoffice."
 "com"
 msgstr ""
+"Collabora Office, die auf LibreOffice-Technologie basierende Office-"
+"Produktivitätssuite von Collabora Productivity. Siehe https://"
+"collaboraoffice.com"
 
 #. 4rBwc
 #: include/svx/strings.hrc:1040
 msgctxt "RID_SVXSTR_PASTE_AS_DIALOG_TITLE"
 msgid "Paste As"
-msgstr ""
+msgstr "Einfügen als"
 
 #. aNZNw
 #: svx/uiconfig/ui/dropdownfielddialog.ui:31
 msgctxt "dropdownDialog|OK"
 msgid "OK"
-msgstr ""
+msgstr "OK"
 
 #. 54Dmg
 #: svx/uiconfig/ui/dropdownfielddialog.ui:44
 msgctxt "dropdownDialog|CANCEL"
 msgid "Cancel"
-msgstr ""
+msgstr "Abbrechen"
 
 #. gPAYw
 #: svx/uiconfig/ui/findreplacedialog.ui:67
 msgctxt "findreplacedialog|find_tab_btn"
 msgid "Find"
-msgstr ""
+msgstr "Suchen"
 
 #. uknDS
 #: svx/uiconfig/ui/findreplacedialog.ui:80
 msgctxt "findreplacedialog|replace_tab_btn"
 msgid "Replace"
-msgstr ""
+msgstr "Ersetzen"
 
 #. 7MFsT
 #: uui/inc/strings.hrc:84
 msgctxt "STR_READONLY_FONT_TITLE"
 msgid "Font Disallows Editing"
-msgstr ""
+msgstr "Schriftart lässt keine Bearbeitung zu"
 
 #. YRahp
 #: uui/inc/strings.hrc:85
@@ -81,6 +90,12 @@ msgid ""
 "Pressing [ No ] will drop these fonts from the document:\n"
 "$(ARG1)"
 msgstr ""
+"Eine oder mehrere in das Dokument eingebettete Schriftarten verfügen über "
+"keine Bearbeitungsberechtigung.\n"
+"Dokument im schreibgeschützten Modus öffnen?\n"
+"Durch Drücken von [ Nein ] werden diese Schriftarten aus dem Dokument "
+"entfernt:\n"
+"$(ARG1)"
 
 #. 4NkMk
 #: readme.xrm
@@ -92,120 +107,124 @@ msgid ""
 "For more information please visit ${PRODUCTNAME} home page at <a "
 "href=\"https://collaboraoffice.com\">https://CollaboraOffice.com/</a>."
 msgstr ""
+"Weitere Informationen finden Sie auf der Homepage von ${PRODUCTNAME} unter "
+"<a href=\"https://collaboraoffice.com\">https://CollaboraOffice.com/</a>."
 
 #. SbQew
 #: chart2/inc/strings.hrc:51
 msgctxt "STR_PAGE_COLOR_PALETTE"
 msgid "Color Palette"
-msgstr ""
+msgstr "Farbpalette"
 
 #. YZBr8
 #: chart2/inc/strings.hrc:52
 msgctxt "STR_PAGE_GRADIENT_PRESETS"
 msgid "Gradients"
-msgstr ""
+msgstr "Gradienten"
 
 #. DWGVf
 #: chart2/uiconfig/ui/chartcolorpalettepopup.ui:46
 msgctxt "chartcolorpalettepopup|colorfulwin"
 msgid "Colorful"
-msgstr ""
+msgstr "Farbenfroh"
 
 #. xmAmH
 #: chart2/uiconfig/ui/chartcolorpalettepopup.ui:98
 msgctxt "chartcolorpalettepopup|monochromaticwin"
 msgid "Monochromatic"
-msgstr ""
+msgstr "Einfarbig"
 
 #. DrjDt
 #: chart2/uiconfig/ui/chartgradientpalettepopup.ui:46
 msgctxt "chartgradientpalettepopup|lightwin"
 msgid "Light Variations"
-msgstr ""
+msgstr "Helle Variationen"
 
 #. Y3PP5
 #: chart2/uiconfig/ui/chartgradientpalettepopup.ui:97
 msgctxt "chartgradientpalettepopup|darkwin"
 msgid "Dark Variations"
-msgstr ""
+msgstr "Dunkle Variationen"
 
 #. WWm9R
 #: chart2/uiconfig/ui/chartthemepopup.ui:51
 msgctxt "chartthemepopup|managechartstyle"
 msgid "_Manage chart styles"
-msgstr ""
+msgstr "Diagrammstile _verwalten"
 
 #. BFxBa
 #: chart2/uiconfig/ui/dlg_Theme.ui:16
 msgctxt "dlg_Theme|ChartThemeDialog"
 msgid "Manage Chart Styles"
-msgstr ""
+msgstr "Diagrammstile verwalten"
 
 #. kqBFK
 #: chart2/uiconfig/ui/dlg_Theme.ui:46
 msgctxt "dlg_Theme|iconviewlabel|tooltip_text"
 msgid "Selectable chart styles list."
-msgstr ""
+msgstr "Liste der auswählbaren Diagrammstile."
 
 #. WsSmE
 #: chart2/uiconfig/ui/dlg_Theme.ui:51
 msgctxt "dlg_Theme|iconviewlabel"
 msgid "_Chart styles:"
-msgstr ""
+msgstr "_Diagrammstile:"
 
 #. DYH5e
 #: chart2/uiconfig/ui/dlg_Theme.ui:122
 msgctxt "dlg_Theme|chartload"
 msgid "_Load style to chart"
-msgstr ""
+msgstr "Stil in Diagramm _laden"
 
 #. YWkrA
 #: chart2/uiconfig/ui/dlg_Theme.ui:134
 msgctxt "dlg_Theme|chartsave"
 msgid "_Save to styles"
-msgstr ""
+msgstr "In Stilen _speichern"
 
 #. h8L8Y
 #: chart2/uiconfig/ui/dlg_Theme.ui:146
 msgctxt "dlg_Theme|chartdelete"
 msgid "_Delete style"
-msgstr ""
+msgstr "Stil _löschen"
 
 #. g5qPU
 #: chart2/uiconfig/ui/dlg_Theme.ui:158
 msgctxt "dlg_Theme|chartsavenew"
 msgid "Save to _new style"
-msgstr ""
+msgstr "In _neuem Stil speichern"
 
 #. GPgLR
 #: chart2/uiconfig/ui/dlg_Theme.ui:183
 msgctxt "dlg_Theme|chartmanage"
 msgid "_Manage chart styles"
-msgstr ""
+msgstr "Diagrammstile _verwalten"
 
-#. NMcqp
+#. Yif9X
 #: chart2/uiconfig/ui/sidebarcolors.ui:30
 msgctxt "sidebarcolors|bordertype|tooltip_text"
 msgid "Allow to select a color palette to apply to current chart data series."
 msgstr ""
+"Ermöglicht die Auswahl einer Farbpalette zur Anwendung auf die aktuelle "
+"Diagrammdatenreihe."
 
-#. FXK8B
+#. xGjwG
 #: chart2/uiconfig/ui/sidebarcolors.ui:42
-#, fuzzy
 msgctxt "sidebarcolors|cellbordertype-atkobject"
 msgid "Border Style"
 msgstr "Umrandungsstil"
 
-#. vDwKf
+#. bEK2j
 #: chart2/uiconfig/ui/sidebargradients.ui:30
 msgctxt "sidebargradients|bordertype|tooltip_text"
 msgid ""
 "Allow to select a gradient palette to apply to current chart data series."
 msgstr ""
+"Ermöglicht die Auswahl einer Gradientenpalette zur Anwendung auf die "
+"aktuelle Diagrammdatenreihe."
 
-#. FXK8B
+#. 3xZSQ
 #: chart2/uiconfig/ui/sidebargradients.ui:42
-#, fuzzy
 msgctxt "sidebargradients|cellbordertype-atkobject"
 msgid "Border Style"
 msgstr "Umrandungsstil"
@@ -215,59 +234,66 @@ msgstr "Umrandungsstil"
 msgctxt "sidebartheme|themelist|tooltip_text"
 msgid "Allow to select a theme to apply to the current chart."
 msgstr ""
+"Ermöglicht die Auswahl eines Designs zur Anwendung auf das aktuelle Diagramm."
 
 #. aGvuY
 #: chart2/uiconfig/ui/sidebartheme.ui:37
 msgctxt "sidebartheme|themetype-atkobject"
 msgid "Themes"
-msgstr ""
+msgstr "Designs"
 
 #. YB6Et
 #: chart2/uiconfig/ui/sidebartheme.ui:48
 msgctxt "sidebartheme|savetonew"
 msgid "_Save to new theme"
-msgstr ""
+msgstr "In neuem Design _speichern"
 
 #. 4C556
 #: chart2/uiconfig/ui/sidebartype.ui:102
 msgctxt "sidebartype|3dschemeft"
 msgid "3D _Scheme:"
-msgstr ""
+msgstr "3D-_Schema:"
 
 #. x3adg
 #: chart2/uiconfig/ui/tp_ChartColorPalette.ui:68
 msgctxt "tp_ChartColorPalette|colorfulwin"
 msgid "Colorful"
-msgstr ""
+msgstr "Farbenfroh"
 
 #. 8QjnP
 #: chart2/uiconfig/ui/tp_ChartColorPalette.ui:126
 msgctxt "tp_ChartColorPalette|monochromaticwin"
 msgid "Monochromatic"
-msgstr ""
+msgstr "Einfarbig"
 
 #. 6JxiC
 #: chart2/uiconfig/ui/tp_ChartGradients.ui:69
 msgctxt "tp_ChartGradients|lightwin"
 msgid "Light Variations"
-msgstr ""
+msgstr "Helle Variationen"
 
 #. DmWVa
 #: chart2/uiconfig/ui/tp_ChartGradients.ui:128
 msgctxt "tp_ChartGradients|darkwin"
 msgid "Dark Variations"
-msgstr ""
+msgstr "Dunkle Variationen"
 
 #. FG2rh
 #: chart2/uiconfig/ui/tp_ChartType.ui:114
 msgctxt "tp_ChartType|extended_tip|subtype_iconview"
 msgid "Select a sub type of the basic chart type."
-msgstr ""
+msgstr "Wählen Sie einen Untertyp des grundlegenden Diagrammtyps aus."
 
 #. Wh4j6
 #: chart2/uiconfig/ui/tp_ChartType.ui:167
 msgctxt "tp_ChartType|3dschemeft"
 msgid "3D _Scheme:"
+msgstr "3D-_Schema:"
+
+#. ChTwx
+#: cui/inc/strings.hrc:481
+msgctxt "REG_CALCDBFOCUS"
+msgid "Table Style focus"
 msgstr ""
 
 #. EPGtZ
@@ -280,25 +306,27 @@ msgstr ""
 #: cui/uiconfig/ui/pageformatpage.ui:260
 msgctxt "pageformatpage|checkResizeAllPages"
 msgid "Resize all pages"
-msgstr ""
+msgstr "Größe aller Seiten ändern"
 
 #. NBdEp
 #: cui/uiconfig/ui/pickbulletpage.ui:45
 msgctxt "pickbulletpage|extended_tip|pick_bullet_iconview"
 msgid "Click the bullet style that you want to use."
-msgstr ""
+msgstr "Klicken Sie auf den gewünschten Aufzählungsstil."
 
 #. rkoDB
 #: cui/uiconfig/ui/pickgraphicpage.ui:45
 msgctxt "pickgraphicpage|extended_tip|pick_graphic_iconview"
 msgid "Click the graphics that you want to use as bullets."
 msgstr ""
+"Klicken Sie auf die Grafiken, die Sie als Aufzählungszeichen verwenden "
+"möchten."
 
 #. WGzy5
 #: cui/uiconfig/ui/picknumberingpage.ui:44
 msgctxt "picknumberingpage|extended_tip|pick_numbering_iconview"
 msgid "Click the numbering scheme that you want to use."
-msgstr ""
+msgstr "Klicken Sie auf das gewünschte Nummerierungsschema."
 
 #. avppC
 #: cui/uiconfig/ui/pickoutlinepage.ui:44
@@ -310,25 +338,25 @@ msgstr ""
 #: cui/uiconfig/ui/toolbarmodedialog.ui:124
 msgctxt "ToolbarmodeDialog|radiobutton1"
 msgid "Compact"
-msgstr ""
+msgstr "Kompakt"
 
 #. ZbYiG
 #: include/svtools/strings.hrc:71
 msgctxt "STR_FORMAT_ID_MARKDOWN"
 msgid "Markdown"
-msgstr ""
+msgstr "Markdown"
 
 #. HASc5
 #: include/sfx2/strings.hrc:227
 msgctxt "STR_SID_QUICKFIND"
 msgid "Quick Find"
-msgstr ""
+msgstr "Schnellsuche"
 
 #. 2VmCo
 #: sfx2/uiconfig/ui/licensedialog.ui:41
 msgctxt "licensedialog|eula"
 msgid "_EULA"
-msgstr ""
+msgstr "_EULA"
 
 #. jjkw7
 #: sfx2/uiconfig/ui/licensedialog.ui:85
@@ -349,19 +377,19 @@ msgstr ""
 #: sfx2/uiconfig/ui/templatepanel.ui:156
 msgctxt "templatepanel|accessible_name|new"
 msgid "New Style from Selection"
-msgstr ""
+msgstr "Neuer Stil aus der Auswahl"
 
 #. 5ZAqh
 #: sfx2/uiconfig/ui/templatepanel.ui:174
 msgctxt "templatepanel|accessible_name|newmenu"
 msgid "Styles actions"
-msgstr ""
+msgstr "Stil-Aktionen"
 
 #. 7NfdA
 #: sfx2/uiconfig/ui/templatepanel.ui:192
 msgctxt "templatepanel|accessible_name|update"
 msgid "Update Style"
-msgstr ""
+msgstr "Stil aktualisieren"
 
 #. BGAhD
 #: sfx2/uiconfig/ui/templatepanel.ui:242
@@ -369,41 +397,47 @@ msgctxt "commontemplate|STR_HIGHLIGHT_CHECKBOX"
 msgid "Highlight styles"
 msgstr "Hervorhebung"
 
+#. fCWMe
+#: sfx2/uiconfig/ui/templatepanel.ui:272
+msgctxt "templatepanel|filter-atkobject"
+msgid "Filter"
+msgstr "Filter"
+
 #. 5xrhC
 #: sw/inc/strings.hrc:232
 msgctxt "STR_COLUMN_ICONVIEW_ITEM0"
 msgid "1 column"
-msgstr ""
+msgstr "1 Spalte"
 
 #. VAfCS
 #: sw/inc/strings.hrc:233
 msgctxt "STR_COLUMN_ICONVIEW_ITEM1"
 msgid "2 columns with equal size"
-msgstr ""
+msgstr "2 Spalten mit gleicher Größe"
 
 #. g8pFG
 #: sw/inc/strings.hrc:234
 msgctxt "STR_COLUMN_ICONVIEW_ITEM2"
 msgid "3 columns with equal size"
-msgstr ""
+msgstr "3 Spalten mit gleicher Größe"
 
 #. QJxAd
 #: sw/inc/strings.hrc:235
 msgctxt "STR_COLUMN_ICONVIEW_ITEM3"
 msgid "2 columns with different size (left > right)"
-msgstr ""
+msgstr "2 Spalten mit unterschiedlicher Größe (links > rechts)"
 
 #. MHk4E
 #: sw/inc/strings.hrc:236
 msgctxt "STR_COLUMN_ICONVIEW_ITEM4"
 msgid "2 columns with different size (left < right)"
-msgstr ""
+msgstr "2 Spalten mit unterschiedlicher Größe (links < rechts)"
 
 #. xPgHS
 #: sw/inc/strings.hrc:498
 msgctxt "STR_REINSTATE_REDLINE"
 msgid "Reinstate change: $1"
-msgstr ""
+msgstr "Änderung wiederherstellen: $1"
 
 #. afEVQ
 #: sw/inc/strings.hrc:1536
@@ -415,7 +449,7 @@ msgstr ""
 #: sw/uiconfig/swriter/ui/columnpage.ui:122
 msgctxt "columnpage|columnft"
 msgid "Column"
-msgstr ""
+msgstr "Spalte"
 
 #. Lurdj
 #: sw/uiconfig/swriter/ui/columnpage.ui:868
@@ -423,6 +457,8 @@ msgctxt "columnpage|extended_tip|column-iconview"
 msgid ""
 "Enter the number of columns that you want in the page, frame, or section."
 msgstr ""
+"Geben Sie die Anzahl der Spalten ein, die Sie auf der Seite, im Rahmen oder "
+"im Abschnitt haben möchten."
 
 #. Ci9GE
 #: sw/uiconfig/swriter/ui/spellmenu.ui:34
@@ -434,7 +470,7 @@ msgstr "Zum _Wörterbuch hinzufügen (standard.dic)"
 #: sw/uiconfig/swriter/ui/wordcount-mobile.ui:643
 msgctxt "wordcount-mobile|comments"
 msgid "Comments"
-msgstr ""
+msgstr "Kommentare"
 
 #. SsL8u
 #: formula/inc/core_resource.hrc:2628
@@ -524,25 +560,25 @@ msgstr "ZEILENUMBRUCH"
 #: formula/uiconfig/ui/functionpage.ui:80
 msgctxt "functionpage|label_category"
 msgid "_Category:"
-msgstr ""
+msgstr "_Kategorie:"
 
 #. BNnFg
 #: formula/uiconfig/ui/functionpage.ui:115
 msgctxt "functionpage|label_function"
 msgid "_Function:"
-msgstr ""
+msgstr "_Funktion:"
 
 #. zRASZ
 #: formula/uiconfig/ui/structpage.ui:28
 msgctxt "structpage|label_struct"
 msgid "Content:"
-msgstr ""
+msgstr "Inhalt:"
 
 #. DPToC
 #: sd/uiconfig/simpress/ui/layoutpanel.ui:41
 msgctxt "layoutpanel|extended_tip|layoutpanel_icons"
 msgid "List of available layout templates."
-msgstr ""
+msgstr "Liste der verfügbaren Layoutvorlagen."
 
 #. Y3kBV
 #: filter/uiconfig/ui/impswfdialog.ui:14
@@ -699,7 +735,7 @@ msgctxt ""
 "UIName\n"
 "value.text"
 msgid "Markdown Document"
-msgstr ""
+msgstr "Markdown-Dokument"
 
 #. 9Q5Zj
 #: draw_flash_Export.xcu
@@ -709,7 +745,7 @@ msgctxt ""
 "UIName\n"
 "value.text"
 msgid "Macromedia Flash (SWF)"
-msgstr ""
+msgstr "Macromedia Flash (SWF)"
 
 #. MsYCr
 #: impress_flash_Export.xcu
@@ -719,7 +755,7 @@ msgctxt ""
 "UIName\n"
 "value.text"
 msgid "Macromedia Flash (SWF)"
-msgstr ""
+msgstr "Macromedia Flash (SWF)"
 
 #. FoizC
 #: CalcCommands.xcu
@@ -739,7 +775,7 @@ msgctxt ""
 "Label\n"
 "value.text"
 msgid "Insert Function"
-msgstr ""
+msgstr "Funktion einfügen"
 
 #. rxGTc
 #: CalcCommands.xcu
@@ -819,7 +855,7 @@ msgctxt ""
 "Label\n"
 "value.text"
 msgid "Manage Themes..."
-msgstr ""
+msgstr "Designs verwalten..."
 
 #. 5LESd
 #: ChartCommands.xcu
@@ -859,7 +895,7 @@ msgctxt ""
 "Label\n"
 "value.text"
 msgid "New Canvas Slide"
-msgstr ""
+msgstr "Neue Leinwandfolie"
 
 #. w3Yib
 #: DrawImpressCommands.xcu
@@ -879,7 +915,7 @@ msgctxt ""
 "Label\n"
 "value.text"
 msgid "Re-order pages"
-msgstr ""
+msgstr "Seiten neu anordnen"
 
 #. ca6bM
 #: GenericCommands.xcu
@@ -889,7 +925,7 @@ msgctxt ""
 "Label\n"
 "value.text"
 msgid "Slide Transitions"
-msgstr ""
+msgstr "Folienübergänge"
 
 #. 5pSJ6
 #: GenericCommands.xcu
@@ -909,7 +945,7 @@ msgctxt ""
 "Label\n"
 "value.text"
 msgid "~Hyperlink"
-msgstr ""
+msgstr "~Hyperlink"
 
 #. aFFu9
 #: GenericCommands.xcu
@@ -919,7 +955,7 @@ msgctxt ""
 "PopupLabel\n"
 "value.text"
 msgid "Insert Hyperlink..."
-msgstr ""
+msgstr "Hyperlink einfügen..."
 
 #. czVMP
 #: GenericCommands.xcu
@@ -993,6 +1029,17 @@ msgctxt ""
 msgid "Master Slide Sorter/Pane (Canvas)"
 msgstr ""
 
+#. kB8Ri
+#: Sidebar.xcu
+#, fuzzy
+msgctxt ""
+"Sidebar.xcu\n"
+"..Sidebar.Content.PanelList.ScDatabasePropertyPanel\n"
+"Title\n"
+"value.text"
+msgid "Table Style Options"
+msgstr "Stil-Aktionen"
+
 #. SYFXq
 #: Sidebar.xcu
 msgctxt ""
@@ -1021,7 +1068,7 @@ msgctxt ""
 "Title\n"
 "value.text"
 msgid "Theme"
-msgstr ""
+msgstr "Design"
 
 #. dgWCC
 #: Sidebar.xcu
@@ -1031,7 +1078,7 @@ msgctxt ""
 "Title\n"
 "value.text"
 msgid "Gradients"
-msgstr ""
+msgstr "Gradienten"
 
 #. ezFez
 #: WriterCommands.xcu
@@ -1153,17 +1200,29 @@ msgctxt ""
 msgid "~Changes in all views"
 msgstr "Änderungen in allen Ansichten"
 
-#. cG7BY
-#: sc/inc/globstr.hrc:592
-msgctxt "STR_SHEET_VIEW_DEFAULT_VIEW_NAME"
-msgid "Default View"
+#. YwxEM
+#: sc/inc/globstr.hrc:70
+msgctxt "STR_UNDO_TABLETOTALS"
+msgid "Tabletotals"
 msgstr ""
 
+#. Gip2L
+#: sc/inc/globstr.hrc:211
+msgctxt "STR_TABLE_TOTAL"
+msgid "Summary"
+msgstr ""
+
+#. cG7BY
+#: sc/inc/globstr.hrc:594
+msgctxt "STR_SHEET_VIEW_DEFAULT_VIEW_NAME"
+msgid "Default View"
+msgstr "Standardansicht"
+
 #. aYwkp
-#: sc/inc/globstr.hrc:593
+#: sc/inc/globstr.hrc:595
 msgctxt "STR_SHEET_VIEW_TEMPORARY_NAME_TEMPLATE"
 msgid "Temporary View %1"
-msgstr ""
+msgstr "Temporäre Ansicht %1"
 
 #. ADmez
 #: sc/inc/scfuncs.hrc:4257
@@ -1270,7 +1329,7 @@ msgstr ""
 #: sc/inc/scfuncs.hrc:4282
 msgctxt "SC_OPCODE_DROP"
 msgid "Columns"
-msgstr ""
+msgstr "Spalten"
 
 #. cAxPB
 #: sc/inc/scfuncs.hrc:4283
@@ -1322,7 +1381,7 @@ msgstr ""
 #: sc/inc/scfuncs.hrc:4294
 msgctxt "SC_OPCODE_EXPAND"
 msgid "Columns"
-msgstr ""
+msgstr "Spalten"
 
 #. EVAXE
 #: sc/inc/scfuncs.hrc:4295
@@ -1445,7 +1504,7 @@ msgstr ""
 #: sc/inc/scfuncs.hrc:4328
 msgctxt "SC_OPCODE_TAKE"
 msgid "Columns"
-msgstr ""
+msgstr "Spalten"
 
 #. ZexcG
 #: sc/inc/scfuncs.hrc:4329
@@ -1956,28 +2015,458 @@ msgstr ""
 #: sc/uiconfig/scalc/ui/selectsheetviewdialog.ui:44
 msgctxt "selectsheetviewdialog|extended_tip|ok"
 msgid "Saves all changes and closes dialog."
-msgstr ""
+msgstr "Speichert alle Änderungen und schließt den Dialog."
 
 #. kGFYu
 #: sc/uiconfig/scalc/ui/selectsheetviewdialog.ui:63
 msgctxt "selectsheetviewdialog|extended_tip|cancel"
 msgid "Closes dialog and discards all changes."
-msgstr ""
+msgstr "Schließt den Dialog und verwirft alle Änderungen."
 
 #. sQPFE
 #: sc/uiconfig/scalc/ui/selectsheetviewdialog.ui:134
 msgctxt "selectsheetviewdialog|extended_tip|entry-list"
 msgid "Available sheet views."
-msgstr ""
+msgstr "Verfügbare Blattansichten."
 
 #. csyNB
 #: sc/uiconfig/scalc/ui/sheetviewbox.ui:17
 msgctxt "sheetviewbox|sheetview_combobox|accessible_name"
 msgid "Sheet View"
-msgstr ""
+msgstr "Blattansicht"
 
 #. FXK8B
 #: sc/uiconfig/scalc/ui/sidebarcellappearance.ui:87
 msgctxt "sidebarcellappearance|cellbordertype-atkobject"
 msgid "Border Style"
 msgstr "Umrandungsstil"
+
+#. sBXLD
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:22
+msgctxt "sidebardatabase|chk_header_row"
+msgid "Show Header Row"
+msgstr ""
+
+#. ECtUM
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:36
+msgctxt "sidebardatabase|chk_total_row"
+msgid "Show Total Row"
+msgstr ""
+
+#. htZbK
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:50
+msgctxt "sidebardatabase|chk_filter_buttons"
+msgid "Show Filter Buttons"
+msgstr ""
+
+#. MjALC
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:86
+msgctxt "sidebardatabase|chk_banded_rows"
+msgid "Banded Rows"
+msgstr ""
+
+#. GVkZ2
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:100
+#, fuzzy
+msgctxt "sidebardatabase|chk_banded_cols"
+msgid "Banded Columns"
+msgstr "Spalten"
+
+#. S4bop
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:114
+#, fuzzy
+msgctxt "sidebardatabase|chk_first_column"
+msgid "First Column"
+msgstr "Spalte"
+
+#. QR56s
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:128
+#, fuzzy
+msgctxt "sidebardatabase|chk_last_column"
+msgid "Last Column"
+msgstr "Spalte"
+
+#. BJHqA
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:170
+#, fuzzy
+msgctxt "sidebardatabase|lbl_styles"
+msgid "Table Styles"
+msgstr "Stil aktualisieren"
+
+#. er8nh
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:187
+msgctxt "sidebardatabase|none"
+msgid "None"
+msgstr ""
+
+#. XXBL8
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:188
+msgctxt "sidebardatabase|tablestylelight1"
+msgid "Table Style Light 1"
+msgstr ""
+
+#. NaDRX
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:189
+msgctxt "sidebardatabase|tablestylelight2"
+msgid "Table Style Light 2"
+msgstr ""
+
+#. EWq9E
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:190
+msgctxt "sidebardatabase|tablestylelight3"
+msgid "Table Style Light 3"
+msgstr ""
+
+#. GdYaL
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:191
+msgctxt "sidebardatabase|tablestylelight4"
+msgid "Table Style Light 4"
+msgstr ""
+
+#. 8ZPyk
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:192
+msgctxt "sidebardatabase|tablestylelight5"
+msgid "Table Style Light 5"
+msgstr ""
+
+#. xcztA
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:193
+msgctxt "sidebardatabase|tablestylelight6"
+msgid "Table Style Light 6"
+msgstr ""
+
+#. pYufr
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:194
+msgctxt "sidebardatabase|tablestylelight7"
+msgid "Table Style Light 7"
+msgstr ""
+
+#. beC85
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:195
+msgctxt "sidebardatabase|tablestylelight8"
+msgid "Table Style Light 8"
+msgstr ""
+
+#. TSbAe
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:196
+msgctxt "sidebardatabase|tablestylelight9"
+msgid "Table Style Light 9"
+msgstr ""
+
+#. GPxe2
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:197
+msgctxt "sidebardatabase|tablestylelight10"
+msgid "Table Style Light 10"
+msgstr ""
+
+#. sedZT
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:198
+msgctxt "sidebardatabase|tablestylelight11"
+msgid "Table Style Light 11"
+msgstr ""
+
+#. VyEM2
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:199
+msgctxt "sidebardatabase|tablestylelight12"
+msgid "Table Style Light 12"
+msgstr ""
+
+#. FF2AT
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:200
+msgctxt "sidebardatabase|tablestylelight13"
+msgid "Table Style Light 13"
+msgstr ""
+
+#. pTuyt
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:201
+msgctxt "sidebardatabase|tablestylelight14"
+msgid "Table Style Light 14"
+msgstr ""
+
+#. zAgnL
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:202
+msgctxt "sidebardatabase|tablestylelight15"
+msgid "Table Style Light 15"
+msgstr ""
+
+#. L4B9t
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:203
+msgctxt "sidebardatabase|tablestylelight16"
+msgid "Table Style Light 16"
+msgstr ""
+
+#. ek54L
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:204
+msgctxt "sidebardatabase|tablestylelight17"
+msgid "Table Style Light 17"
+msgstr ""
+
+#. P6nBG
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:205
+msgctxt "sidebardatabase|tablestylelight18"
+msgid "Table Style Light 18"
+msgstr ""
+
+#. dnT2p
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:206
+msgctxt "sidebardatabase|tablestylelight19"
+msgid "Table Style Light 19"
+msgstr ""
+
+#. Bprxv
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:207
+msgctxt "sidebardatabase|tablestylelight20"
+msgid "Table Style Light 20"
+msgstr ""
+
+#. Z8foN
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:208
+msgctxt "sidebardatabase|tablestylelight21"
+msgid "Table Style Light 21"
+msgstr ""
+
+#. 2qyXC
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:209
+msgctxt "sidebardatabase|tablestylemedium1"
+msgid "Table Style Medium 1"
+msgstr ""
+
+#. MWzKk
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:210
+msgctxt "sidebardatabase|tablestylemedium2"
+msgid "Table Style Medium 2"
+msgstr ""
+
+#. fFFCC
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:211
+msgctxt "sidebardatabase|tablestylemedium3"
+msgid "Table Style Medium 3"
+msgstr ""
+
+#. FthwA
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:212
+msgctxt "sidebardatabase|tablestylemedium4"
+msgid "Table Style Medium 4"
+msgstr ""
+
+#. rCtpb
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:213
+msgctxt "sidebardatabase|tablestylemedium5"
+msgid "Table Style Medium 5"
+msgstr ""
+
+#. UJ6BA
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:214
+msgctxt "sidebardatabase|tablestylemedium6"
+msgid "Table Style Medium 6"
+msgstr ""
+
+#. EbA2b
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:215
+msgctxt "sidebardatabase|tablestylemedium7"
+msgid "Table Style Medium 7"
+msgstr ""
+
+#. XQS9X
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:216
+msgctxt "sidebardatabase|tablestylemedium8"
+msgid "Table Style Medium 8"
+msgstr ""
+
+#. Dho46
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:217
+msgctxt "sidebardatabase|tablestylemedium9"
+msgid "Table Style Medium 9"
+msgstr ""
+
+#. P7SBG
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:218
+msgctxt "sidebardatabase|tablestylemedium10"
+msgid "Table Style Medium 10"
+msgstr ""
+
+#. Rhfet
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:219
+msgctxt "sidebardatabase|tablestylemedium11"
+msgid "Table Style Medium 11"
+msgstr ""
+
+#. JEdqF
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:220
+msgctxt "sidebardatabase|tablestylemedium12"
+msgid "Table Style Medium 12"
+msgstr ""
+
+#. LWYBs
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:221
+msgctxt "sidebardatabase|tablestylemedium13"
+msgid "Table Style Medium 13"
+msgstr ""
+
+#. HiGPB
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:222
+msgctxt "sidebardatabase|tablestylemedium14"
+msgid "Table Style Medium 14"
+msgstr ""
+
+#. FKMSw
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:223
+msgctxt "sidebardatabase|tablestylemedium15"
+msgid "Table Style Medium 15"
+msgstr ""
+
+#. CuPuC
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:224
+msgctxt "sidebardatabase|tablestylemedium16"
+msgid "Table Style Medium 16"
+msgstr ""
+
+#. ACA7x
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:225
+msgctxt "sidebardatabase|tablestylemedium17"
+msgid "Table Style Medium 17"
+msgstr ""
+
+#. bcDbJ
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:226
+msgctxt "sidebardatabase|tablestylemedium18"
+msgid "Table Style Medium 18"
+msgstr ""
+
+#. d42En
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:227
+msgctxt "sidebardatabase|tablestylemedium19"
+msgid "Table Style Medium 19"
+msgstr ""
+
+#. pfyP6
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:228
+msgctxt "sidebardatabase|tablestylemedium20"
+msgid "Table Style Medium 20"
+msgstr ""
+
+#. n5kSb
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:229
+msgctxt "sidebardatabase|tablestylemedium21"
+msgid "Table Style Medium 21"
+msgstr ""
+
+#. mYnu7
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:230
+msgctxt "sidebardatabase|tablestylemedium22"
+msgid "Table Style Medium 22"
+msgstr ""
+
+#. jGs7c
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:231
+msgctxt "sidebardatabase|tablestylemedium23"
+msgid "Table Style Medium 23"
+msgstr ""
+
+#. vMAB3
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:232
+msgctxt "sidebardatabase|tablestylemedium24"
+msgid "Table Style Medium 24"
+msgstr ""
+
+#. xk5eg
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:233
+msgctxt "sidebardatabase|tablestylemedium25"
+msgid "Table Style Medium 25"
+msgstr ""
+
+#. sA3q2
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:234
+msgctxt "sidebardatabase|tablestylemedium26"
+msgid "Table Style Medium 26"
+msgstr ""
+
+#. usGBf
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:235
+msgctxt "sidebardatabase|tablestylemedium27"
+msgid "Table Style Medium 27"
+msgstr ""
+
+#. 32DXC
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:236
+msgctxt "sidebardatabase|tablestylemedium28"
+msgid "Table Style Medium 28"
+msgstr ""
+
+#. TiDzP
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:237
+msgctxt "sidebardatabase|tablestyledark1"
+msgid "Table Style Dark 1"
+msgstr ""
+
+#. jTCaC
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:238
+msgctxt "sidebardatabase|tablestyledark2"
+msgid "Table Style Dark 2"
+msgstr ""
+
+#. 2FCAs
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:239
+msgctxt "sidebardatabase|tablestyledark3"
+msgid "Table Style Dark 3"
+msgstr ""
+
+#. B3BJY
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:240
+msgctxt "sidebardatabase|tablestyledark4"
+msgid "Table Style Dark 4"
+msgstr ""
+
+#. TfBSE
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:241
+msgctxt "sidebardatabase|tablestyledark5"
+msgid "Table Style Dark 5"
+msgstr ""
+
+#. jvA93
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:242
+msgctxt "sidebardatabase|tablestyledark6"
+msgid "Table Style Dark 6"
+msgstr ""
+
+#. 2DAii
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:243
+msgctxt "sidebardatabase|tablestyledark7"
+msgid "Table Style Dark 7"
+msgstr ""
+
+#. B6GrN
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:244
+msgctxt "sidebardatabase|tablestyledark8"
+msgid "Table Style Dark 8"
+msgstr ""
+
+#. TcGzg
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:245
+msgctxt "sidebardatabase|tablestyledark9"
+msgid "Table Style Dark 9"
+msgstr ""
+
+#. DEL7d
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:246
+msgctxt "sidebardatabase|tablestyledark10"
+msgid "Table Style Dark 10"
+msgstr ""
+
+#. M2TB4
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:247
+msgctxt "sidebardatabase|tablestyledark11"
+msgid "Table Style Dark 11"
+msgstr ""
+
+#. CJUkb
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:251
+msgctxt "sidebardatabase|tablestylenames"
+msgid "Table Style Names"
+msgstr ""
+
+#. 3FfJ4
+#: sc/uiconfig/scalc/ui/sidebardatabase.ui:252
+msgctxt "sidebardatabase|defaulttablestylenames"
+msgid "Default Table Style Names"
+msgstr ""

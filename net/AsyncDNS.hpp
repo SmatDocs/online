@@ -16,12 +16,11 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <queue>
 #include <string>
 #include <thread>
 
-#include <NetUtil.hpp>
+#include <net/NetUtil.hpp>
 
 class UnitWSD;
 
@@ -42,8 +41,8 @@ public:
 
     static void dumpState(std::ostream& os);
 
-    typedef std::function<void(const HostEntry& hostEntry)> DNSThreadFn;
-    typedef std::function<std::string()> DNSThreadDumpStateFn;
+    using DNSThreadFn = std::function<void(const HostEntry& hostEntry)>;
+    using DNSThreadDumpStateFn = std::function<std::string()>;
 
     static void lookup(std::string searchEntry, DNSThreadFn cb,
                        const DNSThreadDumpStateFn& dumpState);

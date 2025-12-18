@@ -2,15 +2,17 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-04 22:40+0200\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: LANGUAGE <LL@li.org>\n"
+"POT-Creation-Date: 2025-11-17 08:08+0200\n"
+"PO-Revision-Date: 2025-11-27 18:04+0000\n"
+"Last-Translator: Priit Jõerüüt <jrthwlate@users.noreply.hosted.weblate.org>\n"
+"Language-Team: Estonian <https://hosted.weblate.org/projects/"
+"collabora-online/help/et/>\n"
 "Language: et\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"X-Generator: Translate Toolkit 3.6.0\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: Weblate 5.15-dev\n"
 
 #: html/cool-help.html%2Bdiv.h1:6-5
 msgid "Keyboard Shortcuts"
@@ -22,7 +24,7 @@ msgstr "Üldised kiirklahvid"
 
 #: html/cool-help.html%2Bdiv.div.table.tr.td:10-38
 msgid "Undo"
-msgstr ""
+msgstr "Võta tegevus tagasi"
 
 #: html/cool-help.html%2Bdiv.div.table.tr.td:10-69
 msgid "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Z</kbd>"
@@ -30,7 +32,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.table.tr.td:11-38
 msgid "Redo"
-msgstr ""
+msgstr "Korda tegevust"
 
 #: html/cool-help.html%2Bdiv.div.table.tr.td:11-69
 msgid "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Y</kbd>"
@@ -1272,7 +1274,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.h2:185-9
 msgid "Insert"
-msgstr ""
+msgstr "Lisa"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:187-38
 msgid "Insert date"

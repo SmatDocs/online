@@ -48,6 +48,60 @@ class LOUtil {
 		[209, 118, 0],
 	];
 
+	// This list is based on supported filters defined in core in
+	// filter/Configuration_filter.mk
+	public static graphicMimeFilter = [
+		'image/bmp',
+		'image/dxf',
+		'image/emf',
+		'image/emz',
+		'image/eps',
+		'image/gif',
+		'image/jpeg',
+		'image/met',
+		'image/pbm',
+		'image/pcd',
+		'image/pcd',
+		'image/pcd',
+		'image/pct',
+		'image/pcx',
+		'image/pdf',
+		'image/pgm',
+		'image/png',
+		'image/ppm',
+		'image/psd',
+		'image/ras',
+		'image/svg',
+		'image/svgz',
+		'image/svm',
+		'image/tga',
+		'image/tif',
+		'image/webp',
+		'image/wmf',
+		'image/wmz',
+		'image/xbm',
+		'image/xpm',
+		'image/mov',
+	];
+
+	public static mediaMimeFilter = [
+		'video/MP2T',
+		'video/mp4',
+		'video/mpeg',
+		'video/ogg',
+		'video/quicktime',
+		'video/webm',
+		'video/x-matroska',
+		'video/x-ms-wmv',
+		'video/x-msvideo',
+		'audio/aac',
+		'audio/flac',
+		'audio/mp4',
+		'audio/mpeg',
+		'audio/ogg',
+		'audio/x-wav',
+	];
+
 	public static onRemoveHTMLElement(
 		element: Element,
 		onDetachCallback: () => void,
@@ -364,6 +418,9 @@ class LOUtil {
 			masterslidespanel: 'masterslide',
 			slidemasterpage: 'masterslide',
 			tabledeletemenu: 'deletetable',
+			insertcalctable: 'inserttable',
+			removecalctable: 'deletetable',
+			databasesettings: 'tabledesign',
 			tracechangemode: 'trackchanges',
 			deleteallannotation: 'deleteallnotes',
 			sdtabledesignpanel: 'tabledesign',
@@ -434,7 +491,6 @@ class LOUtil {
 			printoptions: 'print',
 			togglesheetgrid: 'show',
 			toggleprintgrid: 'printgrid',
-			'hamburger-tablet': 'fold',
 			exportdirectpdf: 'exportpdf',
 			textcolumnspropertypanel: 'entirecolumn',
 			'sidebardeck.stylelistdeck': 'editstyle',
@@ -684,7 +740,16 @@ class LOUtil {
 
 	public static isFileODF(map: any): boolean {
 		var ext = LOUtil.getFileExtension(map);
-		return ext === 'odt' || ext === 'ods' || ext === 'odp' || ext == 'odg';
+		return (
+			ext === 'odt' ||
+			ext === 'ods' ||
+			ext === 'odp' ||
+			ext === 'odg' ||
+			ext === 'fodt' ||
+			ext === 'fods' ||
+			ext === 'fodp' ||
+			ext === 'fodg'
+		);
 	}
 
 	public static containsDOMRect(

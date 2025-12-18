@@ -11,8 +11,6 @@
 
 #pragma once
 
-#include <config.h>
-
 #if !MOBILEAPP
 #include <poll.h>
 #include <unistd.h>
@@ -83,7 +81,7 @@ class SocketDisposition final
     STATE_ENUM(Type, CONTINUE, CLOSED, TRANSFER);
 
 public:
-    typedef std::function<void(const std::shared_ptr<Socket> &)> MoveFunction;
+    using MoveFunction = std::function<void(const std::shared_ptr<Socket>&)>;
 
     SocketDisposition(const std::shared_ptr<Socket> &socket)
         : _socket(socket)
@@ -999,7 +997,7 @@ public:
         const std::shared_ptr<ProtocolHandlerInterface>& websocketHandler);
 #endif
 
-    typedef std::function<void()> CallbackFn;
+    using CallbackFn = std::function<void()>;
 
     /// Add a callback to be invoked in the polling thread
     void addCallback(CallbackFn fn)
@@ -1407,7 +1405,7 @@ public:
         msg.msg_iovlen = 1;
 
         const size_t fds_size = sizeof(int) * fds.size();
-        auto adata = static_cast<char*>(alloca(CMSG_SPACE(fds_size)));
+        auto* adata = static_cast<char*>(alloca(CMSG_SPACE(fds_size)));
         cmsghdr *cmsg = (cmsghdr*)adata;
         cmsg->cmsg_type = SCM_RIGHTS;
         cmsg->cmsg_level = SOL_SOCKET;
@@ -1555,13 +1553,13 @@ public:
     /// Create a socket of type TSocket derived from StreamSocket given an FD and a handler.
     /// We need this helper since the handler needs a shared_ptr to the socket
     /// but we can't have a shared_ptr in the ctor.
-    template <typename TSocket,
-              std::enable_if_t<std::is_base_of_v<StreamSocket, TSocket>, bool> = true>
-    static std::shared_ptr<TSocket> create(std::string hostname, int fd, Type type,
-                                           bool isClient, HostType hostType,
-                                           std::shared_ptr<ProtocolHandlerInterface> handler,
-                                           ReadType readType = ReadType::NormalRead,
-                                           std::chrono::steady_clock::time_point creationTime = std::chrono::steady_clock::now())
+    template <typename TSocket>
+    static std::shared_ptr<TSocket>
+    create(std::string hostname, int fd, Type type, bool isClient, HostType hostType,
+           std::shared_ptr<ProtocolHandlerInterface> handler,
+           ReadType readType = ReadType::NormalRead,
+           std::chrono::steady_clock::time_point creationTime = std::chrono::steady_clock::now())
+        requires(std::is_base_of_v<StreamSocket, TSocket>)
     {
         // Without a handler we make no sense object.
         if (!handler)

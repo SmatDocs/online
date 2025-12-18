@@ -53,7 +53,7 @@ void runKitLoopInAThread();
 
 bool globalPreinit(const std::string& loTemplate);
 /// Wrapper around private Document::ViewCallback().
-void documentViewCallback(const int type, const char* p, void* data);
+void documentViewCallback(int type, const char* p, void* data);
 
 class Document;
 class DeltaGenerator;
@@ -208,7 +208,7 @@ public:
     const std::string& getUrl() const { return _url; }
 
     /// Post the message - in the unipoll world we're in the right thread anyway
-    bool postMessage(const char* data, int size, const WSOpCode code) const;
+    bool postMessage(const char* data, int size, WSOpCode code) const;
 
     bool createSession(const std::string& sessionId);
 
@@ -221,43 +221,42 @@ public:
 
     void renderTiles(TileCombined& tileCombined);
 
-
-    bool sendTextFrame(const std::string& message)
+    bool sendTextFrame(const std::string& message) const
     {
         return sendFrame(message.data(), message.size());
     }
 
-    bool sendFrame(const char* buffer, int length, WSOpCode opCode = WSOpCode::Text);
+    bool sendFrame(const char* buffer, int length, WSOpCode opCode = WSOpCode::Text) const;
 
-    void alertNotAsync()
+    void alertNotAsync() const
     {
         // load unfortunately enables inputprocessing in some cases.
         if (processInputEnabled() && !_duringLoad && !isBackgroundSaveProcess())
             notifyAll("error: cmd=notasync kind=failure");
     }
 
-    void alertAllUsers(const std::string& cmd, const std::string& kind)
+    void alertAllUsers(const std::string& cmd, const std::string& kind) const
     {
         sendTextFrame("errortoall: cmd=" + cmd + " kind=" + kind);
     }
 
     /// Notify all views with the given message
-    bool notifyAll(const std::string& msg)
+    bool notifyAll(const std::string& msg) const
     {
         // Broadcast updated viewinfo to all clients.
         return sendTextFrame("client-all " + msg);
     }
 
     unsigned getMobileAppDocId() const { return _mobileAppDocId; }
-    const std::string getDocId() const { return _docId; }
+    const std::string& getDocId() const { return _docId; }
 
     /// See if we should clear out our memory
     void trimIfInactive();
     void trimAfterInactivity();
 
     // LibreOfficeKit callback entry points
-    static void GlobalCallback(const int type, const char* p, void* data);
-    static void ViewCallback(const int type, const char* p, void* data);
+    static void GlobalCallback(int type, const char* p, void* data);
+    static void ViewCallback(int type, const char* p, void* data);
 
 private:
     /// Helper method to broadcast callback and its payload to all clients
@@ -358,7 +357,7 @@ private:
     std::shared_ptr<lok::Document> load(const std::shared_ptr<ChildSession>& session,
                                         const std::string& renderOpts);
 
-    bool forwardToChild(const std::string_view prefix, const std::vector<char>& payload);
+    bool forwardToChild(std::string_view prefix, const std::vector<char>& payload);
 
     static std::string makeRenderParams(const std::string& renderOpts, const std::string& userName,
                                         const std::string& spellOnline, const std::string& theme,

@@ -356,6 +356,22 @@ class UIManager extends window.L.Control {
 
 		if (!isMobile && !enableNotebookbar)
 			this.map.topToolbar = JSDialog.TopToolbar(this.map);
+
+		// this will execute only when UI get initialized
+		if (!isMobile) {
+			this.topReadonlyBtn = document.getElementById('readonlyMode');
+			const label = this.topReadonlyBtn?.querySelector(
+				'.unolabel',
+			) as HTMLElement | null;
+			if (label) {
+				label.textContent = _('Read-only');
+				this.topReadonlyBtn.setAttribute('data-cooltip', _('Permission Mode'));
+				window.L.control.attachTooltipEventListener(
+					this.topReadonlyBtn,
+					this.map,
+				);
+			}
+		}
 	}
 
 	/**
@@ -562,6 +578,10 @@ class UIManager extends window.L.Control {
 		var startFolloMePresntationGet = this.map.isPresentationOrDrawing() && window.coolParams.get('startFollowMePresentation');
 		var presentationLeaderIdGet = this.map.isPresentationOrDrawing() && window.coolParams.get('presentationLeaderId');
 		var startPresentationGet = this.map.isPresentationOrDrawing() && window.coolParams.get('startPresentation');
+		if (this.map.wopi.PresentationLeader)
+		{
+			presentationLeaderIdGet = this.map.wopi.PresentationLeader;
+		}
 		// check for "presentation" dispatch event only after document gets fully loaded
 		// in case if the leader is defined we have to wait a little longer to get the viewer info
 		const startPresentation = () => {
@@ -1210,21 +1230,26 @@ class UIManager extends window.L.Control {
 	// Ruler
 
 	/**
-	 * Shows the ruler.
+	 * Shows the rulers.
 	 */
 	showRuler(): void {
 		this._map.sendUnoCommand('.uno:ShowRuler');
-		$('.cool-ruler').show();
+
+		if (app.UI.horizontalRuler) app.UI.horizontalRuler.show();
+		if (app.UI.verticalRuler) app.UI.verticalRuler.show();
+
 		$('#map').addClass('hasruler');
 		this.setDocTypePref('ShowRuler', true);
 		this.map.fire('rulerchanged');
 	}
 
 	/**
-	 * Hides the ruler.
+	 * Hides the rulers.
 	 */
 	hideRuler(): void {
-		$('.cool-ruler').hide();
+		if (app.UI.horizontalRuler) app.UI.horizontalRuler.hide();
+		if (app.UI.verticalRuler) app.UI.verticalRuler.hide();
+
 		$('#map').removeClass('hasruler');
 		this.setDocTypePref('ShowRuler', false);
 		this.map.fire('rulerchanged');
@@ -1245,6 +1270,20 @@ class UIManager extends window.L.Control {
 	 */
 	isRulerVisible(): boolean {
 		return $('.cool-ruler').is(':visible');
+	}
+
+	/*
+	 * Shows the StyleListDeck (sidebar).
+	 * If 'visible' already, then does nothing as this
+	 * is called from 'stylesview' dropdown and buttons
+	 * in a dropdown aren't toggle buttons.
+	 */
+	showStyleListDeck(): void {
+		const styleListDeck = document.querySelector('#StyleListDeck');
+		JSDialog.CloseAllDropdowns();
+		if (styleListDeck && (styleListDeck as any).checkVisibility())
+			return;
+		this._map.sendUnoCommand('.uno:SidebarDeck.StyleListDeck');
 	}
 
 	/**
@@ -1307,8 +1346,7 @@ class UIManager extends window.L.Control {
 		if (this.isNotebookbarCollapsed() || this.isMenubarHidden())
 			return;
 
-		this.moveObjectVertically($('#formulabar'), -1);
-		$('#toolbar-wrapper').css('display', 'none');
+		$('#toolbar-row').css('display', 'none');
 
 		$('#document-container').addClass('tabs-collapsed');
 	}
@@ -1322,8 +1360,7 @@ class UIManager extends window.L.Control {
 		if (!this.isNotebookbarCollapsed())
 			return;
 
-		this.moveObjectVertically($('#formulabar'), 1);
-		$('#toolbar-wrapper').css('display', '');
+		$('#toolbar-row').css('display', '');
 
 		$('#document-container').removeClass('tabs-collapsed');
 	}
@@ -1457,6 +1494,23 @@ class UIManager extends window.L.Control {
 				app.socket.sendMessage('uno .uno:SidebarHide');
 			}
 		}
+		this.updateReadonlyIndicator();
+	}
+
+	/**
+	 * Updates visibility of the Read-only badge/button in the top toolbar.
+	*/
+	updateReadonlyIndicator(): void {
+		app.layoutingService.appendLayoutingTask(() =>{
+			if (!this.topReadonlyBtn)
+				return;
+
+			if (app.isReadOnly()) {
+				this.topReadonlyBtn.classList.remove('hidden');
+			} else {
+				this.topReadonlyBtn.classList.add('hidden');
+			}
+		})
 	}
 
 	refreshTheme(): void {
@@ -1708,6 +1762,17 @@ class UIManager extends window.L.Control {
 			return this.map.jsdialog.hasDialogOpened();
 		else
 			return this.mobileWizard.isOpen();
+	}
+
+	/**
+	 * Returns whether any context menu is currently open.
+	 */
+	isAnyContextMenuOpened(): boolean {
+		const contextMenu = document.querySelector(
+			'.context-menu-root:not([style*="display: none"])',
+		);
+
+		return contextMenu !== null;
 	}
 
 	// TODO: remove and use JSDialog.generateModalId directly

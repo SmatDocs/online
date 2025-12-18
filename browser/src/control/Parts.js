@@ -13,7 +13,7 @@
  */
 
 /* global app _ cool */
-/* global _ JSDialog app OtherViewCellCursorSection TileManager */
+/* global _ JSDialog app OtherViewCellCursorSection TileManager TextCursorSection */
 
 window.L.Map.include({
 	/*
@@ -22,8 +22,12 @@ window.L.Map.include({
 		@param {boolean} calledFromSetPartHandler - Requests a scroll to the cursor
 	*/
 	setPart: function (part, external, calledFromSetPartHandler) {
-		if (cool.Comment.isAnyEdit()) {
-			cool.CommentSection.showCommentEditingWarning();
+		const editingComment = cool.Comment.isAnyEdit();
+		if (editingComment) {
+			const commentSection = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
+			if (commentSection) {
+				commentSection.navigateAndFocusComment(editingComment);
+			}
 			return;
 		}
 
@@ -84,12 +88,6 @@ window.L.Map.include({
 
 		if (app.file.fileBasedView)
 		{
-			docLayer._selectedPart = docLayer._prevSelectedPart;
-			if (typeof(part) !== 'number') {
-				docLayer._preview._scrollViewByDirection(part);
-				this._docLayer._checkSelectedPart();
-				return;
-			}
 			docLayer._preview._scrollViewToPartPosition(docLayer._selectedPart);
 			this._docLayer._checkSelectedPart();
 			notifyServer(part);
@@ -112,9 +110,8 @@ window.L.Map.include({
 		});
 
 		OtherViewCellCursorSection.updateVisibilities();
-		app.definitions.otherViewCursorSection.updateVisibilities();
+		TextCursorSection.updateVisibilities();
 		app.definitions.otherViewGraphicSelectionSection.updateVisibilities();
-		docLayer.eachView(docLayer._viewSelections, docLayer._onUpdateTextViewSelection, docLayer);
 		docLayer._clearSelections(calledFromSetPartHandler);
 		TileManager.updateOnChangePart();
 		TileManager.pruneTiles();
@@ -329,8 +326,12 @@ window.L.Map.include({
 	},
 
 	insertPage: function(nPos) {
-		if (cool.Comment.isAnyEdit()) {
-			cool.CommentSection.showCommentEditingWarning();
+		const editingComment = cool.Comment.isAnyEdit();
+		if (editingComment) {
+			const commentSection = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
+			if (commentSection) {
+				commentSection.navigateAndFocusComment(editingComment);
+			}
 			return;
 		}
 

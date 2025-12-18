@@ -75,6 +75,11 @@ window.L.Map.StateChangeHandler = window.L.Handler.extend({
 			}
 		}
 
+		if (e.commandName === '.uno:LeftRightParaMargin') {
+			if (app.UI.horizontalRuler) app.UI.horizontalRuler._updateParagraphIndentations();
+			if (app.UI.verticalRuler) app.UI.verticalRuler._updateParagraphIndentations();
+		}
+
 		if (commandName == '.uno:PageLinks') {
 			let links = [];
 			if (state && state.links) {
@@ -95,6 +100,28 @@ window.L.Map.StateChangeHandler = window.L.Handler.extend({
 				}
 			}
 			this._items[commandName] = links;
+		}
+
+		if (commandName == '.uno:CanvasPageVisArea') {
+			const x = parseInt(state.x);
+			const y = parseInt(state.y);
+
+			const point = new cool.SimplePoint(x, y);
+			app.activeDocument.activeLayout.setOverviewPageVisArea(point);
+		}
+
+		if (commandName == '.uno:CanvasPageCenter') {
+			const pageCenterX = app.activeDocument.fileSize.x / 2;
+			const pageCenterY = app.activeDocument.fileSize.y / 2;
+
+			const viewedRect = app.activeDocument.activeLayout.viewedRectangle;
+
+			// Calculate the top-left position that would center the view on the page center
+			const scrollX = pageCenterX - (viewedRect.width / 2);
+			const scrollY = pageCenterY - (viewedRect.height / 2);
+
+			const scrollPoint = new cool.SimplePoint(scrollX, scrollY);
+			app.activeDocument.activeLayout.scrollTo(scrollPoint.pX, scrollPoint.pY);
 		}
 
 		$('#document-container').removeClass('slide-master-mode');

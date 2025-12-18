@@ -16,6 +16,7 @@ class ScrollProperties {
 	minimumVerticalScrollSize: number = 80 * app.roundedDpiScale;
 	verticalScrollRatio: number = 0;
 	startY: number = 0; // Start position of the vertical scroll bar on canvas.
+	viewY: number = 0; // Corresponding view position of startY.
 	verticalScrollStep: number = 0; // Quick scroll step.
 
 	xOffset: number = 0;
@@ -24,6 +25,7 @@ class ScrollProperties {
 	minimumHorizontalScrollSize: number = 80 * app.roundedDpiScale;
 	horizontalScrollRatio: number = 0;
 	startX: number = 0;
+	viewX: number = 0; // Corresponding view position of startX.
 	horizontalScrollStep: number = 0;
 
 	usableThickness: number = 20 * app.roundedDpiScale;
@@ -42,12 +44,52 @@ class ViewLayoutBase {
 	protected clientVisibleAreaCommand: string = ''; // Last visible area command. Checked to avoid sending the same command multiple times.
 	protected _viewedRectangle: cool.SimpleRectangle; // Currently viewed rectangle.
 	protected _viewSize: cool.SimplePoint; // Scrollable area.
+	protected _documentAnchorPosition: number[]; // The position of document section on the canvas. Always canvas (core) pixels, no need for SimplePoint class.
 	public scrollProperties: ScrollProperties = new ScrollProperties();
+	protected currentCoordList: Array<TileCoordData> = [];
 
 	constructor() {
 		this._viewedRectangle = new cool.SimpleRectangle(0, 0, 0, 0);
 		this.lastViewedRectangle = new cool.SimpleRectangle(0, 0, 0, 0);
 		this._viewSize = new cool.SimplePoint(0, 0);
+		this._documentAnchorPosition = [0, 0];
+	}
+
+	/*
+		View layout may choose to render the tiles in different coordinates.
+		In that case, the tiles' coordinates will differ from the file's coordinates.
+		There are x, pX and cX. View layout also adds vX.
+			x : Document coordinate system
+			pX: Corresponding pixel coordinate system on canvas. x and pX have a fixed ratio.
+			cX: Corresponding CSS coordinate system on canvas. x and cX have a fixed ratio.
+			vX: View coordinate system. Current view layout decides on the mapping between x (document coordinate) and vX (view coordinate).
+				View coordinate system also uses canvas pixels as unit (like pX).
+
+		Below functions are used to convert between those coordinate systems.
+		This is the base class. Does nothing special but provide the interface.
+	*/
+	public documentToViewX(point: cool.SimplePoint): number {
+		return (
+			point.pX - this._viewedRectangle.pX1 + this._documentAnchorPosition[0]
+		);
+	}
+
+	public documentToViewY(point: cool.SimplePoint): number {
+		return (
+			point.pY - this._viewedRectangle.pY1 + this._documentAnchorPosition[1]
+		);
+	}
+
+	// point: Unmodified canvas coordinate, no scroll included.
+	public canvasToDocumentPoint(point: cool.SimplePoint): cool.SimplePoint {
+		const result = point.clone();
+
+		result.pX =
+			point.pX + this._viewedRectangle.pX1 - this._documentAnchorPosition[0];
+		result.pY =
+			point.pY + this._viewedRectangle.pY1 - this._documentAnchorPosition[1];
+
+		return result;
 	}
 
 	public resetClientVisibleArea(): void {
@@ -131,7 +173,15 @@ class ViewLayoutBase {
 		this._viewSize = size;
 	}
 
-	private getDocumentAnchorSection(): CanvasSectionObject {
+	public get documentAnchorPosition() {
+		return this._documentAnchorPosition.slice();
+	}
+
+	public set documentAnchorPosition(newPosition: number[]) {
+		this._documentAnchorPosition = newPosition;
+	}
+
+	protected getDocumentAnchorSection(): CanvasSectionObject {
 		return app.sectionContainer.getDocumentAnchorSection();
 	}
 
@@ -179,21 +229,15 @@ class ViewLayoutBase {
 		}
 	}
 
-	public refreshScrollProperties(): any {
-		const documentAnchor = this.getDocumentAnchorSection();
-
-		// The length of the railway that the scroll bar moves on up & down or left & right.
-		this.calculateVerticalScrollLength(documentAnchor);
-		this.calculateHorizontalScrollLength(documentAnchor);
-
+	protected calculateTheScrollSizes() {
 		// Sizes of the scroll bars.
 		this.scrollProperties.verticalScrollSize = Math.round(
 			Math.pow(this.scrollProperties.verticalScrollLength, 2) /
-				app.activeDocument.activeView.viewSize.pY,
+				this.viewSize.pY,
 		);
 		this.scrollProperties.horizontalScrollSize = Math.round(
 			Math.pow(this.scrollProperties.horizontalScrollLength, 2) /
-				app.activeDocument.activeView.viewSize.pX,
+				this.viewSize.pX,
 		);
 
 		if (
@@ -209,31 +253,54 @@ class ViewLayoutBase {
 		)
 			this.scrollProperties.verticalScrollSize =
 				this.scrollProperties.minimumVerticalScrollSize;
+	}
+
+	public refreshScrollProperties(): any {
+		const documentAnchor = this.getDocumentAnchorSection();
+
+		// The length of the railway that the scroll bar moves on up & down or left & right.
+		this.calculateVerticalScrollLength(documentAnchor);
+		this.calculateHorizontalScrollLength(documentAnchor);
+
+		// Sizes of the scroll bars.
+		this.calculateTheScrollSizes();
 
 		// 1px scrolling = xpx document height / width.
 		this.scrollProperties.horizontalScrollRatio =
-			(app.activeDocument.activeView.viewSize.pX - documentAnchor.size[0]) /
+			(this.viewSize.pX - documentAnchor.size[0]) /
 			(this.scrollProperties.horizontalScrollLength -
 				this.scrollProperties.horizontalScrollSize);
 		this.scrollProperties.verticalScrollRatio =
-			(app.activeDocument.activeView.viewSize.pY - documentAnchor.size[1]) /
+			(this.viewSize.pY - documentAnchor.size[1]) /
 			(this.scrollProperties.verticalScrollLength -
 				this.scrollProperties.verticalScrollSize);
 
 		// The start position of scroll bars on canvas.
 		this.scrollProperties.startX =
-			app.activeDocument.activeView.viewedRectangle.pX1 /
-				this.scrollProperties.horizontalScrollRatio +
+			this.viewedRectangle.pX1 / this.scrollProperties.horizontalScrollRatio +
 			this.scrollProperties.xOffset;
 
 		this.scrollProperties.startY =
-			app.activeDocument.activeView.viewedRectangle.pY1 /
-				this.scrollProperties.verticalScrollRatio +
+			this.viewedRectangle.pY1 / this.scrollProperties.verticalScrollRatio +
 			this.scrollProperties.yOffset;
 
 		// Properties for quick scrolling.
 		this.scrollProperties.verticalScrollStep = documentAnchor.size[1] / 2;
 		this.scrollProperties.horizontalScrollStep = documentAnchor.size[0] / 2;
+	}
+
+	public areViewTilesReady(): boolean {
+		for (let i = 0; i < this.currentCoordList.length; i++) {
+			const tempTile = TileManager.get(this.currentCoordList[i]);
+
+			if (!tempTile || tempTile.needsFetch()) return false;
+		}
+
+		return true;
+	}
+
+	public getCurrentCoordList(): Array<TileCoordData> {
+		return this.currentCoordList;
 	}
 
 	// virtual function implemented by the children
@@ -242,7 +309,7 @@ class ViewLayoutBase {
 	}
 
 	/*
-		`ignoreScrollbarLength` constraints while scrolling the document to make some space for the comments. 
+		`ignoreScrollbarLength` constraints while scrolling the document to make some space for the comments.
 		see `ViewLayoutWriter.adjustDocumentMarginsForComments`
 	*/
 	protected scrollHorizontal(
@@ -363,5 +430,9 @@ class ViewLayoutBase {
 		pY -= this.viewedRectangle.pY1;
 
 		this.scroll(pX, pY);
+	}
+
+	public setOverviewPageVisArea(point: cool.SimplePoint): void {
+		this.scrollTo(point.pX, point.pY);
 	}
 }

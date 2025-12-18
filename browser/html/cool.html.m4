@@ -31,7 +31,7 @@ m4_ifelse(IOSAPP,[true],
 <meta charset="utf-8">
 m4_ifelse(MOBILEAPP, [true],
 [
-  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
 ],
 [
   %BROWSER_VIEWPORT%
@@ -135,6 +135,11 @@ m4_ifelse(MOBILEAPP,[true],
             <div id="followingChip"></div>
           </div>
           <div id="userListSummaryBackground"><button id="userListSummary"></button></div>
+        </div>
+        <div id="viewMode">
+          <div class="unotoolbutton notebookbar ui-content unospan readonly inline hidden" tabindex="-1" id="readonlyMode">
+              <span class="ui-content unolabel"></span>
+          </div>
         </div>
         <div id="closebuttonwrapperseparator"></div>
         <div id="closebuttonwrapper">

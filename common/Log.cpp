@@ -11,6 +11,15 @@
 
 #include <config.h>
 
+#include "Log.hpp"
+#include "StaticLogHelper.hpp"
+#include "Util.hpp"
+
+#include <Poco/AutoPtr.h>
+#include <Poco/FileChannel.h>
+#include <Poco/Logger.h>
+#include <Poco/Version.h>
+
 #include <atomic>
 #include <cassert>
 #include <cstdint>
@@ -20,18 +29,8 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <unordered_map>
-
 #include <unistd.h>
-
-#include <Poco/AutoPtr.h>
-#include <Poco/FileChannel.h>
-#include <Poco/Logger.h>
-#include <Poco/Version.h>
-
-#include "Log.hpp"
-#include "StaticLogHelper.hpp"
-#include "Util.hpp"
+#include <unordered_map>
 
 namespace
 {
@@ -44,10 +43,11 @@ thread_local std::int32_t OwnThreadIdIndex = 0;
 std::int32_t ThreadIdArray[256];
 std::atomic_int32_t NextThreadIdIndex(0);
 #endif // !NDEBUG
-} // namespace
 
 /// Which log areas should be disabled
 bool AreasDisabled[Log::AreaMax] = { false, };
+
+} // namespace
 
 /// Wrapper to expose protected 'log' and genericise
 class GenericLogger : public Poco::Logger
@@ -66,7 +66,7 @@ public:
         // loggers and we can't access the internal mutex.
         if (find(name))
             throw Poco::ExistsException();
-        auto log = new GenericLogger(name, std::move(chan), lvl);
+        auto* log = new GenericLogger(name, std::move(chan), lvl);
         add(log);
         return *log;
     }
@@ -92,13 +92,13 @@ public:
         if (getLevel() < prio)
             return;
 #if POCO_VERSION >= 0x010C0501
-        Poco::Channel* pChannel = getChannel().get();
+        Poco::Channel* channel = getChannel().get();
 #else
-        auto pChannel = getChannel();
+        auto channel = getChannel();
 #endif
-        if (!pChannel)
+        if (!channel)
             return;
-        pChannel->log(Poco::Message(name(), text, prio));
+        channel->log(Poco::Message(name(), text, prio));
     }
 
     static Log::Level mapToLevel(Poco::Message::Priority prio)
@@ -392,6 +392,9 @@ namespace Log
     extern StaticHelper Static;
     extern StaticUIHelper StaticUILog;
 
+    namespace
+    {
+
     bool IsShutdown = false;
 
     /// Convert an unsigned number to ascii with 0 padding.
@@ -443,6 +446,7 @@ namespace Log
         return out;
     }
 
+#if defined(__linux__)
     /// Convert unsigned long num to base-10 ascii in place.
     /// Returns the *end* position.
     char* to_ascii(char* buf, std::size_t num)
@@ -464,6 +468,8 @@ namespace Log
 
         return buf + i;
     }
+#endif
+    } // namespace
 
     char* prefix(const std::chrono::time_point<std::chrono::system_clock>& tp,
                  char* buffer,
@@ -628,11 +634,11 @@ namespace Log
         }
         catch (ExistsException&)
         {
-            auto logger = static_cast<GenericLogger *>(&Poco::Logger::get(Static.getName()));
+            auto* logger = static_cast<GenericLogger*>(&Poco::Logger::get(Static.getName()));
             Static.setLogger(logger);
         }
 
-        auto logger = Static.getLogger();
+        auto* logger = Static.getLogger();
 
         const std::string level = logLevel.empty() ? std::string("trace") : logLevel;
         logger->setLevel(level);
@@ -662,20 +668,24 @@ namespace Log
             }
             catch (ExistsException&)
             {
-                auto loggerUILog = static_cast<GenericLogger *>(&Poco::Logger::get(StaticUILog.getName()));
+                auto* loggerUILog =
+                    static_cast<GenericLogger*>(&Poco::Logger::get(StaticUILog.getName()));
                 StaticUILog.setLogger(loggerUILog);
             }
         }
     }
 
+    namespace
+    {
+
     GenericLogger& logger()
     {
-        GenericLogger* pLogger = Static.getThreadLocalLogger();
-        if (pLogger != nullptr)
-            return *pLogger;
+        GenericLogger* logger = Static.getThreadLocalLogger();
+        if (logger != nullptr)
+            return *logger;
 
-        pLogger = Static.getLogger();
-        return pLogger ? *pLogger
+        logger = Static.getLogger();
+        return logger ? *logger
             : *static_cast<GenericLogger *>(
                 &GenericLogger::get(Static.getInited() ? Static.getName() : std::string()));
     }
@@ -692,11 +702,12 @@ namespace Log
                 &GenericLogger::get(StaticUILog.getInited() ? StaticUILog.getName() : std::string()));
     }
 
+    } // namespace
+
     bool isLogUIEnabled()
     {
-        if (StaticUILog.getThreadLocalLogger() || StaticUILog.getLogger())
-            return true;
-        return false;
+        return (StaticUILog.getThreadLocalLogger() != nullptr) ||
+               (StaticUILog.getLogger() != nullptr);
     }
 
     void logUI(Level l, const std::string &text)
@@ -856,8 +867,7 @@ namespace Log
 
     const std::string& getLogLevelName(const std::string& channel)
     {
-        unsigned int wsdLogLevel =
-            Log::logger().get(channel).getLevel();
+        const int wsdLogLevel = GenericLogger::get(channel).getLevel();
         return levelList[wsdLogLevel];
     }
 
@@ -875,12 +885,12 @@ namespace Log
 
         // Get the list of channels..
         std::vector<std::string> nameList;
-        Log::logger().names(nameList);
+        GenericLogger::names(nameList);
 
         if (std::find(std::begin(levelList), std::end(levelList), level) == std::end(levelList))
             lvl = "debug";
 
-        Log::logger().get(channel).setLevel(lvl);
+        GenericLogger::get(channel).setLevel(lvl);
     }
 
 } // namespace Log

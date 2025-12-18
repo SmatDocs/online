@@ -60,8 +60,12 @@ const int ClipboardTokenLengthBytes = 16;
 // home-use, disabled by default.
 const int ProxyAccessTokenLengthBytes = 32;
 
-static std::mutex GlobalSessionMapMutex;
-static std::unordered_map<std::string, std::weak_ptr<ClientSession>> GlobalSessionMap;
+namespace
+{
+std::mutex GlobalSessionMapMutex;
+std::unordered_map<std::string, std::weak_ptr<ClientSession>> GlobalSessionMap;
+
+} // namespace
 
 namespace
 {
@@ -71,40 +75,39 @@ void logSyntaxErrorDetails(const StringVector& tokens, const std::string& firstL
 }
 }
 
-ClientSession::ClientSession(
-    const std::shared_ptr<ProtocolHandlerInterface>& ws,
-    const std::string& id,
-    const std::shared_ptr<DocumentBroker>& docBroker,
-    const Poco::URI& uriPublic,
-    const bool readOnly,
-    const RequestDetails &requestDetails,
-    const Poco::URI& templateOptionUriPublic)
-        : Session(ws, "ToClient-" + id, id, readOnly)
-        , _uriPublic(uriPublic)
-        , _templateOptionUriPublic(templateOptionUriPublic)
-        , _serverURL(requestDetails)
-        , _auth(Authorization::create(uriPublic))
-        , _docBroker(docBroker)
-        , _lastStateTime(std::chrono::steady_clock::now())
-        , _clientVisibleArea(0, 0, 0, 0)
-        , _keyEvents(1)
-        , _splitX(0)
-        , _splitY(0)
-        , _clientSelectedPart(-1)
-        , _clientSelectedMode(0)
-        , _tileWidthPixel(0)
-        , _tileHeightPixel(0)
-        , _tileWidthTwips(0)
-        , _tileHeightTwips(0)
-        , _kitViewId(-1)
-        , _canonicalViewId(CanonicalViewId::None)
-        , _state(SessionState::DETACHED)
-        , _isDocumentOwner(false)
-        , _isTextDocument(false)
-        , _thumbnailSession(false)
-        , _sentAudit(false)
-        , _sentBrowserSetting(false)
-        , _isConvertTo(false)
+ClientSession::ClientSession(const std::shared_ptr<ProtocolHandlerInterface>& ws,
+                             const std::string& id,
+                             const std::shared_ptr<DocumentBroker>& docBroker,
+                             const Poco::URI& uriPublic, const bool readOnly,
+                             const RequestDetails& requestDetails,
+                             const AdditionalFilePocoUris& additionalFileUrisPublic)
+    : Session(ws, "ToClient-" + id, id, readOnly)
+    , _uriPublic(uriPublic)
+    , _additionalFileUrisPublic(additionalFileUrisPublic)
+    , _serverURL(requestDetails)
+    , _auth(Authorization::create(uriPublic))
+    , _docBroker(docBroker)
+    , _lastStateTime(std::chrono::steady_clock::now())
+    , _clientVisibleArea(0, 0, 0, 0)
+    , _keyEvents(1)
+    , _performanceCounterEpoch(0)
+    , _splitX(0)
+    , _splitY(0)
+    , _clientSelectedPart(-1)
+    , _clientSelectedMode(0)
+    , _tileWidthPixel(0)
+    , _tileHeightPixel(0)
+    , _tileWidthTwips(0)
+    , _tileHeightTwips(0)
+    , _kitViewId(-1)
+    , _canonicalViewId(CanonicalViewId::None)
+    , _state(SessionState::DETACHED)
+    , _isDocumentOwner(false)
+    , _isTextDocument(false)
+    , _thumbnailSession(false)
+    , _sentAudit(false)
+    , _sentBrowserSetting(false)
+    , _isConvertTo(false)
 {
     const std::size_t curConnections = ++COOLWSD::NumConnections;
     LOG_INF("ClientSession ctor [" << getName() << "] for URI: [" << _uriPublic.toString()
@@ -116,14 +119,12 @@ ClientSession::ClientSession(
 
     // Emit metadata Trace Events for the synthetic pid used for the Trace Events coming in from the
     // client's cool, and for its dummy thread.
-    TraceEvent::emitOneRecordingIfEnabled("{\"name\":\"process_name\",\"ph\":\"M\",\"args\":{\"name\":\""
-                                          "cool-" + id
-                                          + "\"},\"pid\":"
-                                          + std::to_string(Util::getProcessId() + SYNTHETIC_COOL_PID_OFFSET)
-                                          + ",\"tid\":1},\n");
-    TraceEvent::emitOneRecordingIfEnabled("{\"name\":\"thread_name\",\"ph\":\"M\",\"args\":{\"name\":\"JS\"},\"pid\":"
-                                          + std::to_string(Util::getProcessId() + SYNTHETIC_COOL_PID_OFFSET)
-                                          + ",\"tid\":1},\n");
+    TraceEvent::emitOneRecordingIfEnabled(
+        R"({"name":"process_name","ph":"M","args":{"name":"cool-)" + id + R"("},"pid":)" +
+        std::to_string(Util::getProcessId() + SYNTHETIC_COOL_PID_OFFSET) + ",\"tid\":1},\n");
+    TraceEvent::emitOneRecordingIfEnabled(
+        R"({"name":"thread_name","ph":"M","args":{"name":"JS"},"pid":)" +
+        std::to_string(Util::getProcessId() + SYNTHETIC_COOL_PID_OFFSET) + ",\"tid\":1},\n");
 
     _browserSettingsJSON = new Poco::JSON::Object();
 }
@@ -336,7 +337,7 @@ void ClientSession::handleClipboardRequest(DocumentBroker::ClipboardRequest     
             return;
         }
 
-        LOG_TRC("Session [" << getId() << "] sending getclipboard name=" + tag + specific);
+        LOG_TRC("Session [" << getId() << "] sending getclipboard name=" << tag << specific);
         docBroker->forwardToChild(client_from_this(), "getclipboard name=" + tag + specific);
         _clipSockets.push_back(socket);
     }
@@ -1835,10 +1836,10 @@ bool ClientSession::loadDocument(const char* /*buffer*/, int /*length*/,
         {
             oss << " infilterOptions=" << getInFilterOption();
         }
-        else if (!docBroker->getTemplateOptionUriJailed().empty())
+        else if (auto it = docBroker->getAdditionalFileUrisJailed().find("template"); it != docBroker->getAdditionalFileUrisJailed().end())
         {
-            std::string options = "{\"TemplateURL\":{\"type\":\"string\",\"value\":\"" +
-                                  docBroker->getTemplateOptionUriJailed() + "\"}}";
+            std::string options = R"({"TemplateURL":{"type":"string","value":")" +
+                                  it->second + "\"}}";
             oss << " infilterOptions=" << options;
         }
 
@@ -2061,13 +2062,13 @@ bool ClientSession::filterMessage(const std::string& message) const
     return allowed;
 }
 
-void ClientSession::setReadOnly(bool bVal)
+void ClientSession::setReadOnly(bool val)
 {
-    Session::setReadOnly(bVal);
+    Session::setReadOnly(val);
 
     // Also inform the client.
-    const std::string sPerm = isReadOnly() ? "readonly" : "edit";
-    sendTextFrame("perm: " + sPerm);
+    const std::string perm = isReadOnly() ? "readonly" : "edit";
+    sendTextFrame("perm: " + perm);
 }
 
 void ClientSession::sendFileMode(const bool readOnly, const bool editComments, bool manageRedlines)
@@ -2100,13 +2101,13 @@ bool ClientSession::attemptLock(const std::shared_ptr<DocumentBroker>& docBroker
         return false;
 
     std::string failReason;
-    const bool bResult = docBroker->attemptLock(*this, failReason);
-    if (bResult)
+    const bool result = docBroker->attemptLock(*this, failReason);
+    if (result)
         setReadOnly(false);
     else
         sendTextFrame("lockfailed:" + failReason);
 
-    return bResult;
+    return result;
 }
 
 bool ClientSession::hasQueuedMessages() const
@@ -2197,10 +2198,10 @@ bool ClientSession::postProcessCopyPayload(std::istream& in, std::ostream& out)
         const std::string meta = getClipboardURI();
         LOG_TRC("Inject clipboard cool origin of '" << meta << "'");
 
-        std::string origin = "<div id=\"meta-origin\" data-coolorigin=\"" + meta + "\">\n";
+        std::string origin = R"(<div id="meta-origin" data-coolorigin=")" + meta + "\">\n";
         if (json)
         {
-            origin = "<div id=\\\"meta-origin\\\" data-coolorigin=\\\"" + meta + "\\\">\\n";
+            origin = R"(<div id=\"meta-origin\" data-coolorigin=\")" + meta + R"(\">\n)";
         }
         out.write(origin.data(), origin.size());
 
@@ -2264,7 +2265,7 @@ bool ClientSession::handlePresentationInfo(const std::shared_ptr<Message>& paylo
     const std::string prefix = json.substr(0, iterator);
     json.erase(0, iterator); // Remove the prefix to parse the purse JSON part.
 
-    bool bModified = false;
+    bool modified = false;
 
     Poco::JSON::Object::Ptr rootObject;
     try
@@ -2289,13 +2290,14 @@ bool ClientSession::handlePresentationInfo(const std::shared_ptr<Message>& paylo
 
                             if (!id.empty() && !url.empty())
                             {
-                                std::string original = "{ \"id\" : \"" + id + "\", \"url\" : \"" + url + "\" }";
+                                std::string original =
+                                    R"({ "id" : ")" + id + R"(", "url" : ")" + url + "\" }";
                                 docBroker->addEmbeddedMedia(id, original); // Capture the original message with internal URL.
 
                                 const std::string mediaUrl =
                                     Uri::encode(createPublicURI("media", id, false), "&");
                                 video->set("url", mediaUrl); // Replace the url with the public one.
-                                bModified = true;
+                                modified = true;
                             }
                         }
                     }
@@ -2308,7 +2310,7 @@ bool ClientSession::handlePresentationInfo(const std::shared_ptr<Message>& paylo
         LOG_ERR("unocommandresult parsing failure: " << exception.what());
     }
 
-    if (bModified)
+    if (modified)
     {
         std::ostringstream mediaStr;
         rootObject->stringify(mediaStr);
@@ -3615,7 +3617,7 @@ bool ClientSession::isTileInsideVisibleArea(const TileDesc& tile) const
 // 2. The clipboard payload parsing code in ClipboardData::read().
 bool ClientSession::preProcessSetClipboardPayload(std::istream& in, std::ostream& out)
 {
-    if (!Util::copyToMatch(in, out, "<div id=\"meta-origin\" data-coolorigin=\""))
+    if (!Util::copyToMatch(in, out, R"(<div id="meta-origin" data-coolorigin=")"))
         return false;
 
     const std::string_view endtag = "\">\n";
@@ -3682,7 +3684,7 @@ std::string ClientSession::processSVGContent(const std::string& svg)
 
         // Store the original json with the internal, temporary, file URI.
         const std::string fileUrl = svg.substr(start + 5, end - start - 5);
-        docBroker->addEmbeddedMedia(id, "{ \"action\":\"update\",\"id\":\"" + id + "\",\"url\":\"" +
+        docBroker->addEmbeddedMedia(id, R"({ "action":"update","id":")" + id + R"(","url":")" +
                                             fileUrl + "\"}");
 
         const std::string mediaUrl =

@@ -13,7 +13,8 @@ TYPESCRIPT_JS_DIR = $(builddir)/typescript_js
 export NODE_PATH=$(abs_builddir)/node_module
 
 if !ENABLE_MOBILEAPP
-L10N_JSON = $(patsubst $(srcdir)/po/%.po,$(DIST_FOLDER)/l10n/%.json,$(L10N_PO))
+L10N_JSON = $(patsubst $(srcdir)/po/help-%.po,$(DIST_FOLDER)/l10n/help-%.json,$(L10N_PO))
+L10N_JSON += $(patsubst $(srcdir)/po/ui-%.po,$(DIST_FOLDER)/l10n/ui-%.json,$(L10N_PO))
 else
 L10N_IOS_ALL_JS = $(DIST_FOLDER)/l10n-all.js
 L10N_JSON = $(L10N_IOS_ALL_JS)
@@ -264,6 +265,7 @@ COOL_JS_LST =\
 	src/app/ViewLayoutWriter.ts \
 	src/app/ViewLayoutMultiPage.ts \
 	src/app/DocumentBase.ts \
+	src/app/DocumentView.ts \
 	src/app/TilesMiddleware.ts \
 	src/app/SlideshowMiddleware.ts \
 	src/app/SearchService.ts \
@@ -278,6 +280,7 @@ COOL_JS_LST =\
 	src/app/iface/Control.Interface.ts \
 	src/app/Log.ts \
 	src/app/Debug.ts \
+	src/app/A11yValidator.ts \
 	src/app/SocketBase.ts \
 	src/app/TracingEvents.ts \
 	src/app/ServerCommand.ts \
@@ -318,8 +321,10 @@ COOL_JS_LST =\
 	src/canvas/sections/DebugOverlaySection.ts \
 	src/canvas/sections/PreloadMapSection.ts \
 	src/canvas/sections/TilesSection.ts \
-	src/canvas/sections/AutoFillMarkerSection.ts \
+	src/canvas/sections/AutoFillBaseSection.ts \
+	src/canvas/sections/CellFillMarkerSection.ts \
 	src/canvas/sections/ImpressSelectionRectangle.ts \
+	src/canvas/sections/TableFillMarkerSection.ts \
 	src/canvas/sections/TableResizeMarkerSection.ts \
 	src/canvas/sections/TableSelectMarkerSection.ts \
 	src/canvas/sections/FocusCellSection.ts \
@@ -331,12 +336,14 @@ COOL_JS_LST =\
 	src/canvas/sections/ShapeHandleGluePointSubSection.ts \
 	src/canvas/sections/ShapeHandleAnchorSubSection.ts \
 	src/canvas/sections/ShapeHandleRotationSubSection.ts \
+	src/canvas/sections/ShapeHandleDiagramSubSection.ts \
 	src/canvas/sections/ShapeHandleScalingSubSection.ts \
 	src/canvas/sections/ValidityInputHelpSection.ts \
 	src/canvas/sections/CellCursorSection.ts \
 	src/canvas/sections/CellSelectionHandleSection.ts \
 	src/canvas/sections/CalcValidityDropDownSection.ts \
 	src/canvas/sections/TextSelectionHandleSection.ts \
+	src/canvas/sections/TextSelectionSection.ts \
 	src/canvas/sections/OtherViewGraphicSelectionSection.ts \
 	src/canvas/sections/OtherViewCellCursorSection.ts \
 	src/canvas/sections/FormFieldButton.ts \
@@ -363,7 +370,9 @@ COOL_JS_LST =\
 	src/canvas/sections/CursorHeaderSection.ts \
 	src/canvas/sections/CursorHandler.ts \
 	src/canvas/sections/TableInsertMarkerSection.ts \
+	src/canvas/sections/GenericButtonSection.ts \
 	src/canvas/sections/ChartContextButtonSection.ts \
+	src/canvas/sections/DiagramButtonSection.ts \
 	src/canvas/sections/ContentControlDropdownSubSection.ts \
 	src/canvas/sections/ContentControlSection.ts \
 	src/layer/marker/ProgressOverlay.js \
@@ -371,7 +380,6 @@ COOL_JS_LST =\
 	src/layer/marker/A11yTextInput.js \
 	src/layer/LayerGroup.js \
 	src/geometry/LineUtil.js \
-	src/geometry/PolyUtil.js \
 	src/core/Handler.js \
 	src/dom/DomEvent.js \
 	src/dom/Draggable.js \
@@ -391,6 +399,7 @@ COOL_JS_LST =\
 	src/map/handler/Map.FileInserter.js \
 	src/map/handler/Map.StateChanges.js \
 	src/map/handler/Map.WOPI.js \
+	src/control/jsdialog/Util.UniqueId.ts \
 	src/control/Control.AboutDialog.ts \
 	src/control/Control.Toolbar.js \
 	src/control/Control.Command.js \
@@ -425,6 +434,7 @@ COOL_JS_LST =\
 	src/control/jsdialog/Definitions.Menu.ts \
 	src/control/jsdialog/Definitions.DialogModification.ts \
 	src/control/jsdialog/Definitions.WindowId.ts \
+	src/control/jsdialog/Util.Accessibility.ts \
 	src/control/jsdialog/Util.Dropdown.js \
 	src/control/jsdialog/Util.Events.ts \
 	src/control/jsdialog/Util.KeyboardTabNavigation.ts \
@@ -455,10 +465,12 @@ COOL_JS_LST =\
 	src/control/jsdialog/Widget.Frame.js \
 	src/control/jsdialog/Widget.HTMLContent.ts \
 	src/control/jsdialog/Widget.IconView.ts \
+	src/control/jsdialog/Widget.NotebookbarIconView.ts \
 	src/control/jsdialog/Widget.MenuButton.js \
 	src/control/jsdialog/Widget.MobileBorderSelector.js \
 	src/control/jsdialog/Widget.MobileTabControl.js \
 	src/control/jsdialog/Widget.MultilineEdit.js \
+	src/control/jsdialog/Widget.NewSlideLayoutEntry.ts \
 	src/control/jsdialog/Widget.OverflowGroup.ts \
 	src/control/jsdialog/Widget.OverflowManager.ts \
 	src/control/jsdialog/Widget.Progressbar.js \
@@ -819,6 +831,9 @@ build-cool: \
 	$(DIST_FOLDER)/device-tablet.css \
 	$(DIST_FOLDER)/device-desktop.css \
 	$(DIST_FOLDER)/progressbar.css \
+	$(DIST_FOLDER)/settings.css \
+	$(DIST_FOLDER)/color-palette.css \
+	$(DIST_FOLDER)/color-palette-dark.css \
 	$(DIST_FOLDER)/bundle.js \
 	$(DIST_FOLDER)/cool.html \
 	$(WASM_FILES) \
@@ -999,7 +1014,10 @@ $(DIST_FOLDER)/l10n/%: $(srcdir)/l10n/%
 	@mkdir -p $(dir $@)
 	@cp $< $@
 
-$(DIST_FOLDER)/l10n/%.json: $(srcdir)/po/%.po
+$(DIST_FOLDER)/l10n/help-%.json: $(srcdir)/po/help-%.po
+	@$(srcdir)/util/po2json.py --quiet $< -o $@
+
+$(DIST_FOLDER)/l10n/ui-%.json: $(srcdir)/po/ui-%.po
 	@$(srcdir)/util/po2json.py --quiet $< -o $@
 
 $(DIST_FOLDER)/admin/%: $(srcdir)/admin/%
@@ -1015,22 +1033,33 @@ install-data-hook:
 	mkdir -p $(DESTDIR)$(pkgdatadir)/browser; \
 	cp -a dist/ $(DESTDIR)$(pkgdatadir)/browser/;
 else
-install-data-hook:
-	mkdir -p $(DESTDIR)$(pkgdatadir)/browser; \
-	rsync -a --exclude='src' \
-		--exclude='debug.html' \
-		--exclude='framed.doc.html' \
-		--exclude='framed.html' \
-		--exclude='load.doc.html' \
-		--exclude='multidocs.html' \
-		--exclude='tsconfig.tsbuildinfo' \
-		dist $(DESTDIR)$(pkgdatadir)/browser/;
-	mkdir -p $(DESTDIR)$(pkgdatadir)/browser/dist/src/layer/tile;
-	cp -a dist/src/layer/tile/CanvasTileUtils.js $(DESTDIR)$(pkgdatadir)/browser/dist/src/layer/tile/CanvasTileUtils.js;
-	cp -a dist/src/layer/tile/TileWorker.js $(DESTDIR)$(pkgdatadir)/browser/dist/src/layer/tile/TileWorker.js;
-if ENABLE_WASM
-	find $(DESTDIR)$(pkgdatadir)/browser/dist -type f ! -iname "*.png" -exec brotli --force {} \;
+EXCLUDES = \
+        --exclude='src' \
+        --exclude='debug.html' \
+        --exclude='framed.doc.html' \
+        --exclude='framed.html' \
+        --exclude='load.doc.html' \
+        --exclude='multidocs.html' \
+        --exclude='tsconfig.tsbuildinfo'
+
+if ENABLE_MOBILEAPP
+EXCLUDES += --exclude='l10n-all.js'
 endif
+
+if !ENABLE_WASM
+EXCLUDES += --exclude='wasm.html'
+WASM_BROTLI_CMD =
+else
+WASM_BROTLI_CMD = find $(DESTDIR)$(pkgdatadir)/browser/dist -type f ! -iname "*.png" -exec brotli --force {} \;
+endif
+
+install-data-hook:
+	mkdir -p $(DESTDIR)$(pkgdatadir)/browser
+	rsync -a $(EXCLUDES) dist $(DESTDIR)$(pkgdatadir)/browser/
+	mkdir -p $(DESTDIR)$(pkgdatadir)/browser/dist/src/layer/tile
+	cp -a dist/src/layer/tile/CanvasTileUtils.js $(DESTDIR)$(pkgdatadir)/browser/dist/src/layer/tile/CanvasTileUtils.js
+	cp -a dist/src/layer/tile/TileWorker.js $(DESTDIR)$(pkgdatadir)/browser/dist/src/layer/tile/TileWorker.js
+	$(WASM_BROTLI_CMD)
 endif
 
 libs:
@@ -1058,7 +1087,9 @@ pot:
 		src/canvas/sections/ShapeHandlesSection.ts \
 		src/canvas/sections/URLPopUpSection.ts \
 		src/canvas/sections/TableInsertMarkerSection.ts \
+		src/canvas/sections/GenericButtonSection.ts \
 		src/canvas/sections/ChartContextButtonSection.ts \
+		src/canvas/sections/DiagramButtonSection.ts \
 		src/control/ColorPicker.ts \
 		src/control/Control.AboutDialog.ts \
 		src/control/Control.AddressInputField.ts \
@@ -1120,6 +1151,7 @@ pot:
 		src/control/jsdialog/Widget.PageSizeEntry.ts \
 		src/control/jsdialog/Widget.HTMLContent.ts \
 		src/control/jsdialog/Widget.MobileBorderSelector.js \
+		src/control/jsdialog/Widget.NewSlideLayoutEntry.ts \
 		src/control/jsdialog/Widget.RadioButton.ts \
 		src/control/jsdialog/Widget.SidebarContainers.ts \
 		src/control/jsdialog/Widget.TreeView.ts \

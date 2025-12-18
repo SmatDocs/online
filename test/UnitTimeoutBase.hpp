@@ -9,21 +9,18 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <config.h>
+#include <common/Unit.hpp>
+#include <common/Util.hpp>
+#include <net/HttpRequest.hpp>
+#include <net/Socket.hpp>
+#include <test/helpers.hpp>
+#include <test/lokassert.hpp>
+#include <wsd/UserMessages.hpp>
+
+#include <Poco/Util/LayeredConfiguration.h>
 
 #include <memory>
 #include <string>
-
-#include <HttpRequest.hpp>
-#include <Socket.hpp>
-
-#include <Poco/Util/LayeredConfiguration.h>
-#include <test/lokassert.hpp>
-
-#include <Unit.hpp>
-#include <UserMessages.hpp>
-#include <Util.hpp>
-#include <helpers.hpp>
 #include <vector>
 
 /// Base test suite class for timeout and connection limit using HTTP and WS sessions.
@@ -113,9 +110,9 @@ public:
 class UnitTimeoutBase1 : public UnitTimeoutBase0
 {
 public:
-    TestResult testHttp(const size_t connectionLimit, const size_t connectionsCount);
-    TestResult testWSPing(const size_t connectionLimit, const size_t connectionsCount);
-    TestResult testWSDChatPing(const size_t connectionLimit, const size_t connectionsCount);
+    TestResult testHttp(size_t connectionLimit, size_t connectionsCount);
+    TestResult testWSPing(size_t connectionLimit, size_t connectionsCount);
+    TestResult testWSDChatPing(size_t connectionLimit, size_t connectionsCount);
 
     UnitTimeoutBase1(const std::string& testname_)
         : UnitTimeoutBase0(testname_)

@@ -44,6 +44,7 @@ window.L.Map.WOPI = window.L.Handler.extend({
 	UserCanRename: false,
 	UserCanWrite: false,
 	DisablePresentation: false,
+	PresentationLeader: '',
 
 	_appLoadedConditions: {
 		docloaded: false,
@@ -155,6 +156,7 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		this.EnableShare = !!wopiInfo['EnableShare'];
 		this.UserCanWrite = !!wopiInfo['UserCanWrite'];
 		this.DisablePresentation = wopiInfo['DisablePresentation'];
+		this.PresentationLeader = wopiInfo['PresentationLeader'];
 
 		if (this.UserCanWrite && !app.isReadOnly()) // There are 2 places that set the file permissions, WOPI and URI. Don't change permission if URI doesn't allow.
 			app.setPermission('edit');
@@ -681,6 +683,13 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			if (msg.Values && msg.Values.Mimetype && msg.Values.Data) {
 				var blob = new Blob(['paste mimetype=' + msg.Values.Mimetype + '\n', msg.Values.Data]);
 				app.socket.sendMessage(blob);
+			}
+		}
+		else if (msg.MessageId == 'Action_Copy') {
+			// Request the current text selection in some format.
+			if (msg.Values && msg.Values.Mimetype && this._map._clip) {
+				this._map._clip.setActionCopy(true);
+				app.socket.sendMessage('gettextselection mimetype=' + msg.Values.Mimetype);
 			}
 		}
 		else if (msg.MessageId === 'Action_ShowBusy') {

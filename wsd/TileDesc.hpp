@@ -323,7 +323,7 @@ public:
 
         struct TileDescParseResults
         {
-            typedef std::pair<const std::string_view, int> arg_value;
+            using arg_value = std::pair<const std::string_view, int>;
 
             arg_value args[maxEnum] = {
                 { STRINGIFY(height), 0 },
@@ -665,7 +665,7 @@ public:
 
         struct TileCombinedParseResults
         {
-            typedef std::pair<const std::string_view, int> arg_value;
+            using arg_value = std::pair<const std::string_view, int>;
 
             arg_value args[maxEnum] = {
                 { STRINGIFY(height), 0 },
@@ -826,10 +826,10 @@ protected:
     bool _hasImgSizes : 1;
 };
 
-class TileCombinedBuilder : public TileCombined
+class TileCombinedBuilder final : public TileCombined
 {
 public:
-    TileCombinedBuilder() : TileCombined() { }
+    TileCombinedBuilder() = default;
 
     void pushRendered(const TileDesc &desc, TileWireId wireId, size_t imgSize)
     {

@@ -508,14 +508,14 @@ void WhiteBoxTests::testRegexListMatcher()
     matcher.allow("www[0-9].*");
     LOK_ASSERT(matcher.match("www1example"));
 
-    matcher.allow("192\\.168\\..*\\..*");
+    matcher.allow(R"(192\.168\..*\..*)");
     LOK_ASSERT(matcher.match("192.168.1.1"));
     LOK_ASSERT(matcher.match("192.168.159.1"));
     LOK_ASSERT(matcher.match("192.168.1.134"));
     LOK_ASSERT(!matcher.match("192.169.1.1"));
     LOK_ASSERT(matcher.match("192.168.."));
 
-    matcher.deny("192\\.168\\.1\\..*");
+    matcher.deny(R"(192\.168\.1\..*)");
     LOK_ASSERT(!matcher.match("192.168.1.1"));
 
     matcher.allow("staging\\.collaboracloudsuite\\.com.*");
@@ -524,8 +524,8 @@ void WhiteBoxTests::testRegexListMatcher()
     LOK_ASSERT(!matcher.match("web.collaboracloudsuite"));
     LOK_ASSERT(!matcher.match("staging.collaboracloudsuite.com"));
 
-    matcher.allow("10\\.10\\.[0-9]{1,3}\\.[0-9]{1,3}");
-    matcher.deny("10\\.10\\.10\\.10");
+    matcher.allow(R"(10\.10\.[0-9]{1,3}\.[0-9]{1,3})");
+    matcher.deny(R"(10\.10\.10\.10)");
     LOK_ASSERT(matcher.match("10.10.001.001"));
     LOK_ASSERT(!matcher.match("10.10.10.10"));
     LOK_ASSERT(matcher.match("10.10.250.254"));
@@ -553,7 +553,7 @@ void WhiteBoxTests::testRegexListMatcher_Init()
     matcher.allow("www[0-9].*");
     LOK_ASSERT(matcher.match("www1example"));
 
-    matcher.allow("192\\.168\\..*\\..*");
+    matcher.allow(R"(192\.168\..*\..*)");
     LOK_ASSERT(!matcher.match("192.168.1.1"));
     LOK_ASSERT(!matcher.match("192.168.159.1"));
     LOK_ASSERT(!matcher.match("192.168.1.134"));
@@ -562,7 +562,7 @@ void WhiteBoxTests::testRegexListMatcher_Init()
 
     matcher.clear();
 
-    matcher.allow("192\\.168\\..*\\..*");
+    matcher.allow(R"(192\.168\..*\..*)");
     LOK_ASSERT(matcher.match("192.168.1.1"));
     LOK_ASSERT(matcher.match("192.168.159.1"));
     LOK_ASSERT(matcher.match("192.168.1.134"));
@@ -698,33 +698,33 @@ void WhiteBoxTests::testJson()
     constexpr std::string_view testname = __func__;
 
     static const char* testString =
-         "{\"BaseFileName\":\"SomeFile.pdf\",\"DisableCopy\":true,\"DisableExport\":true,\"DisableInactiveMessages\":true,\"DisablePrint\":true,\"EnableOwnerTermination\":true,\"HideExportOption\":true,\"HidePrintOption\":true,\"OwnerId\":\"id@owner.com\",\"PostMessageOrigin\":\"*\",\"Size\":193551,\"UserCanWrite\":true,\"UserFriendlyName\":\"Owning user\",\"UserId\":\"user@user.com\",\"WatermarkText\":null}";
+        R"({"BaseFileName":"SomeFile.pdf","DisableCopy":true,"DisableExport":true,"DisableInactiveMessages":true,"DisablePrint":true,"EnableOwnerTermination":true,"HideExportOption":true,"HidePrintOption":true,"OwnerId":"id@owner.com","PostMessageOrigin":"*","Size":193551,"UserCanWrite":true,"UserFriendlyName":"Owning user","UserId":"user@user.com","WatermarkText":null})";
 
     Poco::JSON::Object::Ptr object;
     LOK_ASSERT(JsonUtil::parseJSON(testString, object));
 
-    std::size_t iValue = 0;
-    JsonUtil::findJSONValue(object, "Size", iValue);
-    LOK_ASSERT_EQUAL(static_cast<std::size_t>(193551), iValue);
+    std::size_t intValue = 0;
+    JsonUtil::findJSONValue(object, "Size", intValue);
+    LOK_ASSERT_EQUAL(static_cast<std::size_t>(193551), intValue);
 
-    bool bValue = false;
-    JsonUtil::findJSONValue(object, "DisableCopy", bValue);
-    LOK_ASSERT_EQUAL(true, bValue);
+    bool boolValue = false;
+    JsonUtil::findJSONValue(object, "DisableCopy", boolValue);
+    LOK_ASSERT_EQUAL(true, boolValue);
 
-    std::string sValue;
-    JsonUtil::findJSONValue(object, "BaseFileName", sValue);
-    LOK_ASSERT_EQUAL_STR("SomeFile.pdf", sValue);
+    std::string stringValue;
+    JsonUtil::findJSONValue(object, "BaseFileName", stringValue);
+    LOK_ASSERT_EQUAL_STR("SomeFile.pdf", stringValue);
 
     // Don't accept inexact key names.
-    sValue.clear();
-    JsonUtil::findJSONValue(object, "basefilename", sValue);
-    LOK_ASSERT_EQUAL(std::string(), sValue);
+    stringValue.clear();
+    JsonUtil::findJSONValue(object, "basefilename", stringValue);
+    LOK_ASSERT_EQUAL(std::string(), stringValue);
 
-    JsonUtil::findJSONValue(object, "invalid", sValue);
-    LOK_ASSERT_EQUAL(std::string(), sValue);
+    JsonUtil::findJSONValue(object, "invalid", stringValue);
+    LOK_ASSERT_EQUAL(std::string(), stringValue);
 
-    JsonUtil::findJSONValue(object, "UserId", sValue);
-    LOK_ASSERT_EQUAL_STR("user@user.com", sValue);
+    JsonUtil::findJSONValue(object, "UserId", stringValue);
+    LOK_ASSERT_EQUAL_STR("user@user.com", stringValue);
 }
 
 void WhiteBoxTests::testAnonymization()
@@ -858,7 +858,7 @@ void WhiteBoxTests::testIso8601Time()
     oss.str(std::string());
     t = Util::iso8601ToTimestamp("2019-09-02T17:12:17.874777Z", "LastModifiedTime");
     oss << t.time_since_epoch().count();
-    if (std::is_same<std::chrono::system_clock::period, std::nano>::value)
+    if (std::is_same_v<std::chrono::system_clock::period, std::nano>)
         LOK_ASSERT_EQUAL_STR("1567444337874777000", oss.str());
     else
         LOK_ASSERT_EQUAL_STR("1567444337874777", oss.str());
@@ -867,7 +867,7 @@ void WhiteBoxTests::testIso8601Time()
     oss.str(std::string());
     t = Util::iso8601ToTimestamp("2019-10-24T14:31:28.063730Z", "LastModifiedTime");
     oss << t.time_since_epoch().count();
-    if (std::is_same<std::chrono::system_clock::period, std::nano>::value)
+    if (std::is_same_v<std::chrono::system_clock::period, std::nano>)
         LOK_ASSERT_EQUAL_STR("1571927488063730000", oss.str());
     else
         LOK_ASSERT_EQUAL_STR("1571927488063730", oss.str());
@@ -898,7 +898,7 @@ void WhiteBoxTests::testIso8601Time()
 
         std::string t_in_micros_str = std::to_string(t_in_micros);
         std::string time_since_epoch_str = std::to_string(t.time_since_epoch().count());
-        if (!std::is_same<std::chrono::system_clock::period, std::nano>::value)
+        if (!std::is_same_v<std::chrono::system_clock::period, std::nano>)
         {
             // If the system clock has nanoseconds precision, the last 3 digits
             // of these strings may not match. For example,
@@ -1058,7 +1058,11 @@ void WhiteBoxTests::testJsonUtilEscapeJSONValue()
     LOK_ASSERT_EQUAL(JsonUtil::escapeJSONValue(in), expected);
 }
 
+namespace
+{
 STATE_ENUM(TestState, First, Second, Last);
+}
+
 void WhiteBoxTests::testStateEnum()
 {
     constexpr std::string_view testname = __func__;

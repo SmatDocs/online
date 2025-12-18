@@ -380,7 +380,7 @@ void AdminSocketHandler::handleMessage(const std::vector<char> &payload)
         }
         else
         {
-            LOG_WRN("Document migration failed for dockey:" + dockey +
+            LOG_WRN("Document migration failed for dockey:" << dockey <<
                         ", reason has been changed");
         }
     }
@@ -1017,11 +1017,14 @@ void Admin::notifyForkit()
     COOLWSD::sendMessageToForKit(oss.str());
 }
 
+namespace
+{
 /// Similar to std::clamp(), old libstdc++ doesn't have it.
 template <typename T> T clamp(const T& n, const T& lower, const T& upper)
 {
     return std::max(lower, std::min(n, upper));
 }
+} // namespace
 
 void Admin::triggerMemoryCleanup(const size_t totalMem)
 {
@@ -1259,7 +1262,7 @@ void Admin::getMetrics(std::ostream& metrics) const
 }
 
 void Admin::sendMetrics(const std::shared_ptr<StreamSocket>& socket,
-                        const std::shared_ptr<http::Response>& response)
+                        const std::shared_ptr<http::Response>& response) const
 {
     std::ostringstream oss;
     getMetrics(oss);

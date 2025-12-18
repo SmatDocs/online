@@ -28,6 +28,7 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 		this._controlHandlers['combobox'] = this._comboboxControl;
 		this._controlHandlers['exportmenubutton'] = this._exportMenuButton;
 		this._controlHandlers['tabcontrol'] = this._overriddenTabsControlHandler;
+		this._controlHandlers['iconview'] = JSDialog.notebookbarIconView;
 		this._controlHandlers['tabpage'] = this._overriddenTabPageHandler;
 
 		this._toolitemHandlers['.uno:XLineColor'] = JSDialog.colorPickerButton;
@@ -156,16 +157,16 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 			$('#applystyle').val(state).trigger('change');
 		}
 		else if (commandName === '.uno:ModifiedStatus') {
-			const saveEle = document.getElementById('save');
+			const saveEle = document.querySelector('[id^="save"].unotoolbutton');
 			if (saveEle) {
 				if (state === 'true' &&  this.map.saveState) {
 					this.map.saveState.showModifiedStatus();
-					const button = document.getElementById('file-save');
+					const button = document.querySelector('[id^="file-save"]');
 					if (button) button.classList.add('savemodified');
 				} else {
-					const button = document.getElementById('save');
+					const button = document.querySelector('[id^="save"]');
 					if (button) button.classList.remove('savemodified');
-					const fileButton = document.getElementById('file-save');
+					const fileButton = document.querySelector('[id^="file-save"]');
 					if (fileButton) fileButton.classList.remove('savemodified');
 				}
 			}
@@ -220,9 +221,11 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 	// overriden
 	_createTabClick: function(builder, t, tabs, contentDivs, tabIds)
 	{
-		var tooltipCollapsed = _('Tap to expand');
-		var tooltipExpanded = _('Tap to collapse');
-		tabs[t].setAttribute('data-cooltip', tooltipExpanded);
+		const isDesktop = window.mode.isDesktop();
+		const tooltipCollapsed = isDesktop ? _('Click to expand') : _('Tap to expand');
+		const tooltipExpanded = isDesktop ? _('Click to collapse') : _('Tap to collapse');
+		if ($(tabs[t]).hasClass('selected'))
+			tabs[t].setAttribute('data-cooltip', tooltipExpanded);
 		window.L.control.attachTooltipEventListener(tabs[t], builder.map);
 		return function(event) {
 			var tabIsSelected = $(tabs[t]).hasClass('selected');
@@ -230,10 +233,17 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 
 			var accessibilityInputElementHasFocus = app.UI.notebookbarAccessibility && app.UI.notebookbarAccessibility.accessibilityInputElement === document.activeElement ? true: false;
 
+			for (var i = 0; i < tabs.length; i++) {
+				if (i !== t) {
+					tabs[i].setAttribute('data-cooltip', '');
+				}
+			}
+
 			if (tabIsSelected && !notebookbarIsCollapsed && !accessibilityInputElementHasFocus) {
 				builder.wizard.collapse();
-				tabs[t].setAttribute('data-cooltip', tooltipCollapsed);
-			} else if (notebookbarIsCollapsed) {
+				for (i = 0; i < tabs.length; i++)
+					tabs[i].setAttribute('data-cooltip', tooltipCollapsed);
+			} else {
 				builder.wizard.extend();
 				tabs[t].setAttribute('data-cooltip', tooltipExpanded);
 			}
@@ -241,12 +251,11 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 			$(tabs[t]).addClass('selected');
 			tabs[t].setAttribute('aria-selected', 'true');
 			tabs[t].removeAttribute('tabindex');
-			for (var i = 0; i < tabs.length; i++) {
+			for (i = 0; i < tabs.length; i++) {
 				if (i !== t) {
 					$(tabs[i]).removeClass('selected');
 					tabs[i].setAttribute('aria-selected', 'false');
 					tabs[i].tabIndex = -1;
-					tabs[i].setAttribute('data-cooltip', '');
 					$(contentDivs[i]).addClass('hidden');
 				}
 			}

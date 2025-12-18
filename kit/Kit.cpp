@@ -850,18 +850,18 @@ bool Document::postMessage(const char* data, int size, const WSOpCode code) cons
 
             return socket->sendMessage(data, size, code, /*flush=*/true) > 0;
         }
-        else
-            LOG_TRC("Failed to forward to parent of save process: connection closed.");
+
+        LOG_TRC("Failed to forward to parent of save process: connection closed");
+        return false;
+    }
+
+    if (!_websocketHandler)
+    {
+        LOG_ERR("Child Doc: Bad socket while sending: " << getAbbreviatedMessage(data, size));
         return false;
     }
 
     LOG_TRC("postMessage called with: " << getAbbreviatedMessage(data, size));
-    if (!_websocketHandler)
-    {
-        LOG_ERR("Child Doc: Bad socket while sending [" << getAbbreviatedMessage(data, size) << "].");
-        return false;
-    }
-
     _websocketHandler->sendMessage(data, size, code, /*flush=*/true);
     return true;
 }
@@ -1034,7 +1034,7 @@ void Document::renderTiles(TileCombined &tileCombined)
     }
 }
 
-bool Document::sendFrame(const char* buffer, int length, WSOpCode opCode)
+bool Document::sendFrame(const char* buffer, int length, WSOpCode opCode) const
 {
     try
     {
@@ -1905,9 +1905,8 @@ void Document::updateEditorSpeeds(int id, int speed)
 // Get the color value for all author names from the core
 std::map<std::string, int> Document::getViewColors()
 {
-    char* values = _loKitDocument->getCommandValues(".uno:TrackedChangeAuthors");
-    const std::string colorValues = std::string(values == nullptr ? "" : values);
-    std::free(values);
+    LOKitHelper::ScopedString values(_loKitDocument->getCommandValues(".uno:TrackedChangeAuthors"));
+    const std::string colorValues = std::string(values.get() == nullptr ? "" : values.get());
 
     std::map<std::string, int> viewColors;
     try
@@ -1919,7 +1918,7 @@ std::map<std::string, int> Document::getViewColors()
             if (root->get("authors").type() == typeid(Poco::JSON::Array::Ptr))
             {
                 Poco::JSON::Array::Ptr authorsArray = root->get("authors").extract<Poco::JSON::Array::Ptr>();
-                for (auto& authorVar: *authorsArray)
+                for (const auto& authorVar : *authorsArray)
                 {
                     const Poco::JSON::Object::Ptr& authorObj =
                         authorVar.extract<Poco::JSON::Object::Ptr>();
@@ -2059,10 +2058,10 @@ std::shared_ptr<lok::Document> Document::load(const std::shared_ptr<ChildSession
         _jailedUrl = loadUri;
         _isDocPasswordProtected = false;
 
-        const char* pURL = loadUri.c_str();
-        LOG_DBG("Calling lokit::documentLoad(" << anonymizeUrl(pURL) << ", \"" << options << "\")");
+        const char* url = loadUri.c_str();
+        LOG_DBG("Calling lokit::documentLoad(" << anonymizeUrl(url) << ", \"" << options << "\")");
         const auto start = std::chrono::steady_clock::now();
-        _loKitDocument.reset(_loKit->documentLoad(pURL, options.c_str()));
+        _loKitDocument.reset(_loKit->documentLoad(url, options.c_str()));
 #ifdef __ANDROID__
         _loKitDocumentForAndroidOnly = _loKitDocument;
         {
@@ -2074,7 +2073,7 @@ std::shared_ptr<lok::Document> Document::load(const std::shared_ptr<ChildSession
 #endif
         const auto duration = std::chrono::steady_clock::now() - start;
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
-        LOG_DBG("Returned lokit::documentLoad(" << anonymizeUrl(pURL) << ") in " << elapsed);
+        LOG_DBG("Returned lokit::documentLoad(" << anonymizeUrl(url) << ") in " << elapsed);
 #ifdef IOS
         DocumentData::get(_mobileAppDocId).loKitDocument = _loKitDocument.get();
         {
@@ -2162,11 +2161,11 @@ std::shared_ptr<lok::Document> Document::load(const std::shared_ptr<ChildSession
         default:
             // impress/draw currently cannot, so use the current document state
             // so simply joining doesn't toggle that shared spelling state
-            if (char* viewRenderState = _loKitDocument->getCommandValues(".uno:ViewRenderState"))
+            LOKitHelper::ScopedString viewRenderState(_loKitDocument->getCommandValues(".uno:ViewRenderState"));
+            if (viewRenderState.get())
             {
-                StringVector tokens(StringVector::tokenize(viewRenderState, strlen(viewRenderState), ';'));
+                StringVector tokens(StringVector::tokenize(viewRenderState.get(), strlen(viewRenderState.get()), ';'));
                 spellOnline = tokens[0] == "S" ? "true" : "false";
-                free(viewRenderState);
             }
             break;
         }
@@ -2198,7 +2197,10 @@ std::shared_ptr<lok::Document> Document::load(const std::shared_ptr<ChildSession
                                         session->getViewUserExtraInfo(), session->getViewUserPrivateInfo(),
                                         session->isReadOnly());
 
-    _loKitDocument->setViewLanguage(viewId, lang.c_str());
+    if (!lang.empty())
+    {
+        _loKitDocument->setViewLanguage(viewId, lang.c_str());
+    }
     _loKitDocument->setViewTimezone(viewId, userTimezone.c_str());
     _loKitDocument->setAccessibilityState(viewId, accessibilityState);
     if (session->isReadOnly())
@@ -2226,10 +2228,10 @@ std::shared_ptr<lok::Document> Document::load(const std::shared_ptr<ChildSession
 
     session->initWatermark();
 
-    if (char* viewRenderState = _loKitDocument->getCommandValues(".uno:ViewRenderState"))
+    LOKitHelper::ScopedString viewRenderState(_loKitDocument->getCommandValues(".uno:ViewRenderState"));
+    if (viewRenderState.get())
     {
-        session->setViewRenderState(viewRenderState);
-        free(viewRenderState);
+        session->setViewRenderState(viewRenderState.get());
     }
 
     invalidateCanonicalId(session->getId());
@@ -2386,8 +2388,8 @@ bool Document::forwardToChild(const std::string_view prefix, const std::vector<c
     // By default we enable spell-checking, unless it's disabled explicitly.
     if (!spellOnline.empty())
     {
-        const bool bSet = (spellOnline != "false");
-        renderOptsObj->set(".uno:SpellOnline", makePropertyValue("boolean", bSet));
+        const bool set = (spellOnline != "false");
+        renderOptsObj->set(".uno:SpellOnline", makePropertyValue("boolean", set));
     }
 
     if (!theme.empty())
@@ -2722,7 +2724,7 @@ bool Document::trackDocModifiedState(const std::string &stateChanged)
 
 void Document::disableBgSave(const std::string &reason)
 {
-    LOG_WRN("Disabled background save " + reason);
+    LOG_WRN("Disabled background save " << reason);
     _isBgSaveDisabled = true;
 }
 
@@ -3185,7 +3187,7 @@ int pollCallback(void* data, int timeoutUs)
 // Do we have any pending input events from coolwsd ?
 bool anyInputCallback(void* data, int mostUrgentPriority)
 {
-    auto kitSocketPoll = reinterpret_cast<KitSocketPoll*>(data);
+    auto* kitSocketPoll = reinterpret_cast<KitSocketPoll*>(data);
     const std::shared_ptr<Document>& document = kitSocketPoll->getDocument();
 
     if (document)
@@ -3279,14 +3281,14 @@ void copyCertificateDatabaseToTmp(Poco::Path const& jailPath)
         Poco::Path jailedCertDBPath(jailPath, "/tmp/certdb");
         Poco::File(jailedCertDBPath).createDirectories();
 
-        bool bCopied = false;
+        bool copied = false;
         for (const char* filename : { "cert8.db", "cert9.db", "secmod.db", "key3.db", "key4.db" })
         {
-            bool bResult = FileUtil::copy(Poco::Path(certificatePath, filename).toString(),
+            bool result = FileUtil::copy(Poco::Path(certificatePath, filename).toString(),
                                 Poco::Path(jailedCertDBPath, filename).toString(), false, false);
-            bCopied |= bResult;
+            copied |= result;
         }
-        if (bCopied)
+        if (copied)
         {
             LOG_INF("Certificate database files found in '" << certificatePathString << "' and were copied to the jail");
             ::setenv("LO_CERTIFICATE_DATABASE_PATH", "/tmp/certdb", 1);
@@ -3360,10 +3362,10 @@ void lokit_main(
     const std::string LogLevel = logLevel ? logLevel : "trace";
     const std::string LogLevelStartup = logLevelStartup ? logLevelStartup : "trace";
 
-    const bool bTraceStartup = (std::getenv("COOL_TRACE_STARTUP") != nullptr);
-    Log::initialize("kit", bTraceStartup ? LogLevelStartup : LogLevel, logColor, logToFile,
+    const bool traceStartup = (std::getenv("COOL_TRACE_STARTUP") != nullptr);
+    Log::initialize("kit", traceStartup ? LogLevelStartup : LogLevel, logColor, logToFile,
                     logProperties, logToFileUICmd, logPropertiesUICmd);
-    if (bTraceStartup && LogLevel != LogLevelStartup)
+    if (traceStartup && LogLevel != LogLevelStartup)
     {
         LOG_INF("Setting log-level to [" << LogLevelStartup << "] and delaying "
                 "setting to [" << LogLevel << "] until after Kit initialization.");
@@ -3452,7 +3454,13 @@ void lokit_main(
 
             if (sysTemplateIncomplete && JailUtil::isBindMountingEnabled())
             {
-                Poco::File(Poco::Path(sysTemplateSubDir, "etc").toString()).createDirectories();
+                const std::string sysTemplateEtcDir = Poco::Path(sysTemplate, "etc").toString();
+                const std::string sysTemplateSubEtcDir =
+                    Poco::Path(sysTemplateSubDir, "etc").toString();
+                Poco::File(sysTemplateSubEtcDir).createDirectories();
+
+                FileUtil::copyDirectoryRecursive(sysTemplateEtcDir, sysTemplateSubEtcDir, false);
+
                 if (!JailUtil::SysTemplate::updateDynamicFiles(sysTemplateSubDir))
                 {
                     LOG_WRN("Failed to update the dynamic files in ["
@@ -3480,12 +3488,14 @@ void lokit_main(
                 // ro bind-mount a replacement up-to-date /etc
                 if (sysTemplateIncomplete)
                 {
-                    LOG_INF("Mounting " << sysTemplateSubDir << " -> " << jailEtcDir);
-                    if (!JailUtil::bind(sysTemplateSubDir, jailEtcDir)
-                        || !JailUtil::remountReadonly(sysTemplateSubDir, jailEtcDir))
+                    const std::string sysTemplateSubDirEtc =
+                        Poco::Path(sysTemplateSubDir, "etc").toString();
+                    LOG_INF("Mounting " << sysTemplateSubDirEtc << " -> " << jailEtcDir);
+                    if (!JailUtil::bind(sysTemplateSubDirEtc, jailEtcDir) ||
+                        !JailUtil::remountReadonly(sysTemplateSubDirEtc, jailEtcDir))
                     {
-                        LOG_ERR("Failed to mount [" << sysTemplateSubDir << "] -> [" << jailEtcDir
-                                                    << "], will link/copy contents.");
+                        LOG_ERR("Failed to mount [" << sysTemplateSubDirEtc << "] -> ["
+                                                    << jailEtcDir << "], will link/copy contents.");
                         return false;
                     }
                 }
@@ -3989,7 +3999,7 @@ void lokit_main(
         // man 2 sigaction. So we simply waitpid(2) on SIGCHLD.
         SigUtil::setSigChildHandler(sigChildHandler);
 
-        if (bTraceStartup && LogLevel != LogLevelStartup)
+        if (traceStartup && LogLevel != LogLevelStartup)
         {
             LOG_INF("Kit initialization complete: setting log-level to [" << LogLevel << "] as configured.");
             Log::setLevel(LogLevel);

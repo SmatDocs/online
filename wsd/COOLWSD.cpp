@@ -144,7 +144,7 @@ std::vector<std::shared_ptr<ChildProcess>> NewChildren;
 std::atomic<int> TotalOutstandingForks(0);
 std::map<std::string, int> OutstandingForks;
 std::map<std::string, std::chrono::steady_clock::time_point> LastForkRequestTimes;
-typedef std::map<std::string, std::shared_ptr<ForKitProcess>> SubForKitMap;
+using SubForKitMap = std::map<std::string, std::shared_ptr<ForKitProcess>>;
 SubForKitMap SubForKitProcs;
 std::map<std::string, std::chrono::steady_clock::time_point> LastSubForKitBrokerExitTimes;
 Poco::AutoPtr<Poco::Util::XMLConfiguration> KitXmlConfig;
@@ -563,9 +563,9 @@ bool COOLWSD::ensureSubForKit(const std::string& configId)
 
     COOLWSD::checkDiskSpaceAndWarnClients(false);
 
-    const std::string aMessage = "addforkit " + configId + '\n';
-    LOG_DBG("MasterToForKit: " << aMessage.substr(0, aMessage.length() - 1));
-    return queueMessageToForKit(aMessage);
+    const std::string answerMessage = "addforkit " + configId + '\n';
+    LOG_DBG("MasterToForKit: " << answerMessage.substr(0, answerMessage.length() - 1));
+    return queueMessageToForKit(answerMessage);
 }
 
 /// Cleans up dead children.
@@ -650,10 +650,7 @@ static void prespawnChildren()
 }
 
 #else // MOBILEAPP
-static void prespawnChildren()
-{
-    // Nothing to do.
-}
+void prespawnChildren();
 #endif // MOBILEAPP
 
 static size_t addNewChild(std::shared_ptr<ChildProcess> child)
@@ -1030,13 +1027,13 @@ class InotifySocket : public Socket
 public:
     InotifySocket(std::chrono::steady_clock::time_point creationTime):
         Socket(inotify_init1(IN_NONBLOCK), Socket::Type::Unix, creationTime)
-        , m_stopOnConfigChange(true)
+        , _stopOnConfigChange(true)
     {
         if (getFD() == -1)
         {
             LOG_WRN("Inotify - Failed to start a watcher for the configuration, disabling "
                     "stop_on_config_change");
-            m_stopOnConfigChange = false;
+            _stopOnConfigChange = false;
             return;
         }
 
@@ -1055,14 +1052,14 @@ public:
     bool watch(std::string_view configFile);
 
 private:
-    int m_watchedCount = 0;
-    bool m_stopOnConfigChange;
+    int _watchedCount = 0;
+    bool _stopOnConfigChange;
 };
 
 bool InotifySocket::watch(const std::string_view configFile)
 {
     LOG_TRC("Inotify - Attempting to watch " << configFile << ", in addition to current "
-                                             << m_watchedCount << " watched files");
+                                             << _watchedCount << " watched files");
 
     if (getFD() == -1)
     {
@@ -1077,7 +1074,7 @@ bool InotifySocket::watch(const std::string_view configFile)
     if (watchedStatus == -1)
         LOG_WRN("Inotify - Failed to watch config file " << configFile);
     else
-        m_watchedCount++;
+        _watchedCount++;
 
     return watchedStatus != -1;
 }
@@ -1085,8 +1082,8 @@ bool InotifySocket::watch(const std::string_view configFile)
 void InotifySocket::handlePoll(SocketDisposition & /* disposition */, std::chrono::steady_clock::time_point /* now */, int /* events */)
 {
     LOG_TRC("InotifyPoll - woken up. Reload on config change: "
-            << m_stopOnConfigChange << ", Watching " << m_watchedCount << " files");
-    if (!m_stopOnConfigChange)
+            << _stopOnConfigChange << ", Watching " << _watchedCount << " files");
+    if (!_stopOnConfigChange)
         return;
 
     char buf[4096];
@@ -1843,7 +1840,7 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
                 LOG_WRN("Quarantine path is relative. Please use an absolute path for better "
                         "reliability");
 
-            LOG_DBG("Initializing quarantine at [" + path << ']');
+            LOG_DBG("Initializing quarantine at [" << path << ']');
             Quarantine::initialize(path);
         }
     }
@@ -1865,10 +1862,10 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
             Poco::File p(path);
             try
             {
-                LOG_TRC("Creating cache directory [" + path << ']');
+                LOG_TRC("Creating cache directory [" << path << ']');
                 p.createDirectories();
 
-                LOG_DBG("Created cache directory [" + path << ']');
+                LOG_DBG("Created cache directory [" << path << ']');
             }
             catch (const std::exception& ex)
             {
@@ -2140,6 +2137,13 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
         }
 
         setenv("LOK_HOST_ALLOWLIST", allowedRegex.c_str(), true);
+
+#if !MOBILEAPP
+        if (!ConfigUtil::getConfigValue<bool>(conf, "ssl.ssl_verification", true)) {
+            // also disable host verification for allowed hosts
+            ::setenv("LOK_HOST_ALLOWLIST_EXEMPT_VERIFY_HOST", "1", true);
+        }
+#endif
     }
 
 #if !MOBILEAPP
@@ -3594,7 +3598,7 @@ void COOLWSD::innerMain()
     }
     if (locale)
     {
-        LOG_INF("Locale is set to " + std::string(locale));
+        LOG_INF("Locale is set to " << std::string(locale));
         ::setenv("LC_ALL", locale, 1);
     }
 #endif // !IOS
@@ -4258,9 +4262,9 @@ void alertAllUsers(const std::string& msg)
 }
 #endif
 
-#endif
+static void forwardSignal(int signum);
 
-static void forwardSignal(const int signum);
+#endif
 
 void dump_state()
 {
@@ -4315,12 +4319,12 @@ void forwardSigUsr2()
 #endif
 }
 
-void forwardSignal([[maybe_unused]] const int signum)
+#if !MOBILEAPP
+void forwardSignal(const int signum)
 {
     Util::assertIsLocked(DocBrokersMutex);
     Util::assertIsLocked(NewChildrenMutex);
 
-#if !MOBILEAPP
     const char* name = SigUtil::signalName(signum);
 
     if (COOLWSD::ForKitProcId > 0)
@@ -4347,8 +4351,8 @@ void forwardSignal([[maybe_unused]] const int signum)
             ::kill(docBroker->getPid(), signum);
         }
     }
-#endif
 }
+#endif
 
 // Avoid this in the Util::isFuzzing() case because libfuzzer defines its own main().
 #if !MOBILEAPP && !LIBFUZZER

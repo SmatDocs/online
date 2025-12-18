@@ -93,6 +93,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		this._controlHandlers['radiobutton'] = JSDialog.RadioButton;
 		this._controlHandlers['progressbar'] = JSDialog.progressbar;
 		this._controlHandlers['pagemarginentry'] = JSDialog.pageMarginEntry;
+		this._controlHandlers['newslidelayoutentry'] = JSDialog.slideLayoutEntry;
 		this._controlHandlers['pagesizeentry'] = JSDialog.pageSizeEntry;
 		this._controlHandlers['checkbox'] = JSDialog.Checkbox;
 		this._controlHandlers['basespinfield'] = this.baseSpinField;
@@ -246,18 +247,46 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		var charCode = (typeof e.which == 'undefined') ? e.keyCode : e.which;
 		var charStr = String.fromCharCode(charCode);
 		var regex = new RegExp('^[0-9\\' + this._decimal + '\\' + this._minusSign + ']+$');
-		if (!charStr.match(regex))
+		if (!charStr.match(regex) && charCode !== 13)
 			return e.preventDefault();
 
 		var value = e.target.value;
 		if (!value)
-			return e.preventDefault();
+			return;
 
 		// no dup
 		if (this._decimal === charStr || this._minusSign === charStr) {
 			if (value.indexOf(charStr) > -1)
 				return e.preventDefault();
 		}
+	},
+
+	_defaultCallbackHandlerSendMessage: function(objectType, eventType, object, data, builder) {
+		switch (typeof data) {
+		case 'string':
+			// escape backspaces, quotes, newlines, and so on; remove added quotes
+			data = JSON.stringify(data).slice(1, -1);
+			break;
+		case 'object':
+			data = encodeURIComponent(JSON.stringify(data));
+			break;
+		}
+		var windowId = builder && builder.windowId !== null && builder.windowId !== undefined ? builder.windowId :
+			(window.mobileDialogId !== undefined ? window.mobileDialogId :
+				(window.sidebarId !== undefined ? window.sidebarId : -1));
+
+		if (typeof windowId !== 'number') {
+			window.app.console.error('JSDialog: windowId "' + windowId + '" is not valid. Use a number.');
+			return; // core will fail parsing the command, it is a mistake most probably
+		}
+
+		var message = 'dialogevent ' + windowId
+				+ ' {\"id\":\"' + object.id
+			+ '\", \"cmd\": \"' + eventType
+			+ '\", \"data\": \"' + data
+			+ '\", \"type\": \"' + objectType + '\"}';
+		app.socket.sendMessage(message);
+		window._firstDialogHandled = true;
 	},
 
 	// by default send new state to the core
@@ -302,34 +331,12 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 				dispatcher.dispatch('closeapp');
 			}
-			switch (typeof data) {
-			case 'string':
-				// escape backspaces, quotes, newlines, and so on; remove added quotes
-				data = JSON.stringify(data).slice(1, -1);
-				break;
-			case 'object':
-				data = encodeURIComponent(JSON.stringify(data));
-				break;
-			}
-			var windowId = builder.windowId !== null && builder.windowId !== undefined ? builder.windowId :
-				(window.mobileDialogId !== undefined ? window.mobileDialogId :
-					(window.sidebarId !== undefined ? window.sidebarId : -1));
-			var message = 'dialogevent ' + windowId
-					+ ' {\"id\":\"' + object.id
-				+ '\", \"cmd\": \"' + eventType
-				+ '\", \"data\": \"' + data
-				+ '\", \"type\": \"' + objectType + '\"}';
-			app.socket.sendMessage(message);
-			window._firstDialogHandled = true;
+			this._defaultCallbackHandlerSendMessage(objectType, eventType, object, data, builder);
 		}
 	},
 
 	baseSpinField: function(parentContainer, data, builder, customCallback) {
 		var controls = {};
-		if (data.label) {
-			var fixedTextData = { text: data.label };
-			builder._fixedtextControl(parentContainer, fixedTextData, builder);
-		}
 
 		var div = window.L.DomUtil.create('div', builder.options.cssClass + ' spinfieldcontainer', parentContainer);
 		div.id = data.id;
@@ -342,12 +349,14 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		spinfield.tabIndex = '0';
 		spinfield.setAttribute('autocomplete', 'off');
 
-		if (!data.labelledBy) {
-			builder._addAriaLabel(spinfield, data, builder);
+		if (data.label) {
+			var fixedTextData = { text: data.label, labelFor: data.id };
+			builder._fixedtextControl(parentContainer, fixedTextData, builder);
+		} else {
+			JSDialog.SetupA11yLabelForLabelableElement(parentContainer, spinfield, data, builder);
 		}
 
 		controls['spinfield'] = spinfield;
-
 
 		if (data.unit && data.unit !== ':') {
 			var unit = window.L.DomUtil.create('span', builder.options.cssClass + ' spinfieldunit', div);
@@ -767,8 +776,6 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 					else
 						builder.callback('expander', 'toggle', data, null, builder);
 
-					var state = expander.getAttribute('aria-expanded') === 'true';
-					expander.setAttribute('aria-expanded', !state);
 					$(label).toggleClass('expanded');
 					$(expander).siblings().toggleClass('expanded');
 
@@ -971,7 +978,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 				tab.textContent = title;
 				tab.setAttribute('role', 'tab');
 				tab.setAttribute('aria-controls', contentDiv.id);
-				builder._addAriaLabel(tab, item, builder);
+				JSDialog.AddAriaLabel(tab, item, builder);
 				builder._setAccessKey(tab, builder._getAccessKeyFromText(item.text));
 				builder._stressAccessKey(tab, tab.accessKey);
 
@@ -1312,8 +1319,11 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 		const isDisabled = data.enabled === false;
 		if (isDisabled) {
-			wrapper.setAttribute('disabled', 'disabled');
+			wrapper.setAttribute('disabled', 'true');
 			wrapper.setAttribute('aria-disabled', true);
+			pushbutton.setAttribute('disabled', 'true');
+			pushbutton.setAttribute('aria-disabled', true);
+
 		}
 
 		JSDialog.SynchronizeDisabledState(wrapper, [pushbutton]);
@@ -1331,12 +1341,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		else
 			pushbutton.onclick = builder.callback.bind(builder, 'pushbutton', data.isToggle ? 'toggle' : 'click', wrapper, data.command, builder);
 
-
-		if (data.labelledBy) {
-			pushbutton.setAttribute('aria-labelledby', data.labelledBy);
-		} else {
-			builder._addAriaLabel(pushbutton, data, builder);
-		}
+		JSDialog.SetupA11yLabelForLabelableElement(parentContainer, pushbutton, data, builder);
 
 		const tooltipText = (data.aria && data.aria.label) || data.text;
 		if (!pushbuttonText && tooltipText) {
@@ -1426,8 +1431,9 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 		var listbox = window.L.DomUtil.create('select', builder.options.cssClass + ' ui-listbox ', container);
 		listbox.id = data.id + '-input';
-		if (data.labelledBy)
-			listbox.setAttribute('aria-labelledby', data.labelledBy);
+
+		JSDialog.SetupA11yLabelForLabelableElement(parentContainer, listbox, data, builder);
+
 		var listboxArrow = window.L.DomUtil.create('span', builder.options.cssClass + ' ui-listbox-arrow', container);
 		listboxArrow.id = 'listbox-arrow-' + data.id;
 
@@ -1534,16 +1540,20 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		const labelableElements = ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'METER', 'OUTPUT', 'PROGRESS'];
 
 		const updateLabelForAttribute = function(label, labelledControl) {
-			if (labelledControl.hasAttribute('aria-labelledby')) {
-				label.removeAttribute('for');
-			} else if (!labelableElements.includes(labelledControl.nodeName)
-				|| (labelledControl.nodeName === 'INPUT' && labelledControl.type === 'hidden')) {
-				// Use 'aria-labelledby' instead of 'for' for non-labelable elements
-				labelledControl.setAttribute('aria-labelledby', label.id);
-				label.removeAttribute('for');
-			} else {
+			const isLabelable = labelableElements.includes(labelledControl.nodeName);
+			const isHiddenInput = labelledControl.nodeName === 'INPUT' && labelledControl.type === 'hidden';
+
+			// For labelable element always use htmlFor
+			if (isLabelable && !isHiddenInput) {
+				labelledControl.removeAttribute('aria-labelledby');
+				labelledControl.removeAttribute('aria-label');
 				label.htmlFor = labelledControl.id;
+				return;
 			}
+
+			// For non-labelable element or hidden input always use aria-labelledby
+			labelledControl.setAttribute('aria-labelledby', label.id);
+			label.removeAttribute('for');
 		};
 
 		app.layoutingService.appendLayoutingTask(function () {
@@ -1625,7 +1635,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (!data.id)
 			return false;
 
-		var image = window.L.DomUtil.create('img', builder.options.cssClass + ' ui-image', parentContainer);
+		var image = window.L.DomUtil.create('img', builder.options.cssClass + ' ui-image ui-decorative-image', parentContainer);
 		image.id = data.id;
 		image.src = data.image ? data.image.replace(/\\/g, '') : '';
 		image.alt = data.text;
@@ -1774,13 +1784,6 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		}
 	},
 
-	_addAriaLabel(element, data, builder) {
-		if (data.aria)
-			element.setAttribute('aria-label', data.aria.label);
-		else if(data.text)
-			element.setAttribute('aria-label', builder._cleanText(data.text));
-	},
-
 	// Create a DOM node with an identifiable parent class
 	_createIdentifiable : function(type, classNames, parentContainer, data) {
 		return window.L.DomUtil.create(
@@ -1794,21 +1797,6 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 	_isStringLCIcon: function (str) {
 		return str.indexOf('lc_') === 0;
-	},
-
-	_makeIdUnique: function(id) {
-		var counter = 0;
-		var found = document.querySelector('[id="' + id + '"]');
-
-		while (found) {
-			counter++;
-			found = document.querySelector('[id="' + id + counter + '"]');
-		}
-
-		if (counter)
-			id = id + counter;
-
-		return id;
 	},
 
 	_unoToolButton: function(parentContainer, data, builder, options) {
@@ -1875,11 +1863,16 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			if (data.command)
 				window.L.DomUtil.addClass(div, data.command.replace(':', '').replace('.', ''));
 
-			if (isRealUnoCommand)
-				id = builder._makeIdUnique(id);
+			if (isRealUnoCommand) {
+				// there is a problem with JSON crafted manually on the JS side
+				// we do not have warranty the id we passed is the one used in the DOM
+				// updates might then fail to find such item
+				// we need to remember the original ID
+				div.setAttribute('modelId', id);
+				id = JSDialog.MakeIdUnique(id);
+			}
 
 			div.id = id;
-			data.id = id; // change in input data for postprocess
 
 			var buttonId = id + '-button';
 
@@ -1890,7 +1883,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 			itemsToSyncWithContainer.push(button);
 
-			builder._addAriaLabel(button, data, builder);
+			JSDialog.AddAriaLabel(button, data, builder);
 
 			if (!data.accessKey)
 				builder._setAccessKey(button, builder._getAccessKeyFromText(data.text));
@@ -2407,15 +2400,24 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		builder._explorableMenu(parentContainer, title, data.children, builder, content, data.id);
 	},
 
+	_getItemById: function(container, id) {
+		const plainId = this._removeMenuId(id);
+		// prefer the modelId first which is unique within single component, DOM id might be changed due to conflict
+		let control = container.querySelector('[modelId=\'' + plainId + '\']');
+		if (!control)
+			control = container.querySelector('[id=\'' + plainId + '\']');
+		return control;
+	},
+
 	// executes actions like changing the selection without rebuilding the widget
 	executeAction: function(container, data) {
 		app.layoutingService.appendLayoutingTask(() => { this.executeActionImpl(container, data); });
 	},
 
 	executeActionImpl: function(container, data) {
-		var control = container.querySelector('[id=\'' + this._removeMenuId(data.control_id) + '\']');
+		let control = this._getItemById(container, this._removeMenuId(data.control_id));
 		if (!control && data.control)
-			control = container.querySelector('[id=\'' + this._removeMenuId(data.control.id) + '\']');
+			control = this._getItemById(container, this._removeMenuId(data.control.id));
 		if (!control) {
 			window.app.console.warn('executeAction: not found control with id: "' + data.control_id + '"');
 			return;
@@ -2530,26 +2532,33 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 		case 'rendered_entry':
 		case 'rendered_combobox_entry':
+		{
 			if (!this.rendersCache[control.id])
 				this.rendersCache[control.id] = { persistent: false, images: [] };
+
+			const oldImage = this.rendersCache[control.id].images[data.pos];
+			if (oldImage === data.image) {
+					app.console.debug('rendered_entry: no change');
+					break;
+			}
 
 			this.rendersCache[control.id].images[data.pos] = data.image;
 
 			if (typeof control.updateRenders == 'function')
 				control.updateRenders(data.pos);
 			else
-				console.error('widget doesn\'t support custom entries');
-
-			break;
+				app.console.error('widget doesn\'t support custom entries');
+		}
+		break;
 
 		default:
-			console.error('unknown action: "' + data.action_type + '"');
+			app.console.error('unknown action: "' + data.action_type + '"');
 			break;
 		}
 	},
 
 	_removeMenuId: function (rawId) {
-		var elementId = rawId;
+		var elementId = typeof rawId === 'string' ? rawId : (rawId ? String(rawId) : rawId);
 		var separatorPos = elementId ? elementId.indexOf(':') : 0; // delete menuId
 		if (separatorPos > 0)
 			elementId = elementId.substr(0, separatorPos);
@@ -2557,8 +2566,8 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 	},
 
 	_updateWidgetImpl: function (container, data, buildFunc) {
-		var elementId = this._removeMenuId(data.id);
-		var control = container.querySelector('[id=\'' + elementId + '\']');
+		const elementId = this._removeMenuId(data.id);
+		const control = this._getItemById(container, elementId);
 		if (!control) {
 			window.app.console.warn('jsdialogupdate: not found control with id: "' + elementId + '"');
 			return;
@@ -2575,7 +2584,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 		var temporaryParent = new DocumentFragment();
 
-		// Remove the id of the to-be-removed control, so _makeIdUnique() won't rename
+		// Remove the id of the to-be-removed control, so JSDialog.MakeIdUnique() won't rename
 		// data.id to something we can't find later.
 		control.id = '';
 
@@ -2647,7 +2656,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (!parent || !data || !data.id || data.id === '')
 			return;
 
-		var control = parent.querySelector('[id=\'' + data.id + '\']');
+		const control = this._getItemById(parent, data.id);
 		if (data.visible === 'false' || data.visible === false) {
 			if (control)
 				window.L.DomUtil.addClass(control, 'hidden');
@@ -2690,6 +2699,18 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			&& data.type !== 'pushbutton'
 			)
 			control.setAttribute('tabIndex', '0');
+
+		if (control && window.L.Browser.cypressTest && window.app.a11yValidator) {
+			// setupA11yLabelForLabelableElement uses two layouting task depth,
+			// so use three here to do this test after those have added the labels
+			app.layoutingService.appendLayoutingTask(() => {
+				app.layoutingService.appendLayoutingTask(() => {
+					app.layoutingService.appendLayoutingTask(() => {
+						window.app.a11yValidator.checkWidget(data.type, control);
+					});
+				});
+			});
+		}
 	},
 
 	// some widgets we want to modify / change

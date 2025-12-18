@@ -55,6 +55,11 @@ class TileCoordData {
 		return new cool.Point(this.x, this.y);
 	}
 
+	// Returns SimplePoint. To replace getPos in the short term.
+	getPosSimplePoint() {
+		return cool.SimplePoint.fromCorePixels([this.x, this.y], this.part);
+	}
+
 	key(): string {
 		return (
 			this.x +
@@ -269,7 +274,7 @@ class TileManager {
 					this.onWorkerMessage(e),
 				);
 				this.workers[i].addEventListener('error', (e: any) =>
-					this.disableWorker(e),
+					this.disableWorkers(e),
 				);
 			}
 		}
@@ -946,13 +951,13 @@ class TileManager {
 		} catch (e) {
 			window.app.console.error('Failed to decompress pending deltas');
 			this.inTransaction = 0;
-			this.disableWorker(e);
+			this.disableWorkers(e);
 			if (callback) callback();
 			return;
 		}
 	}
 
-	private static disableWorker(e: any = null) {
+	public static disableWorkers(e: any = null) {
 		if (e) window.app.console.error('Worker-related error encountered', e);
 		if (!this.workers.length) return;
 
@@ -1118,7 +1123,7 @@ class TileManager {
 				// request separately from the current viewPort to get
 				// those tiles first.
 
-				const direction = app.activeDocument.activeView.getLastPanDirection();
+				const direction = app.activeDocument.activeLayout.getLastPanDirection();
 
 				// Conservatively enlarge the area to round to more tiles:
 				const pixelTopLeft = this._pixelBounds.getTopLeft();
@@ -1156,6 +1161,45 @@ class TileManager {
 			}.bind(this),
 			50 /*ms*/,
 		);
+	}
+
+	private static sendTileCombineMessage(
+		part: number,
+		mode: number,
+		tilePositionsX: number[],
+		tilePositionsY: number[],
+		tileWids: number[],
+		addedSize: number,
+	) {
+		var msg =
+			'tilecombine ' +
+			'nviewid=0 ' +
+			'part=' +
+			part +
+			' ' +
+			(mode !== 0 ? 'mode=' + mode + ' ' : '') +
+			'width=' +
+			this.tileSize +
+			' ' +
+			'height=' +
+			this.tileSize +
+			' ' +
+			'tileposx=' +
+			tilePositionsX.join(',') +
+			' ' +
+			'tileposy=' +
+			tilePositionsY.join(',') +
+			' ' +
+			'oldwid=' +
+			tileWids.join(',') +
+			' ' +
+			'tilewidth=' +
+			app.tile.size.x +
+			' ' +
+			'tileheight=' +
+			app.tile.size.y;
+		if (addedSize) app.socket.sendMessage(msg, '');
+		else window.app.console.log('Skipped empty (too fast) tilecombine');
 	}
 
 	private static sendTileCombineRequest(
@@ -1212,35 +1256,26 @@ class TileManager {
 				if (tile) tile.updateLastRequest(now);
 			}
 
-			var msg =
-				'tilecombine ' +
-				'nviewid=0 ' +
-				'part=' +
-				part +
-				' ' +
-				(mode !== 0 ? 'mode=' + mode + ' ' : '') +
-				'width=' +
-				this.tileSize +
-				' ' +
-				'height=' +
-				this.tileSize +
-				' ' +
-				'tileposx=' +
-				tilePositionsX.join(',') +
-				' ' +
-				'tileposy=' +
-				tilePositionsY.join(',') +
-				' ' +
-				'oldwid=' +
-				tileWids.join(',') +
-				' ' +
-				'tilewidth=' +
-				app.tile.size.x +
-				' ' +
-				'tileheight=' +
-				app.tile.size.y;
-			if (added.size) app.socket.sendMessage(msg, '');
-			else window.app.console.log('Skipped empty (too fast) tilecombine');
+			this.sendTileCombineMessage(
+				part,
+				mode,
+				tilePositionsX,
+				tilePositionsY,
+				tileWids,
+				added.size,
+			);
+
+			// When Writer requests mode=2, also request mode=1.
+			if (app.map._docLayer.isWriter() && mode === 2) {
+				this.sendTileCombineMessage(
+					part,
+					/*mode=*/ 1,
+					tilePositionsX,
+					tilePositionsY,
+					tileWids,
+					added.size,
+				);
+			}
 		}
 	}
 
@@ -1957,7 +1992,8 @@ class TileManager {
 		if (app.file.fileBasedView) {
 			this.updateFileBasedView();
 			return;
-		}
+		} else if (app.activeDocument.activeLayout.type === 'ViewLayoutMultiPage')
+			return;
 
 		if (!center) {
 			center = map.getCenter();
@@ -1970,7 +2006,7 @@ class TileManager {
 		var queue = this.getMissingTiles(pixelBounds, zoom, true);
 
 		app.map._docLayer._sendClientZoom();
-		app.activeDocument.activeView.sendClientVisibleArea();
+		app.activeDocument.activeLayout.sendClientVisibleArea();
 
 		if (queue.length !== 0) this.addTiles(queue, true);
 
@@ -2101,7 +2137,7 @@ class TileManager {
 
 			default:
 				window.app.console.error('Unrecognised message from worker');
-				this.disableWorker();
+				this.disableWorkers();
 		}
 	}
 
@@ -2135,7 +2171,7 @@ class TileManager {
 
 	public static expandTileRange(range: cool.Bounds): cool.Bounds {
 		const grow = this.visibleTileExpansion;
-		const direction = app.activeDocument.activeView.getLastPanDirection();
+		const direction = app.activeDocument.activeLayout.getLastPanDirection();
 		const minOffset = new cool.Point(
 			grow - grow * this.directionalTileExpansion * Math.min(0, direction[0]),
 			grow - grow * this.directionalTileExpansion * Math.min(0, direction[1]),
@@ -2157,42 +2193,18 @@ class TileManager {
 		);
 	}
 
-	/*
-		Checks the visible tiles in current zoom level.
-		Marks the visible ones as current.
-	*/
-	public static updateLayoutView(bounds: any): any {
-		const queue = this.getMissingTiles(
-			bounds,
-			Math.round(app.map.getZoom()),
-			true,
-		);
+	public static checkRequestTiles(coordList: TileCoordData[]): void {
+		const tileCombineQueue = [];
+		for (var i = 0; i < coordList.length; i++) {
+			let tile = TileManager.get(coordList[i]);
 
-		if (queue.length > 0) this.addTiles(queue, true);
-	}
+			if (!tile) tile = TileManager.createTile(coordList[i]);
 
-	public static getVisibleCoordList(
-		rectangle: cool.SimpleRectangle = app.activeDocument.activeView
-			.viewedRectangle,
-	) {
-		const coordList = Array<TileCoordData>();
-		const zoom = app.map.getZoom();
-
-		for (const tile of this.tiles.values()) {
-			const coords = tile.coords;
-			if (
-				coords.z === zoom &&
-				rectangle.intersectsRectangle([
-					coords.x * app.pixelsToTwips,
-					coords.y * app.pixelsToTwips,
-					this.tileSize * app.pixelsToTwips,
-					this.tileSize * app.pixelsToTwips,
-				])
-			)
-				coordList.push(coords);
+			if (tile.needsFetch()) tileCombineQueue.push(coordList[i]);
+			else this.makeTileCurrent(tile);
 		}
 
-		return coordList;
+		TileManager.sendTileCombineRequest(tileCombineQueue);
 	}
 
 	public static updateFileBasedView(
@@ -2238,7 +2250,7 @@ class TileManager {
 		var mode = 0; // mode is different only in Impress MasterPage mode so far
 
 		var intersectionAreaRectangle = app.LOUtil._getIntersectionRectangle(
-			app.activeDocument.activeView.viewedRectangle.pToArray(),
+			app.activeDocument.activeLayout.viewedRectangle.pToArray(),
 			[0, 0, partWidthPixels, partHeightPixels * app.map._docLayer._parts],
 		);
 
@@ -2258,7 +2270,7 @@ class TileManager {
 				intersectionAreaRectangle[1] / partHeightPixels,
 			);
 			var startY =
-				app.activeDocument.activeView.viewedRectangle.pY1 -
+				app.activeDocument.activeLayout.viewedRectangle.pY1 -
 				startPart * partHeightPixels;
 			startY = Math.floor(startY / app.tile.size.pY) * app.tile.size.pY;
 
@@ -2267,8 +2279,8 @@ class TileManager {
 					partHeightPixels,
 			);
 			var endY =
-				app.activeDocument.activeView.viewedRectangle.pY1 +
-				app.activeDocument.activeView.viewedRectangle.pY2 -
+				app.activeDocument.activeLayout.viewedRectangle.pY1 +
+				app.activeDocument.activeLayout.viewedRectangle.pY2 -
 				endPart * partHeightPixels;
 			endY = Math.floor(endY / app.tile.size.pY) * app.tile.size.pY;
 
@@ -2308,7 +2320,7 @@ class TileManager {
 		if (checkOnly) {
 			return queue;
 		} else {
-			app.activeDocument.activeView.sendClientVisibleArea();
+			app.activeDocument.activeLayout.sendClientVisibleArea();
 			app.map._docLayer._sendClientZoom();
 
 			var tileCombineQueue = [];

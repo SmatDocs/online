@@ -64,44 +64,50 @@ void StatelessBatchBroker::removeFile(const std::string& uriOrig)
         FileUtil::removeFile(dir);
 }
 
-static std::atomic<std::size_t> gConvertToBrokerInstanceCouter;
+static std::atomic<std::size_t> convertToBrokerInstanceCounter;
 
-std::size_t ConvertToBroker::getInstanceCount() { return gConvertToBrokerInstanceCouter; }
+std::size_t ConvertToBroker::getInstanceCount() { return convertToBrokerInstanceCounter; }
 
 ConvertToBroker::ConvertToBroker(const std::string& uri, const Poco::URI& uriPublic,
                                  const std::string& docKey, const std::string& format,
-                                 const std::string& sOptions, const std::string& lang)
+                                 const std::string& options, const std::string& lang)
     : StatelessBatchBroker(uri, uriPublic, docKey)
     , _format(format)
-    , _sOptions(sOptions)
+    , _sOptions(options)
     , _lang(lang)
 {
     LOG_TRC("Created ConvertToBroker: uri: ["
             << uri << "], uriPublic: [" << uriPublic.toString() << "], docKey: [" << docKey
-            << "], format: [" << format << "], options: [" << sOptions << "], lang: [" << lang
+            << "], format: [" << format << "], options: [" << options << "], lang: [" << lang
             << "].");
 
     CONFIG_STATIC const std::chrono::seconds limit_convert_secs(
         ConfigUtil::getConfigValue<std::chrono::seconds>("per_document.limit_convert_secs", 100));
     _limitLifeSeconds = limit_convert_secs;
-    ++gConvertToBrokerInstanceCouter;
+    ++convertToBrokerInstanceCounter;
 }
 
 ConvertToBroker::~ConvertToBroker() {}
 
-bool ConvertToBroker::startConversion(SocketDisposition& disposition, const std::string& id, const Poco::URI& templateOptionUriPublic)
+bool ConvertToBroker::startConversion(SocketDisposition& disposition, const std::string& id, const AdditionalFilePocoUris& additionalFileUrisPublic)
 {
     std::shared_ptr<ConvertToBroker> docBroker =
         std::static_pointer_cast<ConvertToBroker>(shared_from_this());
 
     // Create a session to load the document.
-    const bool isReadOnly = docBroker->isReadOnly();
+    bool isReadOnly = docBroker->isReadOnly();
+    if (isReadOnly && additionalFileUrisPublic.contains("compare"))
+    {
+        // Comparing means modifying the new document to have redlines against the baseline, so all
+        // this to modify the throwaway document model.
+        isReadOnly = false;
+    }
     // FIXME: associate this with moveSocket (?)
     std::shared_ptr<ProtocolHandlerInterface> nullPtr;
     RequestDetails requestDetails("convert-to");
     _clientSession = std::make_shared<ClientSession>(nullPtr, id, docBroker, getPublicUri(),
                                                      isReadOnly, requestDetails,
-                                                     templateOptionUriPublic);
+                                                     additionalFileUrisPublic);
     _clientSession->construct();
 
     docBroker->setupTransfer(
@@ -181,7 +187,7 @@ void ConvertToBroker::dispose()
 {
     if (!_uriOrig.empty())
     {
-        gConvertToBrokerInstanceCouter--;
+        convertToBrokerInstanceCounter--;
         removeFile(_uriOrig);
         _uriOrig.clear();
     }
@@ -193,6 +199,18 @@ void ConvertToBroker::setLoaded()
 
     if (isGetThumbnail())
         return;
+
+    auto it = getAdditionalFileUrisJailed().find("compare");
+    if (it != getAdditionalFileUrisJailed().end())
+    {
+        // We have a baseline to compare against, do that before saving.
+        std::string unoCmd =
+            "uno .uno:CompareDocuments { \"URL\": { \"type\": \"string\", \"value\": \"" +
+            it->second +
+            "\" }, \"NoAcceptDialog\": { \"type\": \"boolean\", \"value\": \"true\" } }";
+        std::vector<char> unoRequest(unoCmd.begin(), unoCmd.end());
+        _clientSession->handleMessage(unoRequest);
+    }
 
     // FIXME: Check for security violations.
     Poco::Path toPath(getPublicUri().getPath());
@@ -215,11 +233,11 @@ void ConvertToBroker::setLoaded()
     _clientSession->handleMessage(saveasRequest);
 }
 
-static std::atomic<std::size_t> gRenderSearchResultBrokerInstanceCouter;
+static std::atomic<std::size_t> renderSearchResultBrokerInstanceCouter;
 
 std::size_t RenderSearchResultBroker::getInstanceCount()
 {
-    return gRenderSearchResultBrokerInstanceCouter;
+    return renderSearchResultBrokerInstanceCouter;
 }
 
 RenderSearchResultBroker::RenderSearchResultBroker(
@@ -231,7 +249,7 @@ RenderSearchResultBroker::RenderSearchResultBroker(
     LOG_TRC("Created RenderSearchResultBroker: uri: ["
             << uri << "], uriPublic: [" << uriPublic.toString() << "], docKey: [" << docKey
             << "].");
-    gConvertToBrokerInstanceCouter++;
+    convertToBrokerInstanceCounter++;
 }
 
 RenderSearchResultBroker::~RenderSearchResultBroker() {}
@@ -288,7 +306,7 @@ void RenderSearchResultBroker::dispose()
 {
     if (!_uriOrig.empty())
     {
-        gRenderSearchResultBrokerInstanceCouter--;
+        renderSearchResultBrokerInstanceCouter--;
         removeFile(_uriOrig);
         _uriOrig.clear();
     }
@@ -296,9 +314,9 @@ void RenderSearchResultBroker::dispose()
 
 bool RenderSearchResultBroker::handleInput(const std::shared_ptr<Message>& message)
 {
-    bool bResult = DocumentBroker::handleInput(message);
+    bool result = DocumentBroker::handleInput(message);
 
-    if (bResult)
+    if (result)
     {
         auto const& messageData = message->data();
 
@@ -307,9 +325,9 @@ bool RenderSearchResultBroker::handleInput(const std::shared_ptr<Message>& messa
 
         if (messageData.size() >= commandStringVector.size())
         {
-            bool bEquals = std::equal(commandStringVector.begin(), commandStringVector.end(),
+            bool equals = std::equal(commandStringVector.begin(), commandStringVector.end(),
                                       messageData.begin());
-            if (bEquals)
+            if (equals)
             {
                 _responseData.resize(messageData.size() - commandStringVector.size());
                 std::copy(messageData.begin() + commandStringVector.size(), messageData.end(),
@@ -333,7 +351,7 @@ bool RenderSearchResultBroker::handleInput(const std::shared_ptr<Message>& messa
             }
         }
     }
-    return bResult;
+    return result;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

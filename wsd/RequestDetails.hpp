@@ -125,7 +125,7 @@ private:
     bool _isWebSocket : 1;
     bool _closeConnection : 1;
 
-    static Method stringToMethod(std::string const & method);
+    static Method stringToMethod(std::string_view method);
 
     void dehexify();
     void processURI();
@@ -133,7 +133,7 @@ private:
 public:
     RequestDetails(Poco::Net::HTTPRequest &request, const std::string& serviceRoot);
     RequestDetails(http::RequestParser& request, const std::string& serviceRoot);
-    RequestDetails(const std::string &mobileURI);
+    RequestDetails(std::string mobileURI);
 
     /// Constructs from its components.
     /// wopiSrc is typically encoded.
@@ -319,7 +319,7 @@ public:
                Util::equal(_pathSegs, rhs._pathSegs);
     }
 
-    std::string toString() const
+    [[nodiscard]] std::string toString() const
     {
         std::ostringstream oss;
         oss << _uriString << ' ' << nameShort(_method)

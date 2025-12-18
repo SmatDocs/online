@@ -580,7 +580,10 @@ class Menubar extends window.L.Control {
 				{name: _('Fullscreen presentation'), id: 'fullscreen-presentation', type: 'action'},
 				{name: _('Present current slide'), id: 'presentation-currentslide', type: 'action'},
 				{name: _('Present in new window'), id: 'present-in-window', type: 'action'},
-				{name: _('Presenter Console'), id: 'presentation-in-console', type: 'action'}]
+				...(!window.ThisIsAMobileApp ? [
+					{name: _('Presenter Console'), id: 'presentation-in-console', type: 'action'}
+				] : [])
+			]
 			},
 			{name: _UNO('.uno:ToolsMenu', 'presentation'), id: 'tools', type: 'menu', menu: [
 				{uno: '.uno:SpellDialog'},
@@ -818,6 +821,7 @@ class Menubar extends window.L.Control {
 				{name: _('Local Image...'), id: 'insertgraphic', type: 'action'},
 				{name: _UNO('.uno:InsertGraphic', 'spreadsheet'), id: 'insertgraphicremote', type: 'action'},
 				{name: _UNO('.uno:DataDataPilotRun', 'spreadsheet'), uno: '.uno:DataDataPilotRun'},
+				{name: _UNO('.uno:InsertCalcTable', 'spreadsheet'), uno: '.uno:InsertCalcTable'},
 				{name: _UNO('.uno:InsertSparkline', 'spreadsheet'), uno: '.uno:InsertSparkline'},
 				{name: _UNO('.uno:InsertAnnotation', 'spreadsheet'), id: 'insertcomment', type: 'action'},
 				{uno: '.uno:InsertObjectChart'},
@@ -981,6 +985,10 @@ class Menubar extends window.L.Control {
 					{name: _UNO('.uno:InsertPivotTable', 'spreadsheet'), uno: '.uno:DataDataPilotRun'},
 					{name: _UNO('.uno:RecalcPivotTable', 'spreadsheet'), uno: '.uno:RecalcPivotTable'},
 					{name: _UNO('.uno:DeletePivotTable', 'spreadsheet'), uno: '.uno:DeletePivotTable'}]},
+				{type: 'separator'},
+				{name: _UNO('.uno:DataTableMenu', 'spreadsheet'), type: 'menu', menu: [
+					{name: _UNO('.uno:RunInsCalcTable', 'spreadsheet'), uno: '.uno:InsertCalcTable'},
+					{name: _UNO('.uno:RemoveCalcTable', 'spreadsheet'), uno: '.uno:RemoveCalcTable'}]},
 				{type: 'separator'},
 				{name: _UNO('.uno:NamesMenu', 'spreadsheet'), type: 'menu', menu: [
 					{name: _UNO('.uno:AddName', 'spreadsheet'), uno: '.uno:AddName'},
@@ -1484,6 +1492,10 @@ class Menubar extends window.L.Control {
 		this._menubarCont = map.mainMenuTemplate.cloneNode(true);
 		if (this._menubarCont != null)
 			$('#main-menu-state').after(this._menubarCont);
+
+		if (window.mode.isDesktop()) {
+			$('#main-menu-state').attr('type', 'hidden');
+		}
 
 		if (!this._map['wopi'].DisablePresentation)
 			this.options.allowedViewModeActions = this.options.allowedViewModeActions.concat(['fullscreen-presentation', 'presentation-currentslide', 'present-in-window','presentation-in-console']);
@@ -2225,23 +2237,7 @@ class Menubar extends window.L.Control {
 		} else if (id === 'remotemultimedia') {
 			this._map.fire('postMessage', {
 				msgId: 'UI_InsertFile', args: {
-					callback: 'Action_InsertMultimedia', mimeTypeFilter: [
-						'video/MP2T',
-						'video/mp4',
-						'video/mpeg',
-						'video/ogg',
-						'video/quicktime',
-						'video/webm',
-						'video/x-matroska',
-						'video/x-ms-wmv',
-						'video/x-msvideo',
-						'audio/aac',
-						'audio/flac',
-						'audio/mp4',
-						'audio/mpeg',
-						'audio/ogg',
-						'audio/x-wav',
-					]
+					callback: 'Action_InsertMultimedia', mimeTypeFilter: app.LOUtil.mediaMimeFilter
 				}
 			});
 		} else if (id === 'selectbackground') {
@@ -2396,11 +2392,13 @@ class Menubar extends window.L.Control {
 			var liItem = window.L.DomUtil.create('li', '');
 			liItem.id = 'document-header';
 			liItem.setAttribute('role', 'menuitem');
-			var aItem = window.L.DomUtil.create('div', 'document-logo', liItem);
+			var aItem = window.L.DomUtil.create('a', 'document-logo', liItem);
 			$(aItem).data('id', 'document-logo');
 			$(aItem).data('type', 'action');
 			aItem.setAttribute('role', 'img');
 			aItem.setAttribute('aria-label', _('file type icon'));
+			aItem.href = '#';
+			aItem.target = '_blank';
 
 			if (window.logoURL) {
 				aItem.style.backgroundImage = "url(" + window.logoURL + ")";

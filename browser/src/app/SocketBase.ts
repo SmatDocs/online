@@ -8,6 +8,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
+/* eslint-disable @typescript-eslint/no-empty-function */
 
 class SocketBase {
 	private ProtocolVersionNumber: string = '0.1';
@@ -72,9 +73,44 @@ class SocketBase {
 		this.traceEvents = new TraceEvents(this);
 	}
 
-	// we need typing of this function in TraceEvents.ts
 	public sendMessage(msg: MessageInterface): void {
-		console.assert(false, 'This should not be called!');
+		if (!this.socket) {
+			console.error('sendMessage() called with non-existent socket!');
+			return;
+		}
+
+		if (this._map._debug.eventDelayWatchdog) this._map._debug.timeEventDelay();
+
+		if (this._map._fatal) {
+			// Avoid communicating when we're in fatal state
+			return;
+		}
+
+		if (!app.idleHandler._active) {
+			// Avoid communicating when we're inactive.
+			if (typeof msg !== 'string') return;
+
+			if (!msg.startsWith('useractive') && !msg.startsWith('userinactive')) {
+				window.app.console.log(
+					'Ignore outgoing message due to inactivity: "' + msg + '"',
+				);
+				return;
+			}
+		}
+
+		if (this._map.uiManager && this._map.uiManager.isUIBlocked()) return;
+
+		const socketState = this.socket.readyState;
+		if (socketState === 2 || socketState === 3) {
+			this._map.loadDocument();
+		}
+
+		if (socketState === 1) {
+			this._doSend(msg);
+		} else {
+			// push message while trying to connect socket again.
+			this._msgQueue.push(msg);
+		}
 	}
 
 	public sendTraceEvent(
@@ -193,11 +229,116 @@ class SocketBase {
 	}
 
 	public close(code?: number, reason?: string): void {
-		console.assert(false, 'This should not be called!');
+		if (!this.socket) {
+			console.error('Tried close() on non-existent socket!');
+			return;
+		}
+		this.socket.onerror = function () {};
+		this.socket.onclose = function () {};
+		this.socket.onmessage = function () {};
+		this.socket.close();
+
+		// Reset wopi's app loaded so that reconnecting again informs outerframe about initialization
+		this._map['wopi'].resetAppLoaded();
+		this._map.fire('docloaded', { status: false });
+		clearTimeout(this._accessTokenExpireTimeout);
+	}
+
+	protected _doSend(msg: MessageInterface): void {
+		if (!this.socket) {
+			console.error('_doSend() called when socket is non-existent!');
+			return;
+		}
+		// Only attempt to log text frames, not binary ones.
+		if (typeof msg === 'string') this._logSocket('OUTGOING', msg);
+
+		this.socket.send(msg);
 	}
 
 	protected _onSocketOpen(evt: Event): void {
-		console.assert(false, 'This should not be called!');
+		window.app.console.debug('_onSocketOpen:');
+		app.idleHandler._serverRecycling = false;
+		app.idleHandler._documentIdle = false;
+
+		// Always send the protocol version number.
+		// TODO: Move the version number somewhere sensible.
+
+		// Note there are two socket "onopen" handlers, this one which ends up as part of
+		// bundle.js and the other in browser/js/global.js. The global.js one attempts to
+		// set up the connection early while bundle.js is still loading. If bundle.js
+		// starts before global.js has connected, then this _onSocketOpen will do the
+		// connection instead, after taking over the socket in "connect"
+
+		// Typically in a "make run" scenario it is the global.js case that sends the
+		// 'coolclient' and 'load' messages while currently in the "WASM app" case it is
+		// this code that gets invoked.
+
+		// Also send information about our performance timer epoch
+		const now0 = Date.now();
+		const now1 = performance.now();
+		const now2 = Date.now();
+		this._doSend(
+			'coolclient ' +
+				this.ProtocolVersionNumber +
+				' ' +
+				(now0 + now2) / 2 +
+				' ' +
+				now1,
+		);
+
+		let msg = 'load url=' + encodeURIComponent(this._map.options.doc);
+		if (this._map._docLayer) {
+			this._reconnecting = true;
+			// we are reconnecting after a lost connection
+			msg += ' part=' + this._map.getCurrentPartNumber();
+		}
+		if (this._map.options.timestamp) {
+			msg += ' timestamp=' + this._map.options.timestamp;
+		}
+		if (this._map._docPassword) {
+			msg += ' password=' + this._map._docPassword;
+		}
+		if (String.locale) {
+			msg += ' lang=' + String.locale;
+		}
+		if (window.deviceFormFactor) {
+			msg += ' deviceFormFactor=' + window.deviceFormFactor;
+		}
+
+		msg += ' timezone=' + Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+		if (this._map.options.renderingOptions) {
+			const options = {
+				rendering: this._map.options.renderingOptions,
+			};
+			msg += ' options=' + JSON.stringify(options);
+		}
+		const spellOnline = window.prefs.get('spellOnline');
+		if (spellOnline) {
+			msg += ' spellOnline=' + spellOnline;
+		}
+
+		const darkTheme = window.prefs.getBoolean('darkTheme');
+		msg += ' darkTheme=' + darkTheme;
+
+		const darkBackground = window.prefs.getBoolean(
+			'darkBackgroundForTheme.' + (darkTheme ? 'dark' : 'light'),
+			darkTheme,
+		);
+		msg += ' darkBackground=' + darkBackground;
+		this._map.uiManager.initDarkBackgroundUI(darkBackground);
+
+		msg += ' accessibilityState=' + window.getAccessibilityState();
+
+		msg += ' clientvisiblearea=' + window.makeClientVisibleArea();
+
+		this._doSend(msg);
+		for (let i = 0; i < this._msgQueue.length; i++) {
+			this._doSend(this._msgQueue[i]);
+		}
+		this._msgQueue = [];
+
+		app.idleHandler._activate();
 	}
 
 	protected _onSocketClose(evt: CloseEvent): void {
@@ -250,6 +391,55 @@ class SocketBase {
 		this._accessTokenExpireTimeout = setTimeout(
 			this._sessionExpiredWarning.bind(this),
 			120 * 1000,
+		);
+	}
+
+	public setUnloading(): void {
+		if (this.socket && this.socket.setUnloading) this.socket.setUnloading();
+	}
+
+	public connected(): boolean {
+		return this.socket !== undefined && this.socket.readyState === 1;
+	}
+
+	protected _logSocket(type: string, msg: string): void {
+		const logMessage =
+			this._map._debug.debugNeverStarted ||
+			this._map._debug.logIncomingMessages;
+		if (!logMessage) return;
+
+		if (window.ThisIsTheGtkApp) window.postMobileDebug(type + ' ' + msg);
+
+		const debugOn = this._map._debug.debugOn;
+
+		if (this._map._debug.overlayOn) {
+			this._map._debug.setOverlayMessage('postMessage', type + ': ' + msg);
+		}
+
+		if (!debugOn && msg.length > 256)
+			// for reasonable performance.
+			msg =
+				msg.substring(0, 256) + '<truncated ' + (msg.length - 256) + 'chars>';
+
+		let status = '';
+		if (!window.fullyLoadedAndReady) status += '[!fullyLoadedAndReady]';
+		if (!window.bundlejsLoaded) status += '[!bundlejsLoaded]';
+
+		app.Log.log(msg, type + status);
+
+		if (!window.protocolDebug && !debugOn) return;
+
+		const color = type === 'OUTGOING' ? 'color:red' : 'color:#2e67cf';
+		window.app.console.log(
+			+new Date() +
+				' %c' +
+				type +
+				status +
+				'%c: ' +
+				msg.concat(' ').replace(' ', '%c '),
+			'background:#ddf;color:black',
+			color,
+			'color:',
 		);
 	}
 }

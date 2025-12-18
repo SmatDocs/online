@@ -61,6 +61,8 @@ class HRuler extends Ruler {
 
 		if (app.map._docLayer._docType === 'presentation')
 			this.options.tileMargin = 0;
+
+		app.UI.horizontalRuler = this;
 	}
 
 	onAdd() {
@@ -132,6 +134,15 @@ class HRuler extends Ruler {
 				}
 			}
 		}
+	}
+
+	public show() {
+		this._rFace.parentElement.style.display = '';
+		this._updateParagraphIndentations();
+	}
+
+	public hide() {
+		this._rFace.parentElement.style.display = 'none';
 	}
 
 	_initiateIndentationMarkers() {
@@ -371,7 +382,7 @@ class HRuler extends Ruler {
 		this._rWrapper.style.visibility = '';
 	}
 
-	_updateParagraphIndentations() {
+	public _updateParagraphIndentations() {
 		var items = this._map['stateChangeHandler'];
 		var state = items.getItemValue('.uno:LeftRightParaMargin');
 		// in impress/draw values are not as per Inch factore we should consider this case
@@ -790,7 +801,7 @@ class HRuler extends Ruler {
 		if (!this._map.options.docBounds) return;
 
 		const rulerOffset =
-			-app.activeDocument.activeView.viewedRectangle.cX1 +
+			-app.activeDocument.activeLayout.viewedRectangle.cX1 +
 			this.options.tileMargin * app.getScale();
 
 		this._rFace.style.marginInlineStart = rulerOffset + 'px';
@@ -846,6 +857,8 @@ class HRuler extends Ruler {
 		// We need to calculate the percentage. Left margin (leftOffset) is not being added to the indentation (on the core part)..
 		// We can use TabStopContainer's position as the reference point, as they share the same reference point..
 		var element = document.getElementById(this._indentationElementId);
+
+		if (!element) return;
 
 		// The halfWidth of the shape..
 		var halfWidth =
@@ -914,6 +927,18 @@ class HRuler extends Ruler {
 				this._rFace,
 				'mousemove',
 				this._moveIndentation,
+				this,
+			);
+			window.L.DomEvent.on(
+				this._rFace,
+				'click',
+				this._moveIndentationEnd,
+				this,
+			);
+			window.L.DomEvent.on(
+				this._rFace,
+				'mouseleave',
+				this._moveIndentationEnd,
 				this,
 			);
 			window.L.DomEvent.on(

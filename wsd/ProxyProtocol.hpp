@@ -22,7 +22,7 @@
  *
  * we use a trivial framing: [T(ext)|B(inary)]<hex-serial->\n<hex-length>\n<content>\n
  */
-class ProxyProtocolHandler : public ProtocolHandlerInterface
+class ProxyProtocolHandler final : public ProtocolHandlerInterface
 {
 public:
     ProxyProtocolHandler() :
@@ -30,8 +30,6 @@ public:
         _outSerial(1)
     {
     }
-
-    virtual ~ProxyProtocolHandler() { }
 
     /// Will be called exactly once by setHandler
     void onConnect(const std::shared_ptr<StreamSocket>& /* socket */) override {}

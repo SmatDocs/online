@@ -56,7 +56,6 @@
 #include <chrono>
 #include <ctime>
 #include <fstream>
-#include <ios>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -264,7 +263,7 @@ void DocumentBroker::setupTransfer(SocketDisposition &disposition,
 }
 
 void DocumentBroker::setupTransfer(SocketPoll& from, const std::weak_ptr<StreamSocket>& socket,
-                                   SocketDisposition::MoveFunction transferFn)
+                                   SocketDisposition::MoveFunction transferFn) const
 {
     from.transferSocketTo(socket, getPoll(), std::move(transferFn), nullptr);
 }
@@ -956,7 +955,7 @@ void DocumentBroker::stop(const std::string& reason)
 bool DocumentBroker::download(
     const std::shared_ptr<ClientSession>& session, const std::string& jailId,
     const Poco::URI& uriPublic,
-    const Poco::URI& templateOptionUriPublic,
+    const AdditionalFilePocoUris& additionalFileUrisPublic,
     [[maybe_unused]] std::unique_ptr<WopiStorage::WOPIFileInfo> wopiFileInfo)
 {
     ASSERT_CORRECT_THREAD();
@@ -1010,7 +1009,7 @@ bool DocumentBroker::download(
         {
             _storage = StorageBase::create(uriPublic, jailRoot, jailPath.toString(),
                                            /*takeOwnership=*/isConvertTo(),
-                                           templateOptionUriPublic);
+                                           additionalFileUrisPublic);
         }
         catch (...)
         {
@@ -1284,8 +1283,8 @@ bool DocumentBroker::doDownloadDocument(const Authorization& auth,
 
     LOG_DBG("Download file for docKey [" << _docKey << ']');
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-    std::string templateOptionLocalPath;
-    std::string localPath = _storage->downloadStorageFileToLocal(auth, *_lockCtx, templateSource, templateOptionLocalPath);
+    AdditionalFilePaths additionalFileLocalPaths;
+    std::string localPath = _storage->downloadStorageFileToLocal(auth, *_lockCtx, templateSource, additionalFileLocalPaths);
     if (localPath.empty())
     {
         throw std::runtime_error("Failed to retrieve document from storage");
@@ -1322,11 +1321,11 @@ bool DocumentBroker::doDownloadDocument(const Authorization& auth,
     _uriJailed = Poco::URI(Poco::URI("file://"), localPathEncoded).toString();
     _uriJailedAnonym =
         Poco::URI(Poco::URI("file://"), COOLWSD::anonymizeUrl(localPathEncoded)).toString();
-    if (!templateOptionLocalPath.empty())
+    for (const auto& it : additionalFileLocalPaths)
     {
-        std::string templateOptionLocalPathEncoded;
-        Poco::URI::encode(templateOptionLocalPath, "#?", templateOptionLocalPathEncoded);
-        _templateOptionUriJailed = Poco::URI(Poco::URI("file://"), templateOptionLocalPathEncoded).toString();
+        std::string additionalFileLocalPathEncoded;
+        Poco::URI::encode(it.second, "#?", additionalFileLocalPathEncoded);
+        _additionalFileUrisJailed[it.first] = Poco::URI(Poco::URI("file://"), additionalFileLocalPathEncoded).toString();
     }
 
     _filename = filename;
@@ -1505,6 +1504,9 @@ DocumentBroker::updateSessionWithWopiInfo(const std::shared_ptr<ClientSession>& 
         wopiInfo->set("HideChangeTrackingControls", wopiFileInfo->getHideChangeTrackingControls() ==
                                                         WopiStorage::WOPIFileInfo::TriState::True);
     wopiInfo->set("IsOwner", session->isDocumentOwner());
+
+    if (!wopiFileInfo->getPresentationLeader().empty())
+        wopiInfo->set("PresentationLeader", wopiFileInfo->getPresentationLeader());
 
     bool disablePresentation = wopiFileInfo->getDisableExport() || wopiFileInfo->getHideExportOption();
     // the new slideshow supports watermarking, anyway it's still an experimental features
@@ -3305,7 +3307,7 @@ void DocumentBroker::handleDocumentConflict()
 }
 
 void DocumentBroker::broadcastSaveResult(bool success, const std::string_view result,
-                                         const std::string& errorMsg)
+                                         const std::string& errorMsg) const
 {
     const std::string_view resultstr = success ? "true" : "false";
     // Some sane limit, otherwise we get problems transferring this to the client with large strings (can be a whole webpage)
@@ -3855,7 +3857,7 @@ std::size_t DocumentBroker::addSession(const std::shared_ptr<ClientSession>& ses
     {
         // First, download the document, since this can fail.
         if (!download(session, _childProcess->getJailId(), session->getPublicUri(),
-                      session->getTemplateOptionPublicUri(),
+                      session->getAdditionalFilePublicUri(),
                       std::move(wopiFileInfo)))
         {
             const auto msg = "Failed to load document with URI [" + session->getPublicUri().toString() + "].";
@@ -4704,20 +4706,23 @@ void DocumentBroker::handleGetSlideRequest(const StringVector& tokens,
 
 void DocumentBroker::handleSlideLayerResponse(const std::shared_ptr<Message>& message)
 {
-    size_t pos = Util::findInVector(message->data(), "\n");
-    std::string msg(message->data().data(), pos == std::string::npos ? message->size() : pos);
-    Poco::JSON::Object::Ptr jsonPtr;
-    if (!JsonUtil::parseJSON(msg, jsonPtr))
+    if (EnableExperimental)
     {
-        LOG_ERR("Invalid slide layer response, could not parse JSON: " << msg);
-        return;
-    }
-    const std::string key = JsonUtil::getJSONValue<std::string>(jsonPtr, "cacheKey");
+        size_t pos = Util::findInVector(message->data(), "\n");
+        std::string msg(message->data().data(), pos == std::string::npos ? message->size() : pos);
+        Poco::JSON::Object::Ptr jsonPtr;
+        if (!JsonUtil::parseJSON(msg, jsonPtr))
+        {
+            LOG_ERR("Invalid slide layer response, could not parse JSON: " << msg);
+            return;
+        }
+        const std::string key = JsonUtil::getJSONValue<std::string>(jsonPtr, "cacheKey");
 
-    // This message has forwardToken which can cause issue if reused for forwardToClient when using cache.
-    // But we ignore it because when reusing cache we only send data from the message and not entire message
-    _slideLayerCache.insert(key, message);
-    LOG_INF("Slideshow: Cached a slide layer with cache key: " << key);
+        // This message has forwardToken which can cause issue if reused for forwardToClient when using cache.
+        // But we ignore it because when reusing cache we only send data from the message and not entire message
+        _slideLayerCache.insert(key, message);
+        LOG_INF("Slideshow: Cached a slide layer with cache key: " << key);
+    }
     forwardToClient(message);
 }
 
@@ -5113,8 +5118,9 @@ bool DocumentBroker::forwardUrpToChild(const std::string& message)
     return _childProcess && _childProcess->sendUrpMessage(message);
 }
 
-std::string DocumentBroker::applySignViewSettings(const std::string& message,
-                                                  const std::shared_ptr<ClientSession>& session)
+std::string
+DocumentBroker::applySignViewSettings(const std::string& message,
+                                      const std::shared_ptr<ClientSession>& session) const
 {
     std::string finalMsg = message;
     if (!_isViewSettingsUpdated)

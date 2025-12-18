@@ -70,10 +70,10 @@ window.L.Control.ContextMenu = window.L.Control.extend({
 				   'AddToWordbook'],
 
 			spreadsheet: ['MergeCells', 'SplitCell', 'InsertCell', 'DeleteCell',
-				      'RecalcPivotTable', 'DataDataPilotRun', 'DeletePivotTable',
-				      'FormatCellDialog', 'DeleteNote', 'SetAnchorToCell', 'SetAnchorToCellResize',
-				      'FormatSparklineMenu', 'InsertSparkline', 'DeleteSparkline', 'DeleteSparklineGroup',
-				      'EditSparklineGroup', 'EditSparkline', 'GroupSparklines', 'UngroupSparklines', 'AutoFill'],
+					  'RecalcPivotTable', 'DataDataPilotRun', 'DeletePivotTable', 'InsertCalcTable', 'RemoveCalcTable',
+					  'DatabaseSettings', 'FormatCellDialog', 'DeleteNote', 'SetAnchorToCell', 'SetAnchorToCellResize',
+					  'FormatSparklineMenu', 'InsertSparkline', 'DeleteSparkline', 'DeleteSparklineGroup',
+					  'EditSparklineGroup', 'EditSparkline', 'GroupSparklines', 'UngroupSparklines', 'AutoFill'],
 
 			presentation: ['SetDefault'],
 			drawing: []
@@ -103,7 +103,7 @@ window.L.Control.ContextMenu = window.L.Control.extend({
 			// text
 			'SpellingAndGrammarDialog', 'FontDialog', 'FontDialogForParagraph',
 			// spreadsheet
-			'FormatCellDialog', 'DataDataPilotRun',
+			'FormatCellDialog', 'DataDataPilotRun', 'InsertCalcTable',
 			'GroupSparklines', 'UngroupSparklines', 'AutoFill'
 		],
 

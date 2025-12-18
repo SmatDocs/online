@@ -37,7 +37,7 @@ public:
     {
     }
 
-    virtual ~StatelessBatchBroker() {}
+    virtual ~StatelessBatchBroker() = default;
 
     /// Cleanup path and its parent
     static void removeFile(const std::string& uri);
@@ -52,7 +52,7 @@ class ConvertToBroker : public StatelessBatchBroker
 public:
     /// Construct DocumentBroker with URI and docKey
     ConvertToBroker(const std::string& uri, const Poco::URI& uriPublic, const std::string& docKey,
-                    const std::string& format, const std::string& sOptions,
+                    const std::string& format, const std::string& options,
                     const std::string& lang);
     virtual ~ConvertToBroker();
 
@@ -60,7 +60,7 @@ public:
     const std::string& getLang() { return _lang; }
 
     /// Move socket to this broker for response & do conversion
-    bool startConversion(SocketDisposition& disposition, const std::string& id, const Poco::URI& templateOptionUriPublic);
+    bool startConversion(SocketDisposition& disposition, const std::string& id, const AdditionalFilePocoUris& additionalFileUrisPublic);
 
     /// When the load completes - lets start saving
     void setLoaded() override;

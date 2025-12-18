@@ -37,9 +37,12 @@ function _drawingAreaControl (parentContainer, data, builder) {
 	image.id = imageId;
 	image.src = data.image.replace(/\\/g, '');
 	image.alt = data.text;
-	image.tabIndex = 0;
 	image.draggable = false;
 	image.ondragstart = function() { return false; };
+
+	if (data.enabled && data.canFocus) {
+		image.tabIndex = 0;
+	}
 
 	if (data.text) {
 		image.setAttribute('data-cooltip', data.text);
@@ -48,7 +51,10 @@ function _drawingAreaControl (parentContainer, data, builder) {
 			window.L.control.attachTooltipEventListener(image, builder.map);
 		}
 	} else if (data.aria && data.aria.label) {
-		image.setAttribute('aria-label', data.aria.label);
+		container.setAttribute('aria-label', data.aria.label);
+		image.alt = '';
+	} else if (data.aria && data.aria.description) {
+		image.alt = data.aria.description;
 	}
 
 	// Line width dialog is affected from delay on image render.

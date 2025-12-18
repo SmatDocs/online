@@ -64,6 +64,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 std::map<std::string, std::string> ClientRequestDispatcher::StaticFileContentCache;
@@ -242,17 +243,17 @@ public:
 class ConvertToPartHandler : public Poco::Net::PartHandler
 {
     /// Parameter name -> filename map.
-    std::map<std::string, std::string> _filenames;
+    AdditionalFilePaths _filenames;
 
 public:
-    const std::map<std::string, std::string>& getFilenames() const { return _filenames; }
+    const AdditionalFilePaths& getFilenames() const { return _filenames; }
 
     /// Afterwards someone else is responsible for cleaning that up.
     void takeFiles() { _filenames.clear(); }
 
-    ConvertToPartHandler() {}
+    ConvertToPartHandler() = default;
 
-    virtual ~ConvertToPartHandler()
+    ~ConvertToPartHandler() override
     {
         for (const auto& it : _filenames)
         {
@@ -661,10 +662,13 @@ void ClientRequestDispatcher::onConnect(const std::shared_ptr<StreamSocket>& soc
                           << ") to ClientRequestDispatcher " << this);
 }
 
+namespace
+{
+#if !MOBILEAPP
 /// Starts an asynchronous CheckFileInfo request in parallel to serving
 /// static files. At this point, we don't have the client's WebSocket
 /// yet, and we're proactively trying to authenticate the client.
-static void launchAsyncCheckFileInfo(
+void launchAsyncCheckFileInfo(
     const std::string& id, const FileServerRequestHandler::ResourceAccessDetails& accessDetails,
     std::unordered_map<std::string, std::shared_ptr<RequestVettingStation>>& requestVettingStations,
     const std::size_t highWatermark)
@@ -716,11 +720,8 @@ static void launchAsyncCheckFileInfo(
     }
 }
 
-#if !MOBILEAPP
-static void socketEraseConsumedBytes(const std::shared_ptr<StreamSocket>& socket,
-                                     ssize_t headerSize,
-                                     ssize_t contentSize,
-                                     bool servedSync)
+void socketEraseConsumedBytes(const std::shared_ptr<StreamSocket>& socket, ssize_t headerSize,
+                              ssize_t contentSize, bool servedSync)
 {
     if( socket->getInBuffer().size() > 0 ) // erase request from inBuffer if not cleared by ignoreInput
     {
@@ -735,6 +736,7 @@ static void socketEraseConsumedBytes(const std::shared_ptr<StreamSocket>& socket
     }
 }
 #endif // !MOBILEAPP
+} // namespace
 
 void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& disposition)
 {
@@ -1146,7 +1148,7 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
                 bool skipAuthentication = ConfigUtil::getConfigValue<bool>(
                     "security.enable_metrics_unauthenticated", false);
                 if (!skipAuthentication)
-                    if (!COOLWSD::FileRequestHandler->isAdminLoggedIn(request, *response))
+                    if (!FileServerRequestHandler::isAdminLoggedIn(request, *response))
                         throw Poco::Net::NotAuthenticatedException("Invalid admin login");
             }
             catch (const Poco::Net::NotAuthenticatedException& exc)
@@ -1403,7 +1405,7 @@ STATE_ENUM(CheckStatus,
 
 void ClientRequestDispatcher::sendResult(const std::shared_ptr<StreamSocket>& socket, CheckStatus result)
 {
-    std::string output = "{\"status\": \"" + JsonUtil::escapeJSONValue(nameShort(result)) + "\"}\n";
+    std::string output = R"({"status": ")" + JsonUtil::escapeJSONValue(nameShort(result)) + "\"}\n";
 
     http::Response jsonResponse(http::StatusCode::OK);
     FileServerRequestHandler::hstsHeaders(jsonResponse);
@@ -2091,9 +2093,9 @@ std::string ClientRequestDispatcher::getContentType(const std::string& fileName)
         { "pdf", "application/pdf" },
     };
 
-    const std::string sExt = Poco::Path(fileName).getExtension();
+    const std::string ext = Poco::Path(fileName).getExtension();
 
-    const auto it = contentTypes.find(sExt);
+    const auto it = contentTypes.find(ext);
     if (it != contentTypes.end())
         return it->second;
 
@@ -2102,11 +2104,11 @@ std::string ClientRequestDispatcher::getContentType(const std::string& fileName)
 
 bool ClientRequestDispatcher::isSpreadsheet(const std::string& fileName)
 {
-    const std::string sContentType = getContentType(fileName);
+    const std::string contentType = getContentType(fileName);
 
-    return sContentType == "application/vnd.oasis.opendocument.spreadsheet" ||
-           sContentType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-           sContentType == "application/vnd.ms-excel";
+    return contentType == "application/vnd.oasis.opendocument.spreadsheet" ||
+           contentType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+           contentType == "application/vnd.ms-excel";
 }
 
 bool ClientRequestDispatcher::handlePostRequest(const RequestDetails& requestDetails,
@@ -2146,7 +2148,7 @@ bool ClientRequestDispatcher::handlePostRequest(const RequestDetails& requestDet
         if (requestDetails.equals(1, "convert-to") && format.empty())
             hasRequiredParameters = false;
 
-        const std::map<std::string, std::string> fromPaths = handler.getFilenames();
+        const AdditionalFilePaths& fromPaths = handler.getFilenames();
         std::string fromPath;
         auto it = fromPaths.find("data");
         if (it != fromPaths.end())
@@ -2163,16 +2165,16 @@ bool ClientRequestDispatcher::handlePostRequest(const RequestDetails& requestDet
         if (!fromPath.empty() && hasRequiredParameters)
         {
             Poco::URI uriPublic = RequestDetails::sanitizeURI(fromPath);
-            Poco::URI templateOptionUriPublic;
-            std::string templateOptionFromPath;
-            it = fromPaths.find("template");
-            if (it != fromPaths.end())
+            AdditionalFilePocoUris additionalFileUrisPublic;
+            for (const auto& key : {"template", "compare"})
             {
-                templateOptionFromPath = it->second;
-            }
-            if (!templateOptionFromPath.empty())
-            {
-                templateOptionUriPublic = RequestDetails::sanitizeURI(templateOptionFromPath);
+                it = fromPaths.find(key);
+                if (it == fromPaths.end())
+                {
+                    continue;
+                }
+
+                additionalFileUrisPublic[key] = RequestDetails::sanitizeURI(it->second);
             }
             const std::string docKey = RequestDetails::getDocKey(uriPublic);
 
@@ -2246,7 +2248,7 @@ bool ClientRequestDispatcher::handlePostRequest(const RequestDetails& requestDet
             LOG_TRC("Have " << DocBrokers.size() << " DocBrokers after inserting [" << docKey
                             << "].");
 
-            if (!docBroker->startConversion(disposition, _id, templateOptionUriPublic))
+            if (!docBroker->startConversion(disposition, _id, additionalFileUrisPublic))
             {
                 LOG_WRN("Failed to create Client Session with id [" << _id << "] on docKey ["
                                                                     << docKey << "].");
@@ -2603,7 +2605,7 @@ bool ClientRequestDispatcher::handleClientWsUpgrade(const Poco::Net::HTTPRequest
         }
 
         // Indicate to the client that document broker is searching.
-        static constexpr const char* const status = "progress: { \"id\":\"find\" }";
+        static constexpr const char* const status = R"(progress: { "id":"find" })";
         LOG_TRC("Sending to Client [" << status << ']');
         ws->sendMessage(status);
 
@@ -2754,8 +2756,11 @@ void ClientRequestDispatcher::CleanupRequestVettingStations()
 
 #if !MOBILEAPP
 
+namespace
+{
+
 /// Create the /hosting/capabilities JSON and return as string.
-static std::string getCapabilitiesJson(bool convertToAvailable)
+std::string getCapabilitiesJson(bool convertToAvailable)
 {
     // Can the convert-to be used?
     Poco::JSON::Object::Ptr convert_to = new Poco::JSON::Object;
@@ -2830,8 +2835,8 @@ static std::string getCapabilitiesJson(bool convertToAvailable)
 }
 
 /// Send the /hosting/capabilities JSON to socket
-static void sendCapabilities(bool convertToAvailable, bool closeConnection,
-                             const std::weak_ptr<StreamSocket>& socketWeak)
+void sendCapabilities(bool convertToAvailable, bool closeConnection,
+                      const std::weak_ptr<StreamSocket>& socketWeak)
 {
     std::shared_ptr<StreamSocket> socket = socketWeak.lock();
     if (!socket)
@@ -2851,6 +2856,8 @@ static void sendCapabilities(bool convertToAvailable, bool closeConnection,
         socket->send(httpResponse);
     LOG_INF("Sent capabilities.json successfully.");
 }
+
+} // namespace
 
 bool ClientRequestDispatcher::handleCapabilitiesRequest(const Poco::Net::HTTPRequest& request,
                                                         const std::shared_ptr<StreamSocket>& socket)
@@ -2872,6 +2879,6 @@ bool ClientRequestDispatcher::handleCapabilitiesRequest(const Poco::Net::HTTPReq
     return false;
 }
 
-#endif
+#endif // !MOBILEAPP
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

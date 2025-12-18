@@ -150,6 +150,11 @@ class NavigatorPanel extends SidebarBase {
 			'keydown',
 			function (e: KeyboardEvent) {
 				if (e.code === 'Escape') {
+					const contextMenu = app.map.uiManager.isAnyContextMenuOpened();
+					if (contextMenu) {
+						// Do not close navigator if any context menu is open
+						return;
+					}
 					clickFunction();
 					e.preventDefault();
 					e.stopPropagation();
@@ -293,7 +298,6 @@ class NavigatorPanel extends SidebarBase {
 		button.className = 'ui-content unobutton';
 		button.id = 'floating-navigator';
 		button.accessKey = 'ZN';
-		button.setAttribute('aria-pressed', 'false');
 
 		// Create the image inside the button
 		const img = document.createElement('img');

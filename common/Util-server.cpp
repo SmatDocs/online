@@ -14,6 +14,13 @@
 #include "StringVector.hpp"
 #include "Util.hpp"
 
+#include <Poco/Exception.h>
+
+#include <dirent.h>
+#include <fstream>
+#include <iomanip>
+#include <spawn.h>
+
 #ifdef __linux__
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -23,14 +30,6 @@
 #include <unistd.h>
 extern char** environ;
 #endif
-
-#include <dirent.h>
-#include <spawn.h>
-
-#include <fstream>
-#include <iomanip>
-
-#include <Poco/Exception.h>
 
 namespace
 {
@@ -243,7 +242,7 @@ std::string getHumanizedBytes(unsigned long bytes)
     switch (count)
     {
         case 0:
-            unit = "";
+            unit.clear();
             break;
         case 1:
             unit = "ki";

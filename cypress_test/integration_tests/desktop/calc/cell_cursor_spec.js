@@ -51,6 +51,39 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Test jumping on large cell
 		cy.cGet(helper.addressInputSelector).should('have.value', 'A1');
 		desktopHelper.assertScrollbarPosition('vertical', 0, 30);
 	});
+
+	it('Scroll and check drawing on frozen part of the view', function() {
+		// We will add a new sheet. Go to a cell other than A1. We will check if the new sheet is added by checking the current cell.
+		cy.cGet(helper.addressInputSelector).focus();
+		cy.cGet(helper.addressInputSelector).clear().type('B2{enter}');
+		cy.cGet(helper.addressInputSelector).should('have.value', 'B2');
+
+		// Add a new sheet.
+		cy.cGet('#insertsheet-button').click();
+		// Cell cursor will go to A1 by default. So we understand that the new sheet is added.
+		cy.cGet(helper.addressInputSelector).should('have.value', 'A1');
+
+		// Go to a cell that we know is visible.
+		cy.cGet(helper.addressInputSelector).focus();
+		cy.cGet(helper.addressInputSelector).clear().type('D7{enter}');
+
+		// Find freeze panes button and click.
+		cy.cGet('#View-tab-label').click();
+		desktopHelper.getNbIconArrow('FreezePanes').click();
+		desktopHelper.getNbIcon('FreezePanes').last().click();
+		cy.cGet('.jsdialog-overlay').click(); // close popup
+
+		// Scroll down.
+		helper.typeIntoInputField(helper.addressInputSelector, 'Z110');
+
+		// Now click on A1. Use click for this, not the input field. We also need to test the core coordinates.
+		calcHelper.clickOnFirstCell();
+
+		// Before the fix for mouse coordinate calculation, this would not go to A1, but somewhere else.
+		// Core side coordinates were not calculated properly.
+		// Fix is here: https://github.com/CollaboraOnline/online/pull/13631
+		cy.cGet(helper.addressInputSelector).should('have.value', 'A1');
+	});
 });
 
 describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Test Cell Selections', function() {

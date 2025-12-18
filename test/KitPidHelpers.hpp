@@ -11,12 +11,10 @@
 
 #pragma once
 
-#include <config.h>
+#include <Common.hpp>
 
 #include <chrono>
 #include <set>
-
-#include <Common.hpp>
 
 namespace helpers
 {
@@ -53,7 +51,7 @@ void logKitProcesses(const std::string& testname);
 /*
  * SIGKILL relevant pid
  */
-void killPid(const std::string& testname, const pid_t pid);
+void killPid(const std::string& testname, pid_t pid);
 
 /*
  * Wait until ready with 0 doc kits and 1 spare kit
@@ -61,16 +59,17 @@ void killPid(const std::string& testname, const pid_t pid);
  * or to wait for doc kits to shut down after
  */
 void waitForKitPidsReady(
-        const std::string& testname,
-        const std::chrono::milliseconds timeoutMs = std::chrono::milliseconds(KIT_PID_TIMEOUT_MS),
-        const std::chrono::milliseconds retryMs = std::chrono::milliseconds(KIT_PID_RETRY_MS));
+    const std::string& testname,
+    std::chrono::milliseconds timeoutMs = std::chrono::milliseconds(KIT_PID_TIMEOUT_MS),
+    std::chrono::milliseconds retryMs = std::chrono::milliseconds(KIT_PID_RETRY_MS));
 
 /*
  * Kill all and wait for previous processes to die
  */
-void killAllKitProcesses(const std::string& testname,
-                         const std::chrono::milliseconds timeoutMs = std::chrono::milliseconds(KIT_PID_TIMEOUT_MS),
-                         const std::chrono::milliseconds retryMs = std::chrono::milliseconds(KIT_PID_RETRY_MS));
+void killAllKitProcesses(
+    const std::string& testname,
+    std::chrono::milliseconds timeoutMs = std::chrono::milliseconds(KIT_PID_TIMEOUT_MS),
+    std::chrono::milliseconds retryMs = std::chrono::milliseconds(KIT_PID_RETRY_MS));
 
 } // namespace helpers
 
