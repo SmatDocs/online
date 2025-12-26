@@ -216,7 +216,6 @@ DocumentBroker::DocumentBroker(ChildType type, const std::string& uri, const Poc
     , _stop(false)
     , _documentChangedInStorage(false)
     , _isViewFileExtension(false)
-    , _isViewSettingsAccessibilityEnabled(false)
     , _isViewSettingsUpdated(false)
     , _alwaysSaveOnExit(ConfigUtil::getConfigValue<bool>("per_document.always_save_on_exit", false))
     , _backgroundAutoSave(
@@ -1640,17 +1639,39 @@ void PresetsInstallTask::addGroup(const Poco::JSON::Object::Ptr& settings, const
 
         Poco::Path destDir(_presetsPath, groupName);
         Poco::File(destDir).createDirectories();
-        std::string fileName;
+        std::string filePath;
         if (groupName == "xcu")
-            fileName = Poco::Path(destDir.toString(), "config.xcu").toString();
+            filePath = Poco::Path(destDir.toString(), "config.xcu").toString();
         else if (groupName == "browsersetting")
-            fileName = Poco::Path(destDir.toString(), "browsersetting.json").toString();
+            filePath = Poco::Path(destDir.toString(), "browsersetting.json").toString();
         else if (groupName == "viewsetting")
-            fileName = Poco::Path(destDir.toString(), "viewsetting.json").toString();
+            filePath = Poco::Path(destDir.toString(), "viewsetting.json").toString();
         else
-            fileName = Poco::Path(destDir.toString(), Uri::getFilenameWithExtFromURL(uri)).toString();
+        {
+            // Check for a file_name='something' and use that if it exists and
+            // if it is safe to use, otherwise use a file name derived from the
+            // url itself.
+            std::string fileName;
+            for (const auto& param : Poco::URI(uri).getQueryParameters())
+            {
+                if (param.first == "file_name")
+                    fileName = param.second;
+            }
 
-        queries.emplace_back(uri, stamp, fileName);
+            if (fileName.empty())
+                fileName = Uri::getFilenameWithExtFromURL(uri);
+
+            if (fileName.empty() || fileName == "." || fileName == ".." ||
+                fileName.find_first_of('/') != std::string::npos)
+            {
+                LOG_ERR("Invalid settings filename of: " << fileName);
+                continue;
+            }
+
+            filePath = Poco::Path(destDir.toString(), fileName).toString();
+        }
+
+        queries.emplace_back(uri, stamp, filePath);
     }
 }
 
@@ -1711,7 +1732,6 @@ void PresetsInstallTask::install(const Poco::JSON::Object::Ptr& settings,
 
 static std::string extractViewSettings(const std::string& viewSettingsPath,
                                        const std::shared_ptr<ClientSession>& session,
-                                       bool& _isViewSettingsAccessibilityEnabled,
                                        bool& _isViewSettingsUpdated)
 {
     std::string viewSettingsString;
@@ -1739,10 +1759,7 @@ static std::string extractViewSettings(const std::string& viewSettingsPath,
             }
         }
 
-        std::string accessibilityState, zoteroAPIKey, signatureCertificate, signatureKey, signatureCa;
-        JsonUtil::findJSONValue(viewSettings, "accessibilityState", accessibilityState);
-        _isViewSettingsAccessibilityEnabled = accessibilityState == "true";
-        session->setAccessibilityState(accessibilityState == "true");
+        std::string zoteroAPIKey, signatureCertificate, signatureKey, signatureCa;
 
         bool viewSettingsNeedUpdate = false;
 
@@ -1834,7 +1851,7 @@ void DocumentBroker::asyncInstallPresets(const std::shared_ptr<ClientSession>& s
             const std::string viewSettings = presetsPath + "viewsetting/viewsetting.json";
             if (FileUtil::Stat(viewSettings).exists())
             {
-                const std::string settings = extractViewSettings(viewSettings, session, _isViewSettingsAccessibilityEnabled, _isViewSettingsUpdated);
+                const std::string settings = extractViewSettings(viewSettings, session, _isViewSettingsUpdated);
                 session->sendTextFrame("viewsetting: " + settings);
             }
             forwardToChild(session, "addconfig");
@@ -5148,17 +5165,22 @@ DocumentBroker::applySignViewSettings(const std::string& message,
     return finalMsg;
 }
 
-std::string DocumentBroker::applyViewAccessibility(const std::string& message,
+std::string DocumentBroker::applyBrowserAccessibility(const std::string& message,
                                                    const std::string& viewId)
 {
-    if (!_isViewSettingsAccessibilityEnabled)
-        return message;
-
+    bool accessibilityEnabled = false;
     const auto it = _sessions.find(viewId);
     if (it != _sessions.end())
-        it->second->sendTextFrame("lockaccessibilityon");
+    {
+        auto session = it->second;
+        auto json = session->getBrowserSettingJSON();
+        JsonUtil::findJSONValue(json, "accessibilityState", accessibilityEnabled);
+    }
     else
         LOG_WRN("Cannot lock accessibility on for ClientSession [" << viewId << ']');
+
+    if (!accessibilityEnabled)
+        return message;
 
     // Ensure accessibilityState=true is enabled. Overwrite accessibilityState=
     // if it exists, append otherwise.
@@ -5190,7 +5212,7 @@ std::string DocumentBroker::applyViewSetting(const std::string& message, const s
                                              const std::shared_ptr<ClientSession>& session)
 {
     std::string msgWithSignSettings = applySignViewSettings(message, session);
-    return applyViewAccessibility(msgWithSignSettings, viewId);
+    return applyBrowserAccessibility(msgWithSignSettings, viewId);
 }
 
 bool DocumentBroker::forwardToChild(const std::shared_ptr<ClientSession>& session,

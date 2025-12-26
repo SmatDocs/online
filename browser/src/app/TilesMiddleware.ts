@@ -253,6 +253,7 @@ class TileManager {
 	// updating during scrolling
 	private static directionalTileExpansion: number = 2;
 	private static pausedForCoherency: boolean = false;
+	private static dehydratedCurrentTiles: string[] = [];
 	private static shrinkCurrentId: any = null;
 
 	//private static _debugTime: any = {}; Reserved for future.
@@ -490,9 +491,12 @@ class TileManager {
 		}
 
 		// Check if all current visible tiles are accounted for and resume drawing if so.
-		if (this.pausedForCoherency && this.visibleTilesReady()) {
-			app.sectionContainer.resumeDrawing();
-			this.pausedForCoherency = false;
+		if (this.visibleTilesReady()) {
+			if (this.pausedForCoherency) {
+				app.sectionContainer.resumeDrawing();
+				this.pausedForCoherency = false;
+			}
+			app.sectionContainer.deferDrawing(null);
 		}
 
 		if (this.nPendingWorkerTasks === 0)
@@ -516,6 +520,21 @@ class TileManager {
 				imageData.byteLength,
 			);
 			const image = new ImageData(clampedData, this.tileSize, this.tileSize);
+
+			// uncomment to dump each image as a data url to console to see each
+			// tile snapshot
+			/*
+			const extremedebug = false;
+			if (extremedebug) {
+				const canvas = document.createElement('canvas');
+				canvas.width = image.width;
+				canvas.height = image.height;
+				canvas.getContext('2d').putImageData(image, 0, 0);
+				const pngDataUrl = canvas.toDataURL('image/png');
+				console.log(pngDataUrl);
+			}
+			*/
+
 			bitmaps.push(
 				createImageBitmap(image, {
 					premultiplyAlpha: 'none',
@@ -926,6 +945,17 @@ class TileManager {
 		}
 	}
 
+	private static rehydrateCurrentTiles() {
+		// If the graphics memory of visible tiles was reclaimed, we have tiles that
+		// have a valid delta cache, but no corresponding bitmap.
+		this.beginTransaction();
+		while (this.dehydratedCurrentTiles.length) {
+			const tile = this.tiles.get(this.dehydratedCurrentTiles.pop());
+			if (tile) this.rehydrateTile(tile, false);
+		}
+		this.endTransaction(null);
+	}
+
 	private static endTransaction(callback: any = null) {
 		if (this.inTransaction === 0) {
 			window.app.console.error('Mismatched endTransaction');
@@ -1317,6 +1347,19 @@ class TileManager {
 		for (let i = 1; i < visibleRanges.length; ++i) {
 			const distance = tileBounds.distanceTo(visibleRanges[i]);
 			if (distance < tile.distanceFromView) tile.distanceFromView = distance;
+		}
+	}
+
+	private static updateAllTileDistances() {
+		// FIXME: updateFileBasedView seems to be doing a lot. Does it need to be special-cased?
+		if (app.file.fileBasedView) this.updateFileBasedView(true);
+		else {
+			const visibleRanges = this.getVisibleRanges();
+			const zoom = Math.round(app.map.getZoom());
+			for (const tile of this.tiles.values()) {
+				this.updateTileDistance(tile, zoom, visibleRanges);
+			}
+			this.sortTileBitmapList();
 		}
 	}
 
@@ -1920,17 +1963,23 @@ class TileManager {
 	}
 
 	public static pruneTiles() {
-		// update tile.distanceFromView for the view
-		if (app.file.fileBasedView) this.updateFileBasedView(true);
-
+		this.updateAllTileDistances();
 		this.garbageCollect();
 	}
 
-	public static discardAllCache() {
-		// update tile.distanceFromView for the view
-		if (app.file.fileBasedView) this.updateFileBasedView(true);
+	public static reclaimGraphicsMemory() {
+		for (const [key, tile] of this.tiles.entries()) {
+			if (tile.distanceFromView === 0) this.dehydratedCurrentTiles.push(key);
+			this.reclaimTileBitmapMemory(tile);
+		}
+		if (this.dehydratedCurrentTiles.length)
+			app.sectionContainer.deferDrawing(this.rehydrateCurrentTiles.bind(this));
+	}
 
+	public static discardAllCache() {
+		this.updateAllTileDistances();
 		this.garbageCollect(true);
+		this.reclaimGraphicsMemory();
 	}
 
 	public static isValidTile(coords: TileCoordData) {
@@ -2315,6 +2364,7 @@ class TileManager {
 				if (tempTile) this.makeTileCurrent(tempTile);
 			}
 			this.endTransaction(null);
+			this.sortTileBitmapList();
 		}
 
 		if (checkOnly) {

@@ -123,8 +123,14 @@ JSDialog.OpenDropdown = function (id, popupParent, entries, innerCallback, popup
 		json.children[0].children.push(entry);
 	}
 
-	var lastSubMenuOpened = null;
 	var generateCallback = function (targetEntries) {
+		let lastSubMenuOpened = null;
+		const closeLastSubMenu = () => {
+			if (!lastSubMenuOpened) return;
+			JSDialog.CloseDropdown(lastSubMenuOpened);
+			lastSubMenuOpened = null;
+		};
+
 		return function(objectType, eventType, object, data, builder) {
 			if (typeof data == 'number') var pos = data;
 			else var pos = data ? parseInt(data.substr(0, data.indexOf(';'))) : null;
@@ -132,16 +138,8 @@ JSDialog.OpenDropdown = function (id, popupParent, entries, innerCallback, popup
 			var subMenuId = object.id + '-' + pos;
 
 			if (eventType === 'selected' || eventType === 'showsubmenu') {
-				if (lastSubMenuOpened === subMenuId)
-					return;
 				if (entry && entry.items) {
-					if (lastSubMenuOpened) {
-						var submenu = JSDialog.GetDropdown(lastSubMenuOpened);
-						if (submenu) {
-							JSDialog.CloseDropdown(lastSubMenuOpened);
-							lastSubMenuOpened = null;
-						}
-					}
+					closeLastSubMenu();
 
 					// open submenu
 					var dropdown = JSDialog.GetDropdown(object.id);
@@ -162,6 +160,8 @@ JSDialog.OpenDropdown = function (id, popupParent, entries, innerCallback, popup
 						if (focusables && focusables.length)
 							focusables[0].focus();
 					});
+
+					return;
 				} else if (eventType === 'selected' && entry && entry.uno) {
 					var uno = (entry.uno.indexOf('.uno:') === 0) ? entry.uno : '.uno:' + entry.uno;
 					window.L.Map.THIS.sendUnoCommand(uno);
@@ -169,9 +169,9 @@ JSDialog.OpenDropdown = function (id, popupParent, entries, innerCallback, popup
 					return;
 				}
 			} else if (eventType === 'hidedropdown') {
-				if (lastSubMenuOpened)
-					JSDialog.CloseDropdown(lastSubMenuOpened);
+				closeLastSubMenu();
 				JSDialog.CloseDropdown(id);
+				return;
 			}
 
 			// for multi-level menus last parameter should be used to handle event (it contains selected entry)

@@ -1026,45 +1026,11 @@ button.leaflet-control-search-next
 	width: 32px !important;
 	height: 32px !important; }
 
-#layout0-button,
-#layout1-button,
-#layout2-button,
-#layout3-button,
-#layout4-button,
-#layout5-button,
-#layout6-button,
-#layout7-button,
-#layout8-button,
-#layout9-button,
-#layout10-button,
-#layout11-button,
-#layout12-button,
-#layout13-button,
-#layout14-button,
-#layout15-button {
+[id^='slidelayoutgrid'] [modelId^='layout'] button,
+[id^='slidelayoutgrid'] [modelId^='layout'] img {
 	background-size: 64px 64px !important;
-	width: 64px;
-	height: 64px;
-}
-
-#layout0-button img,
-#layout1-button img,
-#layout2-button img,
-#layout3-button img,
-#layout4-button img,
-#layout5-button img,
-#layout6-button img,
-#layout7-button img,
-#layout8-button img,
-#layout9-button img,
-#layout10-button img,
-#layout11-button img,
-#layout12-button img,
-#layout13-button img,
-#layout14-button img,
-#layout15-button img {
-	width: 100%;
-	height: 100%;
+	width: 64px !important;
+	height: 64px !important;
 }
 
 .w2ui-icon.print { background: url('images/lc_print.svg') no-repeat center; }
