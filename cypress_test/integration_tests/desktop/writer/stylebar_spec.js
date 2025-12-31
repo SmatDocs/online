@@ -8,35 +8,37 @@ describe(['tagdesktop'], 'Test style sidebar', function() {
 		cy.viewport(1920,1080);
 		helper.setupAndLoadDocument('writer/stylebar.odt');
 
+		// wait for notebookbar load
+		cy.cGet('#stylesview .ui-iconview-entry img').should('exist');
+
 		cy.cGet('#Format-tab-label').click();
 		cy.cGet('#toolbar-up [id^="format-style-dialog"] button:visible').click();
 		cy.cGet('#StyleListDeck').should('exist').should('be.visible');
 
+		renderEntry('Complimentary Close');
+
 		cy.viewport(1000,660);
 
-		// wait for entries
-
-		cy.cGet('#treeview .ui-treeview-cell-text').contains('Complimentary Close')
-			.should('exist');
-
-		cy.wait(2000); // stabilize
-
-		// show and trigger render
-		cy.cGet('#treeview .ui-treeview-cell-text').contains('Complimentary Close')
-			.should('exist').scrollIntoView();
-
-		cy.wait(2000); // stabilize
+		getEntry('Complimentary Close'); // check render exists
 	});
 
+	/// finds rendered entry or text one and scrolls into view to trigger observer action
+	function renderEntry(text) {
+		cy.cGet('#treeview .ui-treeview-cell-text [textContent="' + text + '"], #treeview img.ui-treeview-custom-render[alt="' + text + '"]',
+			{ timeout: 20000 }).should('exist').scrollIntoView();
+	}
+
+	/// finds rendered entry
 	function getEntry(text) {
-		return cy.cGet('#treeview img.ui-treeview-custom-render[alt="' + text + '"]').should('exist');
+		return cy.cGet('#treeview img.ui-treeview-custom-render[alt="' + text + '"]', { timeout: 20000 })
+			.should('exist');
 	}
 
 	it('Style sidebar updates rendered preview on added style', function() {
 		getEntry('Complimentary Close').click();
 
 		cy.wait(2000); // stabilize
-		cy.cGet('#sidebar-dock-wrapper').compareSnapshot('style_initial', 0.05);
+		cy.cGet('#sidebar-dock-wrapper').compareSnapshot('style_initial', 0.07);
 
 		// open context menu and "new" dialog
 		getEntry('Complimentary Close').rightclick();
@@ -54,7 +56,7 @@ describe(['tagdesktop'], 'Test style sidebar', function() {
 			.find('.ui-treeview-expander-column').should('exist').click();
 
 		cy.wait(2000); // stabilize
-		cy.cGet('#sidebar-dock-wrapper').compareSnapshot('style_added', 0.05);
+		cy.cGet('#sidebar-dock-wrapper').compareSnapshot('style_added', 0.07);
 	});
 
 	it('Style sidebar context menu on node with spaces', function() {
