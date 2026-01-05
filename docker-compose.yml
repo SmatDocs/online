@@ -17,8 +17,6 @@ services:
       # Persist build artifacts and cache
       - coolwsd-build-cache:/srv/apps/online/.libs
       - coolwsd-cache:/srv/apps/online/cache
-      # Jails directory - named volume mounted at hardcoded path from ./configure
-      - coolwsd-jails:/srv/apps/online/jails
     networks:
       - smartdocs_network
     restart: on-failure
@@ -42,12 +40,13 @@ services:
     command: >
       sh -c "cd /srv/apps/online/browser && npm install &&
              cd /srv/apps/online && make -j $$(nproc) &&
-             mkdir -p /tmp/cool-jails /tmp/cool-cache &&
-             chmod 777 /tmp/cool-jails /tmp/cool-cache &&
+             mkdir -p /tmp/systemplate /tmp/jails /tmp/cache &&
+             ./coolwsd-systemplate-setup /tmp/systemplate /srv/apps/libreoffice-mini/instdir &&
+             chmod -R 777 /tmp/systemplate /tmp/jails /tmp/cache &&
              ./coolwsd --disable-cool-user-checking
-             --o:sys_template_path=/srv/apps/online/systemplate
-             --o:child_root_path=/tmp/cool-jails
-             --o:cache_files.path=/tmp/cool-cache
+             --o:sys_template_path=/tmp/systemplate
+             --o:child_root_path=/tmp/jails
+             --o:cache_files.path=/tmp/cache
              --o:storage.filesystem[@allow]=true
              --o:ssl.enable=false
              --o:admin_console.username=admin
@@ -63,5 +62,3 @@ volumes:
     name: smartdocs-coolwsd-build-cache
   coolwsd-cache:
     name: smartdocs-coolwsd-cache
-  coolwsd-jails:
-    name: smartdocs-coolwsd-jails
