@@ -28,6 +28,8 @@ services:
       - CHOWN
       - SYS_CHROOT
     # Required for coolwsd to function properly (needs user namespaces)
+    # privileged mode needed because host has apparmor_restrict_unprivileged_userns enabled
+    privileged: true
     security_opt:
       - seccomp:unconfined
       - apparmor:unconfined
