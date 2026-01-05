@@ -36,7 +36,18 @@ services:
     environment:
       - TZ=UTC
     working_dir: /srv/apps/online
-    command: ["sh", "-c", "cd /srv/apps/online/browser && npm install && cd /srv/apps/online && make -j $(nproc) && make run"]
+    # Build normally, then run coolwsd with --disable-cool-user-checking for Docker
+    command: >
+      sh -c "cd /srv/apps/online/browser && npm install &&
+             cd /srv/apps/online && make -j $$(nproc) &&
+             ./coolwsd --disable-cool-user-checking
+             --o:sys_template_path=/srv/apps/online/systemplate
+             --o:child_root_path=/srv/apps/online/jails
+             --o:storage.filesystem[@allow]=true
+             --o:ssl.enable=false
+             --o:admin_console.username=admin
+             --o:admin_console.password=admin
+             --o:logging.level=trace"
 
 networks:
   smartdocs_network:

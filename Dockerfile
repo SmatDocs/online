@@ -59,6 +59,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Configure git to allow mounted directories (fixes "dubious ownership" error)
 RUN git config --global --add safe.directory '*'
 
+# Create the cool user (coolwsd refuses to run as root)
+RUN adduser --quiet --system --group --home /opt/cool cool
+
 # Set the working directory (must match host path since Makefile has absolute paths)
 WORKDIR /srv/apps/online
 
@@ -68,6 +71,11 @@ WORKDIR /srv/apps/online
 # Expose the default coolwsd port
 EXPOSE 9980
 
-# Default command - installs npm deps, builds and runs the application
-CMD ["sh", "-c", "cd /srv/apps/online/browser && npm install && cd /srv/apps/online && make -j $(nproc) && make run"]
+# NOTE: We don't use USER here because:
+# - npm install and make need write access to the mounted volume (runs as root)
+# - Only coolwsd (make run) needs to run as 'cool' user
+# The Makefile's 'run' target already handles switching to cool user internally
+# But if it doesn't, we'll handle it in the command
 
+# Default command - builds as root, runs coolwsd
+CMD ["sh", "-c", "cd /srv/apps/online/browser && npm install && cd /srv/apps/online && make -j $(nproc) && make run"]
