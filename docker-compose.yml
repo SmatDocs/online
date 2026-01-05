@@ -17,6 +17,8 @@ services:
       # Persist build artifacts and cache
       - coolwsd-build-cache:/srv/apps/online/.libs
       - coolwsd-cache:/srv/apps/online/cache
+      # Jails directory - needs to be a named volume to avoid host permission issues
+      - coolwsd-jails:/opt/cool/jails
     networks:
       - smartdocs_network
     restart: on-failure
@@ -40,12 +42,12 @@ services:
     command: >
       sh -c "cd /srv/apps/online/browser && npm install &&
              cd /srv/apps/online && make -j $$(nproc) &&
-             mkdir -p /srv/apps/online/jails /srv/apps/online/cache &&
-             chmod 777 /srv/apps/online/jails /srv/apps/online/cache &&
+             mkdir -p /opt/cool/jails /opt/cool/cache /opt/cool/child-roots &&
+             chmod -R 777 /opt/cool &&
              ./coolwsd --disable-cool-user-checking
              --o:sys_template_path=/srv/apps/online/systemplate
-             --o:child_root_path=/srv/apps/online/jails
-             --o:cache_files.path=/srv/apps/online/cache
+             --o:child_root_path=/opt/cool/jails
+             --o:cache_files.path=/opt/cool/cache
              --o:storage.filesystem[@allow]=true
              --o:ssl.enable=false
              --o:admin_console.username=admin
@@ -61,3 +63,5 @@ volumes:
     name: smartdocs-coolwsd-build-cache
   coolwsd-cache:
     name: smartdocs-coolwsd-cache
+  coolwsd-jails:
+    name: smartdocs-coolwsd-jails
