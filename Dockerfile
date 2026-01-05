@@ -47,6 +47,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpam-dev \
     python3-lxml \
     libgif-dev \
+    # Podman - workaround for apparmor_restrict_unprivileged_userns
+    podman \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 20.x (required for browser build - ESLint, etc.)
