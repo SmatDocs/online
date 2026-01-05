@@ -50,14 +50,15 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Configure git to allow mounted directories (fixes "dubious ownership" error)
 RUN git config --global --add safe.directory '*'
 
-# Set the working directory
-WORKDIR /app
+# Set the working directory (must match host path since Makefile has absolute paths)
+WORKDIR /srv/apps/online
 
-# The source code will be mounted at /app via volume
+# The source code will be mounted via volume
 # This allows for development with hot-reload capability
 
 # Expose the default coolwsd port
 EXPOSE 9980
 
 # Default command - installs npm deps, builds and runs the application
-CMD ["sh", "-c", "cd /app/browser && npm install && cd /app && make -j $(nproc) && make run"]
+CMD ["sh", "-c", "cd /srv/apps/online/browser && npm install && cd /srv/apps/online && make -j $(nproc) && make run"]
+
