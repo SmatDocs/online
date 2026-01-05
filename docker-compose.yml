@@ -1,0 +1,43 @@
+ 
+services:
+  coolwsd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: smartdocs_coolwsd
+    container_name: smartdocs_coolwsd
+    ports:
+      - "9980:9980"
+    volumes:
+      # Mount the entire online source code directory
+      - .:/app:rw
+      # Persist build artifacts and cache
+      - coolwsd-build-cache:/app/.libs
+      - coolwsd-cache:/app/cache
+    networks:
+      - smartdocs_network
+    restart: on-failure
+    # Security capabilities needed for coolwsd
+    cap_add:
+      - SYS_ADMIN
+      - MKNOD
+      - FOWNER
+      - CHOWN
+      - SYS_CHROOT
+    # Required for coolwsd to function properly
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      - TZ=UTC
+    working_dir: /app
+    command: ["sh", "-c", "make -j $(nproc) && make run"]
+
+networks:
+  smartdocs_network:
+    external: true
+
+volumes:
+  coolwsd-build-cache:
+    name: smartdocs-coolwsd-build-cache
+  coolwsd-cache:
+    name: smartdocs-coolwsd-cache
