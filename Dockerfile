@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-droid-fallback \
     fonts-noto-cjk \
     ca-certificates \
+    git \
+    curl \
     build-essential \
     make \
     automake \
@@ -38,6 +40,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcppunit-dev \
     libssl-dev \
     libzstd-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 20.x (required for browser build - ESLint, etc.)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
