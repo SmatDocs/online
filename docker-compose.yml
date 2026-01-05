@@ -12,6 +12,8 @@ services:
       # Mount the entire online source code directory at the SAME path as host
       # (Makefile has absolute paths from ./configure)
       - .:/srv/apps/online:rw
+      # Mount LibreOffice core (required for coolwsd)
+      - /srv/apps/libreoffice-mini:/srv/apps/libreoffice-mini:ro
       # Persist build artifacts and cache
       - coolwsd-build-cache:/srv/apps/online/.libs
       - coolwsd-cache:/srv/apps/online/cache

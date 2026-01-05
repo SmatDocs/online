@@ -6,6 +6,7 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install runtime dependencies for LibreOffice and coolwsd
+# Based on: https://collaboraonline.github.io/post/build-code/#ubuntu
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpng16-16 \
     fontconfig \
@@ -40,6 +41,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcppunit-dev \
     libssl-dev \
     libzstd-dev \
+    # Poco library - required for coolwsd build
+    libpoco-dev \
+    python3-polib \
+    libpam-dev \
+    python3-lxml \
+    libgif-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 20.x (required for browser build - ESLint, etc.)
