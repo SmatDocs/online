@@ -93,6 +93,11 @@
 	background-color: var(--color-background-tabs-group);
 }
 
+/* if menubutton has text - be sure it is fully visible */
+.menubutton.has-label button {
+	min-width: fit-content;
+}
+
 /*limit icon to button height*/
 button.jsdialog img {
 	max-height: 100%;
@@ -113,7 +118,6 @@ button.jsdialog img {
 	line-height: normal;
 	color: var(--color-main-text);
 	font-size: var(--default-font-size);
-	min-width: 62px;
 	background-color: var(--color-background-dark);
 	border: 1px solid var(--color-btn-border);
 	border: 1px solid var(--color-border-dark);
@@ -121,6 +125,12 @@ button.jsdialog img {
 	margin: 5px;
 	vertical-align: middle;
 	width: max-content;
+}
+
+/* dialog main action buttons should have equal minimal width */
+.ui-button-box .button-secondary,
+.ui-button-box .ui-pushbutton {
+	min-width: 62px !important;
 }
 
 .button-primary {
@@ -209,7 +219,10 @@ button#left.has-img > img {
 
 /* Writer - Format - Page Style - Columns */
 /* Writer - Format - Columns */
-div[id^='TemplateDialog'] #Columns :is(#back, #next) button.has-img,
-#ColumnDialog :is(#back, #next) button.has-img {
+/* Insert field using Writer - Reference - Cross-Reference, double click on inserted field to edit */
+div[id^='TemplateDialog'] #Columns :is(#back, #next) button.has-img img,
+div[id^='ColumnDialog'] :is(#back, #next) button.has-img img,
+div[id^='FieldRefPage'] :is(#prev, #next) button.has-img img {
 	width: 100%;
+	height: 100%;
 }
