@@ -43,6 +43,8 @@ services:
              mkdir -p /tmp/systemplate /tmp/jails /tmp/cache &&
              ./coolwsd-systemplate-setup /tmp/systemplate /srv/apps/libreoffice-mini/instdir &&
              chmod -R 777 /tmp/systemplate /tmp/jails /tmp/cache &&
+             sed -i 's|<sys_template_path[^>]*>[^<]*</sys_template_path>|<sys_template_path type=\"path\" relative=\"false\">/tmp/systemplate</sys_template_path>|' coolwsd.xml &&
+             sed -i 's|<child_root_path[^>]*>[^<]*</child_root_path>|<child_root_path type=\"path\" relative=\"false\">/tmp/jails</child_root_path>|' coolwsd.xml &&
              ./coolwsd --disable-cool-user-checking
              --o:sys_template_path=/tmp/systemplate
              --o:child_root_path=/tmp/jails
