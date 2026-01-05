@@ -30,7 +30,7 @@ services:
     environment:
       - TZ=UTC
     working_dir: /app
-    command: ["sh", "-c", "make -j $(nproc) && make run"]
+    command: ["sh", "-c", "cd /app/browser && npm install && cd /app && make -j $(nproc) && make run"]
 
 networks:
   smartdocs_network:
