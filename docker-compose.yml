@@ -40,9 +40,12 @@ services:
     command: >
       sh -c "cd /srv/apps/online/browser && npm install &&
              cd /srv/apps/online && make -j $$(nproc) &&
+             mkdir -p /srv/apps/online/jails /srv/apps/online/cache &&
+             chmod 777 /srv/apps/online/jails /srv/apps/online/cache &&
              ./coolwsd --disable-cool-user-checking
              --o:sys_template_path=/srv/apps/online/systemplate
              --o:child_root_path=/srv/apps/online/jails
+             --o:cache_files.path=/srv/apps/online/cache
              --o:storage.filesystem[@allow]=true
              --o:ssl.enable=false
              --o:admin_console.username=admin
