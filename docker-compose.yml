@@ -27,9 +27,10 @@ services:
       - FOWNER
       - CHOWN
       - SYS_CHROOT
-    # Required for coolwsd to function properly
+    # Required for coolwsd to function properly (needs user namespaces)
     security_opt:
       - seccomp:unconfined
+      - apparmor:unconfined
     environment:
       - TZ=UTC
     working_dir: /srv/apps/online
