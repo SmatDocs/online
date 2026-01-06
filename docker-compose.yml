@@ -38,7 +38,7 @@ services:
     working_dir: /srv/apps/online
     # Build normally, then run coolwsd with --disable-cool-user-checking for Docker
     command: >
-      sh -c "rm -f browser/25.04.9.0 && cd /srv/apps/online/browser && npm install &&
+      sh -c "rm -rf browser/25.04.9.0 && cd /srv/apps/online/browser && npm install &&
              cd /srv/apps/online && make -j $$(nproc) &&
              mkdir -p /tmp/systemplate /tmp/jails /tmp/cache &&
              ./coolwsd-systemplate-setup /tmp/systemplate /srv/apps/libreoffice-mini/instdir &&
@@ -48,7 +48,7 @@ services:
              sed -i 's|<file_server_root_path[^>]*>[^<]*</file_server_root_path>|<file_server_root_path type=\"path\" relative=\"false\">/srv/apps/online</file_server_root_path>|' coolwsd.xml &&
              sed -i 's|<username[^>]*></username>|<username>admin</username>|' coolwsd.xml &&
              sed -i 's|<password[^>]*></password>|<password>admin</password>|' coolwsd.xml &&
-             cd browser && ln -sfn dist 25.04.9.0 && cd .. &&
+             cd browser && cp -a dist 25.04.9.0 && cd .. &&
              ./coolwsd --disable-cool-user-checking
              --o:sys_template_path=/tmp/systemplate
              --o:child_root_path=/tmp/jails
@@ -58,7 +58,7 @@ services:
              --o:ssl.enable=false
              --o:admin_console.username=admin
              --o:admin_console.password=admin
-             --o:logging.level=trace"
+             "--o:logging.level=trace"
 
 networks:
   smartdocs_network:
