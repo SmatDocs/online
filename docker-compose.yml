@@ -47,6 +47,9 @@ services:
         cd /srv/apps/online && make -j $(nproc)
         mkdir -p /tmp/systemplate /tmp/jails /tmp/cache
         ./coolwsd-systemplate-setup /tmp/systemplate /srv/apps/libreoffice-mini/instdir
+        # Copy Python scripts into systemplate so LibreOffice can find them
+        mkdir -p /tmp/systemplate/lo/share/Scripts/python
+        cp -r /srv/apps/libreoffice-mini/instdir/share/Scripts/python/* /tmp/systemplate/lo/share/Scripts/python/
         chmod -R 777 /tmp/systemplate /tmp/jails /tmp/cache
         sed -i 's|<sys_template_path[^>]*>[^<]*</sys_template_path>|<sys_template_path type="path" relative="false">/tmp/systemplate</sys_template_path>|' coolwsd.xml
         sed -i 's|<child_root_path[^>]*>[^<]*</child_root_path>|<child_root_path type="path" relative="false">/tmp/jails</child_root_path>|' coolwsd.xml
