@@ -54,7 +54,7 @@ services:
         sed -i 's|<username[^>]*></username>|<username>admin</username>|' coolwsd.xml
         sed -i 's|<password[^>]*></password>|<password>admin</password>|' coolwsd.xml
         # Configure frame-ancestors CSP to allow embedding from any origin (for development)
-        sed -i 's|</content_security_policy>|frame-ancestors *;</content_security_policy>|' coolwsd.xml
+        # Using command-line option instead of sed for multiline XML
         cd browser && cp -a dist 25.04.9.0 && cd ..
         exec ./coolwsd --disable-cool-user-checking \
           --o:sys_template_path=/tmp/systemplate \
@@ -65,6 +65,7 @@ services:
           --o:ssl.enable=false \
           --o:admin_console.username=admin \
           --o:admin_console.password=admin \
+          '--o:net.content_security_policy=frame-ancestors *;' \
           --o:logging.level=trace
 
 networks:
