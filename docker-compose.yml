@@ -48,8 +48,17 @@ services:
              sed -i 's|<file_server_root_path[^>]*>[^<]*</file_server_root_path>|<file_server_root_path type=\"path\" relative=\"false\">/srv/apps/online</file_server_root_path>|' coolwsd.xml &&
              sed -i 's|<username[^>]*></username>|<username>admin</username>|' coolwsd.xml &&
              sed -i 's|<password[^>]*></password>|<password>admin</password>|' coolwsd.xml &&
-             ln -sfn dist browser/25.04.9.0 2>/dev/null || true &&
-             ./coolwsd --disable-cool-user-checking --o:sys_template_path=/tmp/systemplate --o:child_root_path=/tmp/jails --o:cache_files.path=/tmp/cache --o:file_server_root_path=/srv/apps/online --o:storage.filesystem[@allow]=true --o:ssl.enable=false --o:admin_console.username=admin --o:admin_console.password=admin --o:logging.level=trace"
+             cd browser && ln -sfn dist 25.04.9.0 && cd .. &&
+             ./coolwsd --disable-cool-user-checking
+             --o:sys_template_path=/tmp/systemplate
+             --o:child_root_path=/tmp/jails
+             --o:cache_files.path=/tmp/cache
+             --o:file_server_root_path=/srv/apps/online
+             --o:storage.filesystem[@allow]=true
+             --o:ssl.enable=false
+             --o:admin_console.username=admin
+             --o:admin_console.password=admin
+             --o:logging.level=trace"
 
 networks:
   smartdocs_network:
