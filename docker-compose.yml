@@ -48,9 +48,8 @@ services:
              sed -i 's|<file_server_root_path[^>]*>[^<]*</file_server_root_path>|<file_server_root_path type=\"path\" relative=\"false\">/srv/apps/online</file_server_root_path>|' coolwsd.xml &&
              sed -i 's|<username[^>]*></username>|<username>admin</username>|' coolwsd.xml &&
              sed -i 's|<password[^>]*></password>|<password>admin</password>|' coolwsd.xml &&
-             COOL_VERSION=$$(./coolforkit-ns --version 2>&1 | head -1 | awk '{print $$3}' | cut -d- -f1) &&
-             if [ -n \"$$COOL_VERSION\" ] && [ ! -d browser/$$COOL_VERSION ]; then echo Creating browser symlink for version $$COOL_VERSION && ln -sfn dist browser/$$COOL_VERSION; fi &&
-             exec ./coolwsd --disable-cool-user-checking --o:sys_template_path=/tmp/systemplate --o:child_root_path=/tmp/jails --o:cache_files.path=/tmp/cache --o:file_server_root_path=/srv/apps/online --o:storage.filesystem[@allow]=true --o:ssl.enable=false --o:admin_console.username=admin --o:admin_console.password=admin --o:logging.level=trace"
+             ln -sfn dist browser/25.04.9.0 2>/dev/null || true &&
+             ./coolwsd --disable-cool-user-checking --o:sys_template_path=/tmp/systemplate --o:child_root_path=/tmp/jails --o:cache_files.path=/tmp/cache --o:file_server_root_path=/srv/apps/online --o:storage.filesystem[@allow]=true --o:ssl.enable=false --o:admin_console.username=admin --o:admin_console.password=admin --o:logging.level=trace"
 
 networks:
   smartdocs_network:
