@@ -38,7 +38,7 @@ services:
     working_dir: /srv/apps/online
     # Build normally, then run coolwsd with --disable-cool-user-checking for Docker
     command: >
-      sh -c "cd /srv/apps/online/browser && npm install &&
+      sh -c "rm -f browser/25.04.9.0 && cd /srv/apps/online/browser && npm install &&
              cd /srv/apps/online && make -j $$(nproc) &&
              mkdir -p /tmp/systemplate /tmp/jails /tmp/cache &&
              ./coolwsd-systemplate-setup /tmp/systemplate /srv/apps/libreoffice-mini/instdir &&
