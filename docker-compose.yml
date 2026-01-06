@@ -58,7 +58,7 @@ services:
              --o:ssl.enable=false
              --o:admin_console.username=admin
              --o:admin_console.password=admin
-             "--o:logging.level=trace"
+             --o:logging.level=trace"
 
 networks:
   smartdocs_network:
