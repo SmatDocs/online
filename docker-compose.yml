@@ -48,6 +48,9 @@ services:
              sed -i 's|<file_server_root_path[^>]*>[^<]*</file_server_root_path>|<file_server_root_path type=\"path\" relative=\"false\">/srv/apps/online</file_server_root_path>|' coolwsd.xml &&
              sed -i 's|<username[^>]*></username>|<username>admin</username>|' coolwsd.xml &&
              sed -i 's|<password[^>]*></password>|<password>admin</password>|' coolwsd.xml &&
+             COOL_VERSION=$$(./coolwsd --version 2>&1 | grep -oP 'coolwsd version \\K[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+' | head -1) &&
+             echo Creating browser symlink for version $$COOL_VERSION &&
+             ln -sfn dist browser/$$COOL_VERSION &&
              ./coolwsd --disable-cool-user-checking
              --o:sys_template_path=/tmp/systemplate
              --o:child_root_path=/tmp/jails
