@@ -53,6 +53,8 @@ services:
         sed -i 's|<file_server_root_path[^>]*>[^<]*</file_server_root_path>|<file_server_root_path type="path" relative="false">/srv/apps/online</file_server_root_path>|' coolwsd.xml
         sed -i 's|<username[^>]*></username>|<username>admin</username>|' coolwsd.xml
         sed -i 's|<password[^>]*></password>|<password>admin</password>|' coolwsd.xml
+        # Configure frame-ancestors CSP to allow embedding from any origin (for development)
+        sed -i 's|</content_security_policy>|frame-ancestors *;</content_security_policy>|' coolwsd.xml
         cd browser && cp -a dist 25.04.9.0 && cd ..
         exec ./coolwsd --disable-cool-user-checking \
           --o:sys_template_path=/tmp/systemplate \
