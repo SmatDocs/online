@@ -1406,7 +1406,7 @@ std::string FileServerRequestHandler::getRequestPathname(const HTTPRequest& requ
 
     std::string path(requestUri.getPath());
 
-    Poco::RegularExpression gitHashRe("/([0-9a-f]+)/");
+    Poco::RegularExpression gitHashRe("/([0-9a-f.]+)/");
     std::string gitHash;
     if (gitHashRe.extract(path, gitHash))
     {
