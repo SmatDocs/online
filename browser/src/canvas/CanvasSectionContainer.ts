@@ -597,6 +597,9 @@ class CanvasSectionContainer {
 			layoutingService.cancelFrame();
 
 		while (layoutingService.runTheTopTask());
+
+		// Trigger drain callbacks since we bypassed the normal async flow
+		layoutingService.triggerDrainCallbacks();
 	}
 
 	private isCanvasSizeValidAfterDisplayChange(): boolean {
@@ -1191,7 +1194,7 @@ class CanvasSectionContainer {
 	}
 
 	public onMouseDown (e: MouseEvent) { // Ignore this event, just rely on this.draggingSomething variable.
-		if (e.button === 0 && !this.touchEventInProgress) { // So, we only handle left button.
+		if (e.button === 0 && !this.touchEventInProgress && this.mouseIsInside ) { // So, we only handle left button (and only when mouse is inside).
 			this.clearMousePositions();
 			this.positionOnMouseDown = this.convertPositionToCanvasLocale(e);
 

@@ -740,7 +740,7 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_a
    # Sanity checks
    CHK_FILE_VAR(POCOINCLUDE,Poco/Poco.h,Poco include)
    CHK_FILE_VAR(POCOINCLUDE,Poco/Poco.h,Poco include,_ARM64_V8A)
-   CHK_FILE_VAR(POCOINCLUDE,Poco/Poco.h,Poco include,_X64)
+   CHK_FILE_VAR(POCOINCLUDE,Poco/Poco.h,Poco include,_X86)
    CHK_FILE_VAR(POCOINCLUDE,Poco/Poco.h,Poco include,_X86_64)
 
    AC_MSG_CHECKING([for Poco lib directory to build against])
@@ -771,8 +771,8 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_a
    # Sanity checks
    CHK_FILE_VAR(POCOLIB,libPocoFoundation.a,Poco lib)
    CHK_FILE_VAR(POCOLIB,libPocoFoundation.a,Poco lib,_ARM64_V8A)
-   CHK_FILE_VAR(POCOLIB,libPocoFoundation.a,Poco lib,_X64)
-   CHK_FILE_VAR(POCOLIB,libPocoFoundation.a,Poco lib,_X86_X64)
+   CHK_FILE_VAR(POCOLIB,libPocoFoundation.a,Poco lib,_X86)
+   CHK_FILE_VAR(POCOLIB,libPocoFoundation.a,Poco lib,_X86_64)
 
    if test "$ENABLE_DEBUG" = "true" ; then
        POCODEBUG=d
@@ -806,7 +806,7 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_a
    # Sanity checks
    CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include)
    CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include,_ARM64_V8A)
-   CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include,_X64)
+   CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include,_X86)
    CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include,_X86_64)
 
    ZSTDLIB="$with_zstd_libs"
@@ -831,7 +831,7 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_a
 
    CHK_FILE_VAR(ZSTDLIB,libzstd.a,Zstd lib)
    CHK_FILE_VAR(ZSTDLIB,libzstd.a,Zstd lib,_ARM64_V8A)
-   CHK_FILE_VAR(ZSTDLIB,libzstd.a,Zstd lib,_X64)
+   CHK_FILE_VAR(ZSTDLIB,libzstd.a,Zstd lib,_X86)
    CHK_FILE_VAR(ZSTDLIB,libzstd.a,Zstd lib,_X86_64)
 fi
 
@@ -984,8 +984,10 @@ AM_CONDITIONAL([ENABLE_WASM_FALLBACK], [test -n "$with_wasm_fallback"])
 WASM_BUILDDIR="$with_wasm_fallback"
 AC_SUBST(WASM_BUILDDIR)
 AS_IF([test -n "$with_wasm_fallback"],
-      [WASM_SUPPORT_ENABLE=true],
-      [WASM_SUPPORT_ENABLE=false])
+      [WASM_SUPPORT_ENABLE=true
+       AC_DEFINE([ENABLE_WASM_SUPPORT],1,[Define to 1 if the "fallback to Wasm" capability is enabled])],
+      [WASM_SUPPORT_ENABLE=false
+       AC_DEFINE([ENABLE_WASM_SUPPORT],0,[Define to 1 if the "fallback to Wasm" capability is enabled])])
 AC_SUBST(WASM_SUPPORT_ENABLE)
 
 AM_CONDITIONAL([ENABLE_WASM_ADDITIONAL_FILES], [test -n "$with_wasm_additional_files"])
@@ -1146,7 +1148,7 @@ if test "x$with_coverage" != "x"; then
 
     AC_DEFUN([AC_PROG_LCOV], [AC_CHECK_PROG(LCOV,lcov,yes)])
     AC_PROG_LCOV
-    if test x"${LCOV}" == x"yes" ; then
+    if test x"${LCOV}" = x"yes" ; then
         AC_MSG_RESULT([yes ($with_coverage)])
         CODE_COVERAGE=1
         CXXFLAGS="$CXXFLAGS --coverage"
@@ -1213,6 +1215,18 @@ if test "x$with_sanitizer" != "x"; then
     CFLAGS="$CFLAGS $SANITIZER_FLAGS"
 else
     AC_MSG_RESULT([no])
+fi
+ENABLE_RUNTIME_OPTIMIZATIONS=
+for i in $CC; do
+    case $i in
+    -fsanitize=*)
+        ENABLE_RUNTIME_OPTIMIZATIONS=no
+        break
+        ;;
+    esac
+done
+if test "$ENABLE_RUNTIME_OPTIMIZATIONS" != no; then
+    AC_DEFINE([ENABLE_RUNTIME_OPTIMIZATIONS],1,[Define to 1 if this is not a santitizers build.])
 fi
 
 # Check for C++20 support.

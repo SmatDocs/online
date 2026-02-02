@@ -14,7 +14,7 @@
 declare var JSDialog: any;
 
 class GraphicSelection {
-	public static rectangle: cool.SimpleRectangle = null;
+	public static rectangle: cool.SimpleRectangle | null = null;
 	public static extraInfo: any = null;
 	public static selectionAngle: number = 0;
 	public static handlesSection: ShapeHandlesSection = null;
@@ -277,6 +277,10 @@ class GraphicSelection {
 	}
 
 	private static checkChartData() {
+		// Chart Context Buttons are disabled now.
+		// we will probably enable it when chart styles will work fine.
+		var disabled = true;
+		if (disabled) return;
 		if (
 			GraphicSelection.extraInfo &&
 			GraphicSelection.extraInfo.isChartPage &&

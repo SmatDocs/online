@@ -8,7 +8,7 @@ msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2025-12-08 11:25+0100\n"
-"PO-Revision-Date: 2025-12-12 17:32+0000\n"
+"PO-Revision-Date: 2026-01-23 13:46+0000\n"
 "Last-Translator: Méven Car <meven.car@collabora.com>\n"
 "Language-Team: French <https://hosted.weblate.org/projects/collabora-online/"
 "ui/fr/>\n"
@@ -17,7 +17,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=n > 1;\n"
-"X-Generator: Weblate 5.15-dev\n"
+"X-Generator: Weblate 5.16-dev\n"
 
 #: admin/admin.strings.js:15
 msgid "Admin console"
@@ -385,7 +385,7 @@ msgstr "Accessibilité"
 
 #: admin/src/integrator/AdminIntegratorSettings.ts:155
 msgid "Signature Certificate"
-msgstr ""
+msgstr "Certificat de Signature"
 
 #: admin/src/integrator/AdminIntegratorSettings.ts:156
 #, fuzzy
@@ -799,10 +799,12 @@ msgid ""
 "To use Zotero specify your API key here. You can create your API key in "
 "your "
 msgstr ""
+"Pour utiliser Zotero, entrer votre clé d'API ici. Vous pouvez créer votre "
+"clé d'API dans votre "
 
 #: admin/src/integrator/AdminIntegratorSettings.ts:1386
 msgid "Zotero account API settings"
-msgstr ""
+msgstr "les paramètres d'API de votre Compte Zotero"
 
 #: admin/src/integrator/AdminIntegratorSettings.ts:1395
 #, fuzzy
@@ -930,10 +932,14 @@ msgid ""
 "The system is currently adjusting resources. Please wait a moment while we "
 "retry your request..."
 msgstr ""
+"Le système est en train d'ajuster ses ressources. Veuillez patientez un "
+"moment pendant que nous réessayons votre requête..."
 
 #: js/global.js:1612
 msgid "The document is being migrated to a new server. Retrying shortly..."
 msgstr ""
+"Le document est en cours de migration vers un nouveau serveur.\n"
+"Ré-essaie sous-peu..."
 
 #: js/global.js:1614
 msgid "Failed to get RouteToken from controller"
@@ -1003,7 +1009,7 @@ msgstr "Ouvert en pleine vue"
 
 #: src/canvas/sections/CommentListSection.ts:1288
 msgid "Show in navigator"
-msgstr ""
+msgstr "Afficher dans le navigateur"
 
 #: src/canvas/sections/CommentListSection.ts:1316
 #: src/control/Control.JSDialogBuilder.js:1718
@@ -1051,7 +1057,7 @@ msgstr "Ouvrir le menu"
 
 #: src/canvas/sections/CommentSection.ts:347
 msgid "Press Ctrl + Enter to post"
-msgstr ""
+msgstr "Pressez Ctrl + Entrer pour poster"
 
 #: src/canvas/sections/CommentSection.ts:411
 #: src/canvas/sections/CommentSection.ts:412
@@ -1177,7 +1183,7 @@ msgstr ""
 #: src/control/Control.BackstageView.ts:202
 #: src/control/Control.BackstageView.ts:203
 msgid "Back to document"
-msgstr ""
+msgstr "Retourner au document"
 
 #: src/control/Control.BackstageView.ts:238
 #: src/control/Control.NotebookbarCalc.js:29
@@ -1209,7 +1215,7 @@ msgstr "Partager"
 
 #: src/control/Control.BackstageView.ts:266
 msgid "Info"
-msgstr ""
+msgstr "Info"
 
 #: src/control/Control.BackstageView.ts:280
 #: src/control/Control.NotebookbarCalc.js:165
@@ -1221,7 +1227,7 @@ msgstr "Enregistrer sous"
 
 #: src/control/Control.BackstageView.ts:294
 msgid "Export"
-msgstr ""
+msgstr "Exporter"
 
 #: src/control/Control.BackstageView.ts:340
 #: src/control/jsdialog/Widget.ColorPicker.ts:421
@@ -1230,31 +1236,31 @@ msgstr "Récent"
 
 #: src/control/Control.BackstageView.ts:341
 msgid "Recently opened documents will appear here"
-msgstr ""
+msgstr "Les documents récemment ouverts apparaîtront ici"
 
 #: src/control/Control.BackstageView.ts:353
 msgid "New Document"
-msgstr ""
+msgstr "Nouveau Document"
 
 #: src/control/Control.BackstageView.ts:354
 msgid "Start from a template or a blank file"
-msgstr ""
+msgstr "Démarrer depuis un modèle ou un fichier vide"
 
 #: src/control/Control.BackstageView.ts:375
 msgid "Document Info"
-msgstr ""
+msgstr "Info sur le Document"
 
 #: src/control/Control.BackstageView.ts:376
 msgid "View document properties and information"
-msgstr ""
+msgstr "Visualiser les propriétés de document et Informations"
 
 #: src/control/Control.BackstageView.ts:392
 msgid "Export Document"
-msgstr ""
+msgstr "Exporter le Document"
 
 #: src/control/Control.BackstageView.ts:393
 msgid "export your documents in different formats"
-msgstr ""
+msgstr "exporter vos documents dans différents formats"
 
 #: src/control/Control.BackstageView.ts:445 src/control/Control.Menubar.ts:381
 #: src/control/Control.Menubar.ts:1354
@@ -1268,11 +1274,11 @@ msgstr "Propriétés"
 
 #: src/control/Control.BackstageView.ts:451
 msgid "More Property Info"
-msgstr ""
+msgstr "Plus d'information de Propriété"
 
 #: src/control/Control.BackstageView.ts:530
 msgid "Text Document"
-msgstr ""
+msgstr "Document Texte"
 
 #: src/control/Control.BackstageView.ts:530
 #: src/control/Control.BackstageView.ts:533
@@ -1282,11 +1288,11 @@ msgstr "Page"
 
 #: src/control/Control.BackstageView.ts:531
 msgid "Spreadsheet"
-msgstr ""
+msgstr "Feuille de calcul"
 
 #: src/control/Control.BackstageView.ts:531
 msgid "Sheets"
-msgstr ""
+msgstr "Feuille"
 
 #: src/control/Control.BackstageView.ts:532
 #: src/control/Control.NavigatorPanel.ts:189
@@ -1297,7 +1303,7 @@ msgstr "Diapositives"
 
 #: src/control/Control.BackstageView.ts:538
 msgid "Parts"
-msgstr ""
+msgstr "Parties"
 
 #: src/control/Control.BackstageView.ts:542
 #: src/control/Control.DocumentRepair.js:140
@@ -1306,31 +1312,31 @@ msgstr "Type"
 
 #: src/control/Control.BackstageView.ts:548
 msgid "Mode"
-msgstr ""
+msgstr "Mode"
 
 #: src/control/Control.BackstageView.ts:549
 msgid "View Only"
-msgstr ""
+msgstr "Afficher seulement"
 
 #: src/control/Control.BackstageView.ts:556
 msgid "File Name"
-msgstr ""
+msgstr "Nom de Fichier"
 
 #: src/control/Control.BackstageView.ts:658
 msgid "Loading templates…"
-msgstr ""
+msgstr "Chargement des modèles…"
 
 #: src/control/Control.BackstageView.ts:704
 msgid "Search templates"
-msgstr ""
+msgstr "Chercher les modèles"
 
 #: src/control/Control.BackstageView.ts:762
 msgid "No templates match your search."
-msgstr ""
+msgstr "Aucun modèle ne correspond à votre recherche."
 
 #: src/control/Control.BackstageView.ts:868
 msgid "Blank Spreadsheet"
-msgstr ""
+msgstr "Feuille de calcul Vide"
 
 #: src/control/Control.BackstageView.ts:872
 #, fuzzy
@@ -1339,7 +1345,7 @@ msgstr "Fin de la présentation"
 
 #: src/control/Control.BackstageView.ts:877
 msgid "Blank Document"
-msgstr ""
+msgstr "Document Vide"
 
 #: src/control/Control.Command.js:90
 msgid "Unlock"
@@ -2637,7 +2643,7 @@ msgstr "Après"
 
 #: src/control/Notebookbar.ImpressTransitionTab.ts:137
 msgid "Apply to All Slides"
-msgstr ""
+msgstr "Appliquer à toutes les diapos"
 
 #: src/control/Notebookbar.WriterReferencesTab.ts:41
 msgid "Table of content"
@@ -2705,7 +2711,7 @@ msgstr "Fichier"
 #: src/control/Control.NotebookbarWriter.js:936
 #: src/control/Control.NotebookbarWriter.js:2405
 msgid "Insert"
-msgstr "Insertion"
+msgstr "Insérer"
 
 #: src/control/Control.NotebookbarCalc.js:42
 #: src/control/Control.NotebookbarDraw.js:1284
@@ -2990,23 +2996,23 @@ msgstr "Aperçu de la feuille"
 
 #: src/control/Control.NotebookbarCalc.js:1414
 msgid "Default View"
-msgstr ""
+msgstr "Vue par Défaut"
 
 #: src/control/Control.NotebookbarCalc.js:1431
 msgid "Select Sheet View"
-msgstr ""
+msgstr "Sélectionner la Vue de Feuille"
 
 #: src/control/Control.NotebookbarCalc.js:1438
 msgid "New Sheet View"
-msgstr ""
+msgstr "Nouvelle Vue de Feuille"
 
 #: src/control/Control.NotebookbarCalc.js:1445
 msgid "Remove Sheet View"
-msgstr ""
+msgstr "Supprimer la Vue de Feuille"
 
 #: src/control/Control.NotebookbarCalc.js:1452
 msgid "Exit Sheet View"
-msgstr ""
+msgstr "Quitter la Vue de Feuille"
 
 #: src/control/Control.NotebookbarCalc.js:1467
 msgid "Freeze"
@@ -3237,16 +3243,16 @@ msgstr "Présenter dans une fenêtre"
 
 #: src/control/Control.NotebookbarImpress.js:501
 msgid "Start Follow-me Presentation"
-msgstr ""
+msgstr "Démarrer une Présentation me suivant"
 
 #: src/control/Control.NotebookbarImpress.js:509
 #: src/slideshow/SlideShowPresenter.ts:745
 msgid "Follow Presentation"
-msgstr ""
+msgstr "Suivre la Présentation"
 
 #: src/control/Control.NotebookbarImpress.js:637
 msgid "Slide Views"
-msgstr ""
+msgstr "Vues de Diapos"
 
 #: src/control/Control.NotebookbarImpress.js:676
 msgid "Snap to Grid"
@@ -3255,7 +3261,7 @@ msgstr "Aligner sur la grille"
 #: src/control/Control.NotebookbarImpress.js:800
 #: src/control/Control.NotebookbarImpress.js:1827
 msgid "Slide Layout"
-msgstr ""
+msgstr "Mise-en-page de Diapo"
 
 #: src/control/Control.NotebookbarImpress.js:822
 #: src/control/Control.NotebookbarImpress.js:1837
@@ -3269,7 +3275,7 @@ msgstr "Réinitialiser la mise en page"
 
 #: src/control/Control.NotebookbarImpress.js:844
 msgid "Character"
-msgstr ""
+msgstr "Caractère"
 
 #: src/control/Control.NotebookbarImpress.js:1105
 msgid "Spacing & Color"
@@ -3355,7 +3361,7 @@ msgstr "Scinder"
 
 #: src/control/Control.NotebookbarWriter.js:2650
 msgid "Number Format"
-msgstr ""
+msgstr "Format de Nombre"
 
 #: src/control/Control.PartsPreview.js:188
 msgid "preview of page %1"
@@ -3400,7 +3406,7 @@ msgstr ""
 
 #: src/control/Control.ServerAuditDialog.ts:77
 msgid "Each document is securely contained"
-msgstr ""
+msgstr "Chacun des documents sont conteneurisés de façon sûre"
 
 #: src/control/Control.ServerAuditDialog.ts:83
 msgid ""
@@ -3410,7 +3416,7 @@ msgstr ""
 
 #: src/control/Control.ServerAuditDialog.ts:88
 msgid "System call security filtering enabled"
-msgstr ""
+msgstr "Filtrage de sécurité des appels système activés"
 
 #: src/control/Control.ServerAuditDialog.ts:95
 msgid ""
@@ -3439,7 +3445,7 @@ msgstr ""
 
 #: src/control/Control.ServerAuditDialog.ts:122
 msgid "Direct network connection"
-msgstr ""
+msgstr "Connexion réseau direct"
 
 #: src/control/Control.ServerAuditDialog.ts:128
 msgid "The IsAdminUser property is not set by integration"
@@ -3564,7 +3570,7 @@ msgstr "Compte de la sélection"
 
 #: src/control/Control.StatusBar.js:250
 msgid "Multi Page View"
-msgstr ""
+msgstr "Vue de multiple page"
 
 #: src/control/Control.StatusBar.js:405
 msgid ""
@@ -4191,51 +4197,51 @@ msgstr "Cet utilisateur"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1911
 msgid "No Borders"
-msgstr ""
+msgstr "Aucune Bordure"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1917
 msgid "Left Border"
-msgstr ""
+msgstr "Bordure Gauche"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1923
 msgid "Right Border"
-msgstr ""
+msgstr "Bordure Droite"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1929
 msgid "Left And Right Borders"
-msgstr ""
+msgstr "Bordures Gauche et Droite"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1935
 msgid "Top Border"
-msgstr ""
+msgstr "Bordure du Haut"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1941
 msgid "Bottom Border"
-msgstr ""
+msgstr "Bordure du Bas"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1947
 msgid "Top And Bottom Border"
-msgstr ""
+msgstr "Bordures du Haut et du Bas"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1953
 msgid "Outer Border"
-msgstr ""
+msgstr "Bordure Extérieur"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1959
 msgid "All Horizontal Lines"
-msgstr ""
+msgstr "Toutes les Lignes Horizontales"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1965
 msgid "Outer Border And Horizontal Lines"
-msgstr ""
+msgstr "Bordure Extérieur et Lignes Horizontales"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1971
 msgid "Outer Border and Vertical Lines"
-msgstr ""
+msgstr "Bordure Extérieur et Lignes Verticales"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1977
 msgid "Outer Borders And All Inner lines"
-msgstr ""
+msgstr "Bordures Extérieurs et Toutes les Lignes Intérieures"
 
 #: src/control/jsdialog/Definitions.Menu.ts:1982
 msgid "Line color"
@@ -4402,11 +4408,11 @@ msgstr "Automatique"
 
 #: src/control/jsdialog/Widget.ColorPicker.ts:262
 msgid "Color palette"
-msgstr ""
+msgstr "Palette de Couleurs"
 
 #: src/control/jsdialog/Widget.ColorPicker.ts:328
 msgid "Enter custom color in hex format"
-msgstr ""
+msgstr "Entrer une couleur personnalisé au format Hex"
 
 #: src/control/jsdialog/Widget.PageMarginEntry.ts:40
 msgid "Page margin options"

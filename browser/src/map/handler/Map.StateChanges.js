@@ -3,7 +3,7 @@
  * window.L.Map.StateChanges stores the state changes commands coming from core
  * LOK_CALLBACK_STATE_CHANGED callback
  */
-/* global $ app cool */
+/* global $ app cool _ */
 /*eslint no-extend-native:0*/
 window.L.Map.mergeOptions({
 	stateChangeHandler: true
@@ -122,6 +122,19 @@ window.L.Map.StateChangeHandler = window.L.Handler.extend({
 
 			const scrollPoint = new cool.SimplePoint(scrollX, scrollY);
 			app.activeDocument.activeLayout.scrollTo(scrollPoint.pX, scrollPoint.pY);
+		}
+
+		if (commandName == '.uno:ReshufflePagePopup') {
+			if (!app.map.isReadOnlyMode())
+			{
+				app.map.uiManager.showSnackbar(_('Apply this order to your presentation?'), _('Update Slides'), function () {
+					app.map.sendUnoCommand('.uno:ReshufflePages');
+				});
+			}
+		}
+
+		if (commandName == '.uno:HasOverviewPage') {
+			app.impress.hasOverviewPage = e.state === "true";
 		}
 
 		$('#document-container').removeClass('slide-master-mode');

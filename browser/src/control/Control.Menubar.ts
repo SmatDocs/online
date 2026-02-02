@@ -137,6 +137,7 @@ class Menubar extends window.L.Control {
 				{type: 'separator'},
 				{name: _UNO('.uno:ChangesMenu', 'text'), id: 'changesmenu', type: 'menu', menu: [
 					{uno: '.uno:TrackChanges'},
+					{name: _('Compare Changes'), id: 'comparechanges', type: 'action'},
 					{uno: '.uno:ShowTrackedChanges'},
 					{type: 'separator'},
 					{uno: '.uno:AcceptTrackedChanges'},
@@ -161,7 +162,7 @@ class Menubar extends window.L.Control {
 					{type: 'separator'},
 					{name: _UNO('.uno:ZoomPlus', 'text'), id: 'zoomin', type: 'action'},
 					{name: _UNO('.uno:ZoomMinus', 'text'), id: 'zoomout', type: 'action',},
-					{name: _('Reset zoom'), id: 'zoomreset', type: 'action'},
+					{name: _('Fit to Screen'), id: 'fitwidthzoom', type: 'action'},
 				] as MenuItem[]).concat([
 					{type: 'separator'},
 					{name: _('Toggle UI Mode'), id: 'toggleuimode', type: 'action'},
@@ -1438,7 +1439,7 @@ class Menubar extends window.L.Control {
 			'downloadas-odp', 'downloadas-ppt', 'downloadas-pptx', 'downloadas-odg', 'exportpdf' , // file menu
 			!window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf', !window.ThisIsAMobileApp ? 'exportepub' : 'downloadas-epub', // file menu
 			'downloadas-ods', 'downloadas-xls', 'downloadas-xlsx', 'downloadas-csv', 'closedocument', // file menu
-			() => !window.L.Browser.edge ? 'fullscreen' : undefined, 'zoomin', 'zoomout', 'zoomreset', 'showstatusbar', 'showresolved', 'showannotations', 'toggledarktheme', // view menu
+			() => !window.L.Browser.edge ? 'fullscreen' : undefined, 'zoomin', 'zoomout', 'zoomreset', 'fitwidthzoom', 'showstatusbar', 'showresolved', 'showannotations', 'toggledarktheme', // view menu
 			'insert-signatureline', // insert menu
 			'about', 'keyboard-shortcuts', 'latestupdates', 'feedback', 'serveraudit', 'online-help', 'report-an-issue', // help menu
 			'insertcomment'
@@ -1886,7 +1887,7 @@ class Menubar extends window.L.Control {
        * @param menu - The submenu element.
        */
 	private _beforeShow(e: any, menu: any): void {
-		const items = $(menu).children().children('a').not('.has-submenu');
+		const items = this._getMenuItems(menu);
 		$(items).each((index, aItem) => {
 			const type = $(aItem).data('type');
 			const id = $(aItem).data('id');
@@ -2123,6 +2124,38 @@ class Menubar extends window.L.Control {
 					$(aItem).hide();
 			}
 		});
+		// We hide adjacent, leading, and trailing separators that might occur due to hidden items above.
+		var visibleItems = this._getMenuItems(menu).filter(function(this: HTMLElement) {
+			return $(this).css('display') !== 'none';
+		});
+
+		visibleItems.each((index: number, aItem: HTMLElement) => {
+			// Always show first, might be hidden by previous pass
+			if ($(aItem).hasClass('separator')) {
+				$(aItem).show();
+			}
+
+			// Hide leading separator
+			if (index === 0 && $(aItem).hasClass('separator')) {
+				$(aItem).hide();
+				return;
+			}
+
+			// Hide trailing separator
+			if (index === visibleItems.length - 1 && $(aItem).hasClass('separator')) {
+				$(aItem).hide();
+				return;
+			}
+
+			// Hide double/adjacent separators
+			// If this is a separator, and the previous visible item was also a separator, hide this one.
+			if (index > 0) {
+				var prevItem = visibleItems[index - 1];
+				if ($(aItem).hasClass('separator') && $(prevItem).hasClass('separator')) {
+					$(aItem).hide();
+				}
+			}
+		});
 	}
 
 	/**
@@ -2252,6 +2285,8 @@ class Menubar extends window.L.Control {
 			app.dispatcher.dispatch('zoomout');
 		} else if (id === 'zoomreset') {
 			app.dispatcher.dispatch('zoomreset');
+		} else if (id === 'fitwidthzoom') {
+			app.dispatcher.dispatch('fitwidthzoom');
 		} else if (id === 'fullscreen') {
 			app.util.toggleFullScreen();
 		} else if (id === 'showruler') {
@@ -2321,6 +2356,8 @@ class Menubar extends window.L.Control {
 			app.dispatcher.dispatch(command);
 		} else if (id === 'columnrowhighlight') {
 			app.dispatcher.dispatch('columnrowhighlight');
+		} else if (id === 'comparechanges') {
+			app.dispatcher.dispatch('comparechanges');
 		} else {
 			// not found
 			app.console.warn('Menubar: unknown action for id: ' + id);
@@ -2931,6 +2968,10 @@ class Menubar extends window.L.Control {
 	 * @param nameString - The name to search for.
 	 * @returns The found submenu or null.
 	 */
+	private _getMenuItems(menu: any): any {
+		return $(menu).children().children('a').not('.has-submenu');
+	}
+
 	private _findSubMenuByName(menuTarget: any, nameString: string): any {
 		if (menuTarget.name === nameString)
 			return menuTarget;

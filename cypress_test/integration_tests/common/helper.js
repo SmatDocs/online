@@ -1,6 +1,13 @@
 /* -*- js-indent-level: 8 -*- */
 /* global cy Cypress expect */
 
+// Maximum viewport height for consistent screenshots across environments.
+// Some Chrome/Chromium headless configurations reserve space for UI (or
+// something of that nature) so viewport must be <= 581px to fit within that
+// max available space to produce identical screenshots.
+// See cypress-io/cypress#27260.
+const maxScreenshotableViewportHeight = 581;
+
 /*
  * Prepares the test document by copying or uploading it
  * filePath: test document file path
@@ -462,10 +469,19 @@ function assertCursorAndFocus() {
 }
 
 // Select all text via CTRL+A shortcut.
-function selectAllText() {
+// options.isTable: when true, use multiple ctrl+a to select all text beyond current table
+function selectAllText(options) {
+	var isTable = options && options.isTable;
+
 	cy.log('>> selectAllText - start');
 
-	typeIntoDocument('{ctrl}a');
+	if (isTable) {
+		typeIntoDocument('{ctrl}a');
+		typeIntoDocument('{ctrl}a');
+		typeIntoDocument('{ctrl}a');
+	} else {
+		typeIntoDocument('{ctrl}a');
+	}
 
 	textSelectionShouldExist();
 
@@ -473,13 +489,14 @@ function selectAllText() {
 }
 
 // Clear all text by selecting all and deleting.
-function clearAllText() {
+// options.isTable: when true, use multiple ctrl+a to select all text beyond current table
+function clearAllText(options) {
 	cy.log('>> clearAllText - start');
 
 	//assertCursorAndFocus();
 
 	// Trigger select all
-	selectAllText();
+	selectAllText(options);
 
 	// Then remove
 	typeIntoDocument('{backspace}');
@@ -1151,7 +1168,7 @@ function setDummyClipboardForCopy(type) {
 // Clicks the Copy button on the UI.
 function copy() {
 	cy.log('helper.copy()');
-	cy.window({log: false}).then(win => {
+	return cy.window({log: false}).then(win => {
 		const app = win['0'].app;
 		const clipboard = app.map._clip;
 		clipboard.filterExecCopyPaste('.uno:Copy');
@@ -1217,6 +1234,82 @@ function getMenuEntry(index) {
 	return cy.cGet('.ui-dialog-content div.ui-combobox-entry span').eq(index);
 }
 
+var idleCounter = 0;
+
+function waitUntilCoreIsIdle(win) {
+	var expectedIdleID = String(++idleCounter);
+	var spy;
+	var ownSpy = false;
+
+	cy.then(function() {
+		// Check if _onMessage is already wrapped/spied
+		if (win.app.socket._onMessage.restore) {
+			// Already wrapped, use the existing spy
+			spy = win.app.socket._onMessage;
+		} else {
+			// Create our own spy
+			spy = Cypress.sinon.spy(win.app.socket, '_onMessage');
+			ownSpy = true;
+		}
+
+		var idleArgs = {
+			'idleID': { 'type': 'string', 'value': expectedIdleID }
+		};
+		// force of 'true' because sendUnoCommand doesn't want to send a
+		// command if a dialog is open
+		win.app.map.sendUnoCommand('.uno:ReportWhenIdle', idleArgs, /*force*/ true);
+	});
+
+	cy.wrap(null).should(function() {
+		var matchingCall = spy.getCalls().find(function(call) {
+			var evt = call.args && call.args[0];
+			var textMsg = evt && evt.textMsg;
+			if (!textMsg || !textMsg.startsWith('unocommandresult:')) {
+				return false;
+			}
+			var jsonPart = textMsg.replace('unocommandresult:', '').trim();
+			var data = JSON.parse(jsonPart);
+			if (data.commandName !== '.uno:ReportWhenIdle') {
+				return false;
+			}
+			return data.idleID === expectedIdleID;
+		});
+
+		expect(matchingCall, '.uno:ReportWhenIdle result with idleID ' + expectedIdleID).to.be.an('object');
+	});
+
+	return cy.then(function() {
+		// Only restore if we created our own spy
+		if (ownSpy && spy && spy.restore) {
+			spy.restore();
+		}
+	});
+}
+
+function waitUntilLayoutingIsIdle(win) {
+	return cy.then(function() {
+		return new Cypress.Promise(function(resolve) {
+			win.app.layoutingService.onDrain(function() {
+				resolve();
+			});
+		});
+	});
+}
+
+function processToIdle(win) {
+	return waitUntilCoreIsIdle(win).then(function() {
+		return waitUntilLayoutingIsIdle(win);
+	});
+}
+
+// Wait until no timers of the given tag exist.
+// If no timers with the tag exist at call time resolve immediately.
+function waitForTimers(win, tag) {
+	return cy.waitUntil(function() {
+		return !win.app.timerRegistry.hasActive(tag);
+	}, { timeout: Cypress.config('defaultCommandTimeout'), interval: 50 });
+}
+
 module.exports.setupDocument = setupDocument;
 module.exports.loadDocument = loadDocument;
 module.exports.setupAndLoadDocument = setupAndLoadDocument;
@@ -1267,3 +1360,8 @@ module.exports.addressInputSelector = "#addressInput input";
 module.exports.assertImageSize = assertImageSize;
 module.exports.containsFocusElement = containsFocusElement;
 module.exports.getMenuEntry = getMenuEntry;
+module.exports.waitUntilCoreIsIdle = waitUntilCoreIsIdle;
+module.exports.waitUntilLayoutingIsIdle = waitUntilLayoutingIsIdle;
+module.exports.processToIdle = processToIdle;
+module.exports.waitForTimers = waitForTimers;
+module.exports.maxScreenshotableViewportHeight = maxScreenshotableViewportHeight;

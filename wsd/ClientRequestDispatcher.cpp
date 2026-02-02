@@ -912,7 +912,14 @@ bool allowedOriginByHost(const std::string& host, const std::string& actualOrigi
 
 template <typename T> bool allowedOrigin(const T& request, const RequestDetails& requestDetails)
 {
-    const std::string actualOrigin = request.get("Origin");
+    auto const it = request.find("Origin");
+    if (it == request.end())
+    {
+        LOG_ERR("Rejecting message with no Origin header");
+        return false;
+    }
+
+    const std::string actualOrigin = it->second;
     const ServerURL cnxDetails(requestDetails);
 
     if (net::sameOrigin(cnxDetails.getWebServerUrl(), actualOrigin))
@@ -1359,17 +1366,19 @@ bool ClientRequestDispatcher::handleWopiDiscoveryRequest(
     LOG_DBG("Wopi discovery request: " << requestDetails.getURI());
 
     std::string xml = getFileContent("discovery.xml");
-    std::string srvUrl =
+    bool isSsl =
 #if ENABLE_SSL
-        ((ConfigUtil::isSslEnabled() || ConfigUtil::isSSLTermination()) ? "https://" : "http://")
+        (ConfigUtil::isSslEnabled() || ConfigUtil::isSSLTermination());
 #else
-        "http://"
+        false;
 #endif
+    std::string srvUrl = (isSsl ? "https://" : "http://")
         + (COOLWSD::ServerName.empty() ? requestDetails.getHostUntrusted() : COOLWSD::ServerName) +
         COOLWSD::ServiceRoot;
     if (requestDetails.isProxy())
         srvUrl = requestDetails.getProxyPrefix();
     Poco::replaceInPlace(xml, std::string("%SRV_URI%"), srvUrl);
+    Poco::replaceInPlace(xml, std::string("%SRV_PROTO%"), std::string(isSsl ? "https" : "http"));
 
     http::Response httpResponse(http::StatusCode::OK);
     FileServerRequestHandler::hstsHeaders(httpResponse);
@@ -1383,25 +1392,6 @@ bool ClientRequestDispatcher::handleWopiDiscoveryRequest(
     LOG_INF("Sent discovery.xml successfully.");
     return true;
 }
-
-
-// NB: these names are part of the published API, and should not be renamed or altered but can be expanded
-STATE_ENUM(CheckStatus,
-    Ok,
-    NotHttpSuccess,
-    HostNotFound,
-    WopiHostNotAllowed,
-    UnspecifiedError,
-    ConnectionAborted,
-    CertificateValidation,
-    SelfSignedCertificate,
-    ExpiredCertificate,
-    SslHandshakeFail,
-    MissingSsl,
-    NotHttps,
-    NoScheme,
-    Timeout,
-);
 
 void ClientRequestDispatcher::sendResult(const std::shared_ptr<StreamSocket>& socket, CheckStatus result)
 {
@@ -2794,6 +2784,12 @@ std::string getCapabilitiesJson(bool convertToAvailable)
 
     // Set the product version hash
     capabilities->set("productVersionHash", Util::getCoolVersionHash());
+
+    // Set the kit version
+    capabilities->set("productKitVersion", COOLWSD::LOKitVersionNumber);
+
+    // Set the kit version hash
+    capabilities->set("productKitVersionHash", COOLWSD::LOKitVersionHash);
 
     // Set that this is a proxy.php-enabled instance
     capabilities->set("hasProxyPrefix", COOLWSD::IsProxyPrefixEnabled);

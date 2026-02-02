@@ -28,6 +28,7 @@ interface WidgetJSON {
 	labelledBy?: string;
 	allyRole?: string;
 	aria?: AriaLabelAttributes; // ARIA Label attributes
+	gridKeyboardNavigation?: boolean; // receives keyboard navigation for elements in col/rows
 }
 
 interface JSBuilderOptions {
@@ -54,6 +55,7 @@ interface JSBuilder {
 	options: JSBuilderOptions; // current state
 	map: MapInterface; // reference to map
 	rendersCache: any; // on demand content cache
+	windowId?: WindowId | number;
 
 	build: (
 		parentContainer: Element,
@@ -118,12 +120,6 @@ interface DialogResponse {
 	response: number;
 }
 
-interface DialogJSON extends WidgetJSON {
-	dialogid: string; // unique id for a dialog type, not instance
-	collapsed?: boolean; // if dialog is in collapsed mode
-	responses?: Array<DialogResponse>;
-}
-
 interface ActionData {
 	control_id: string;
 	action_type: string;
@@ -131,12 +127,13 @@ interface ActionData {
 }
 
 // JSDialog message (full, update or action)
-interface JSDialogJSON extends DialogJSON {
+interface JSDialogJSON extends WidgetJSON {
 	id: string; // unique windowId
 	jsontype: string; // specifies target component, on root level only
 	action?: string; // optional name of an action
 	control?: WidgetJSON;
 	data?: ActionData;
+	init_focus_id?: string; // id of initially focused widget
 }
 
 // JSDialog message for popup
@@ -151,6 +148,12 @@ interface PopupData extends JSDialogJSON {
 	persistKeyboard?: boolean;
 	posx: number;
 	posy: number;
+}
+
+interface DialogJSON extends JSDialogJSON {
+	dialogid: string; // unique id for a dialog type, not instance
+	collapsed?: boolean; // if dialog is in collapsed mode
+	responses?: Array<DialogResponse>;
 }
 
 // Notebookbar
@@ -198,7 +201,8 @@ interface MenuDefinition extends WidgetJSON {
 	img?: string; // icon name
 	icon?: string; // icon name FIXME: duplicated property, used in exportMenuButton
 	checked?: boolean; // state of check mark
-	items?: Array<any>; // submenu
+	items?: Array<any>;
+	selected?: boolean; // selected state for entry
 }
 
 interface HtmlContentJson extends WidgetJSON {
@@ -239,6 +243,8 @@ interface OverflowGroupContainer extends Element {
 interface GridWidgetJSON extends ContainerWidgetJSON {
 	cols: number; // number of grid columns
 	rows: number; // numer of grid rows
+	tabIndex?: number;
+	initialSelectedId?: string; // id of the first selected element
 }
 
 interface ToolboxWidgetJSON extends WidgetJSON {
@@ -298,6 +304,8 @@ interface PushButtonWidget extends WidgetJSON {
 interface MenuButtonWidgetJSON extends WidgetJSON {
 	menu?: Array<MenuDefinition>; // custom menu
 	applyCallback?: () => void; // split button callback for left part
+	class?: string;
+	image?: string | boolean;
 }
 
 // type: 'buttonbox'
@@ -308,6 +316,7 @@ interface ButtonBoxWidget extends WidgetJSON {
 // type: 'listbox'
 interface ListBoxWidget extends WidgetJSON {
 	entries: Array<string>;
+	selectedEntries?: Array<string> | Array<number>;
 }
 
 // type: 'radiobutton'
@@ -324,6 +333,7 @@ interface ComboBoxEntry extends MenuDefinition {
 	selected?: boolean; // is selected
 	comboboxId?: string; // used to reference parent
 	pos: string | number; // identifier of an entry
+	initialSelectedId?: string;
 }
 
 interface ComboBoxWidget extends WidgetJSON {
@@ -373,8 +383,8 @@ interface TreeWidgetJSON extends WidgetJSON {
 	entries: Array<TreeEntryJSON>;
 	headers: Array<TreeHeaderJSON>; // header columns
 	highlightTerm?: string; // what, if any, entries are we highlighting?
-	ignoreFocus?: boolean; // When true, does't focus to selected item automatically.
 	customEntryRenderer?: boolean;
+	noSearchField?: boolean; // When true, the widget shouldn't have a search field added
 }
 
 interface IconViewEntry {
@@ -382,6 +392,8 @@ interface IconViewEntry {
 	separator: boolean; // is separator
 	selected: boolean; // is currently selected
 	image: string; // base64 encoded image
+	width: number; // width in pixels; used for on demand rendering
+	height: number; // height in pixels; used for on demand rendering
 	text: string; // label of an entry
 	tooltip: string; // tooltip of an entry
 	ondemand: boolean; // if true then we ignore image property and request it on demand (when shown)

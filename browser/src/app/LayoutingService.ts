@@ -22,6 +22,7 @@ class LayoutingService {
 		null;
 	private _layoutTasks: Array<LayoutingTask> = [];
 	private _layoutTaskFlush: ReturnType<typeof setTimeout> | null = null;
+	private _drainCallbacks: Array<LayoutingTask> = [];
 
 	// get something around 25 fps as minimum (35ms + some overflow = ~40ms)
 	private MAX_TASK_DURATION_MS = 35;
@@ -34,6 +35,11 @@ class LayoutingService {
 
 	public hasTasksPending(): boolean {
 		return this._layoutTasks.length > 0;
+	}
+
+	public onDrain(callback: LayoutingTask): void {
+		this._drainCallbacks.push(callback);
+		this._scheduleLayouting();
 	}
 
 	public runTheTopTask(): boolean {
@@ -54,6 +60,13 @@ class LayoutingService {
 		this._requestedFrame = null;
 	}
 
+	// Called by CanvasSectionContainer after it synchronously flushes tasks
+	public triggerDrainCallbacks(): void {
+		if (!this.hasTasksPending()) {
+			this._runDrainCallbacks();
+		}
+	}
+
 	// internal implementation below
 
 	private _setupTimer() {
@@ -71,7 +84,10 @@ class LayoutingService {
 
 	private _flushLayoutingQueue(): void {
 		this._layoutTaskFlush = null;
-		if (!this.hasTasksPending()) return;
+		if (!this.hasTasksPending()) {
+			this._runDrainCallbacks();
+			return;
+		}
 
 		this._requestedFrame = window.requestAnimationFrame(() => {
 			this._requestedFrame = null;
@@ -83,7 +99,20 @@ class LayoutingService {
 					return;
 				}
 			}
+			this._runDrainCallbacks();
 		});
+	}
+
+	private _runDrainCallbacks(): void {
+		const callbacks = this._drainCallbacks;
+		this._drainCallbacks = [];
+		for (const cb of callbacks) {
+			try {
+				cb();
+			} catch (ex) {
+				console.error('Drain callback exception: ' + ex);
+			}
+		}
 	}
 
 	private _scheduleLayouting(): void {

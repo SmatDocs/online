@@ -20,6 +20,7 @@ interface MapInterface extends Evented {
 	_docLayer: DocLayerInterface;
 	uiManager: UIManager;
 	_textInput: { debug(value: boolean): void };
+	addressInputField: AddressInputField;
 
 	removeLayer(layer: any): void;
 	addLayer(layer: any): void;
@@ -74,6 +75,7 @@ interface MapInterface extends Evented {
 		UserCanNotWriteRelative: boolean;
 		BaseFileName: string;
 		HideExportOption: boolean;
+		UserCanWrite: boolean;
 	};
 
 	loadDocument(socket?: SockInterface): void;
@@ -84,7 +86,7 @@ interface MapInterface extends Evented {
 
 	_clip: ClipboardInterface;
 
-	setPermission(permission: 'edit' | 'readonly' | 'view'): void;
+	setPermission(permission: string): void;
 	onLockFailed(reason: string): void;
 	updateModificationIndicator(newModificationTime: string): void;
 	isEditMode(): boolean;
@@ -97,7 +99,7 @@ interface MapInterface extends Evented {
 	hideRestrictedItems(it: any, item: any, button: any): void;
 	disableLockedItem(it: any, item: any, button: any): void;
 	isLockedItem(data: any): boolean;
-	openUnlockPopup(cmd: ParsedJSONResult): void;
+	openUnlockPopup(cmd: ControlCommand): void;
 	isLockedUser(): boolean;
 	isRestrictedUser(): boolean;
 
@@ -111,8 +113,14 @@ interface MapInterface extends Evented {
 
 	addControl(control: any): void;
 
+	_shouldStartReadOnly(): boolean;
+	_switchToEditMode(): void;
+
+	_permission: 'edit' | 'readonly' | 'view';
+
 	toolbarUpTemplate: any;
 	menubar: Menubar;
 	userList: UserList;
 	sidebar: Sidebar;
+	getViewColor(viewId: number): number;
 }
