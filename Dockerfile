@@ -71,6 +71,7 @@ WORKDIR /srv/apps/online
 # Expose the default coolwsd port
 EXPOSE 9980
 
+
 # NOTE: We don't use USER here because:
 # - npm install and make need write access to the mounted volume (runs as root)
 # - Only coolwsd (make run) needs to run as 'cool' user
@@ -78,4 +79,4 @@ EXPOSE 9980
 # But if it doesn't, we'll handle it in the command
 
 # Default command - builds as root, runs coolwsd
-CMD ["sh", "-c", "cd /srv/apps/online/browser && npm install && cd /srv/apps/online && make -j $(nproc) && make run"]
+CMD ["sh", "-c", "set -e; LO_ROOT=${LO_ROOT:-/srv/apps/libreoffice-mini/instdir}; cd /srv/apps/online/browser && npm install && cd /srv/apps/online && make -j $(nproc) LO_PATH=$LO_ROOT && make run LO_PATH=$LO_ROOT"]

@@ -163,6 +163,8 @@ window.L.Map.Feedback = window.L.Handler.extend({
 		}
 	}
 });
-if (window.feedbackUrl && window.prefs.canPersist) {
+// Hard-disable feedback handler regardless of config flags.
+const FEEDBACK_DISABLED = true;
+if (!FEEDBACK_DISABLED && window.feedbackUrl && window.prefs.canPersist) {
 	window.L.Map.addInitHook('addHandler', 'feedback', window.L.Map.Feedback);
 }

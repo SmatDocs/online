@@ -7,13 +7,15 @@ services:
     image: smartdocs_coolwsd
     container_name: smartdocs_coolwsd
     ports:
-      - "9980:9980"
+      - "9985:9980"
     volumes:
       # Mount the entire online source code directory at the SAME path as host
       # (Makefile has absolute paths from ./configure)
       - .:/srv/apps/online:rw
       # Mount LibreOffice core (required for coolwsd)
       - /srv/apps/libreoffice-mini:/srv/apps/libreoffice-mini:ro
+      # Optional local LibreOffice core (used if present)
+      - ../libreoffice-mini-25:/srv/apps/libreoffice-mini-25:ro
       # Persist build artifacts and cache
       - coolwsd-build-cache:/srv/apps/online/.libs
       - coolwsd-cache:/srv/apps/online/cache
@@ -35,6 +37,8 @@ services:
       - apparmor:unconfined
     environment:
       - TZ=UTC
+      - LO_ROOT=${LO_ROOT:-/srv/apps/libreoffice-mini/instdir}
+      - PYUNO_SCRIPTS_DIR=${PYUNO_SCRIPTS_DIR:-/srv/apps/libreoffice-mini/instdir/share/Scripts/python}
     working_dir: /srv/apps/online
     # Build normally, then run coolwsd with --disable-cool-user-checking for Docker
     command:
@@ -46,10 +50,16 @@ services:
         cd /srv/apps/online/browser && npm install
         cd /srv/apps/online && make -j $(nproc)
         mkdir -p /tmp/systemplate /tmp/jails /tmp/cache
-        ./coolwsd-systemplate-setup /tmp/systemplate /srv/apps/libreoffice-mini/instdir
+        LO_ROOT="${LO_ROOT:-/srv/apps/libreoffice-mini/instdir}"
+        ./coolwsd-systemplate-setup /tmp/systemplate "$LO_ROOT"
         # Copy Python scripts into systemplate so LibreOffice can find them
         mkdir -p /tmp/systemplate/lo/share/Scripts/python
-        cp -r /srv/apps/libreoffice-mini/instdir/share/Scripts/python/* /tmp/systemplate/lo/share/Scripts/python/
+        PYUNO_SCRIPTS_DIR="${PYUNO_SCRIPTS_DIR:-$LO_ROOT/share/Scripts/python}"
+        if [ -d "$PYUNO_SCRIPTS_DIR" ]; then \
+          cp -r "$PYUNO_SCRIPTS_DIR"/* /tmp/systemplate/lo/share/Scripts/python/; \
+        else \
+          echo "WARNING: PYUNO_SCRIPTS_DIR not found: $PYUNO_SCRIPTS_DIR"; \
+        fi
         chmod -R 777 /tmp/systemplate /tmp/jails /tmp/cache
         sed -i 's|<sys_template_path[^>]*>[^<]*</sys_template_path>|<sys_template_path type="path" relative="false">/tmp/systemplate</sys_template_path>|' coolwsd.xml
         sed -i 's|<child_root_path[^>]*>[^<]*</child_root_path>|<child_root_path type="path" relative="false">/tmp/jails</child_root_path>|' coolwsd.xml
@@ -69,7 +79,14 @@ services:
           --o:admin_console.username=admin \
           --o:admin_console.password=admin \
           '--o:net.content_security_policy=frame-ancestors *;' \
-          --o:logging.level=trace
+          --o:logging.level=warning \
+          --o:logging.level_startup=warning \
+          '--o:logging.file[@enable]=false' \
+          '--o:logging_ui_cmd.file[@enable]=false' \
+          '--o:trace_event[@enable]=false' \
+          --o:logging.protocol=false \
+          --o:browser_logging=false \
+          --o:num_prespawn_children=4
 
 networks:
   smartdocs_network:

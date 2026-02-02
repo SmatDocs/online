@@ -144,6 +144,8 @@ window.L.Map.Welcome = window.L.Handler.extend({
 	}
 });
 
-if (!window.L.Browser.cypressTest && window.enableWelcomeMessage && window.prefs.canPersist) {
+// Hard-disable welcome handler regardless of config flags.
+const WELCOME_DISABLED = true;
+if (!WELCOME_DISABLED && !window.L.Browser.cypressTest && window.enableWelcomeMessage && window.prefs.canPersist) {
 	window.L.Map.addInitHook('addHandler', 'welcome', window.L.Map.Welcome);
 }

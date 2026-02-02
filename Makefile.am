@@ -636,6 +636,16 @@ else
   OUTPUT_TO_FILE=false
 endif
 
+# Default run settings tuned for fast, production-like document open latency.
+RUN_FAST_LOG_LEVEL ?= warning
+RUN_FAST_LOG_LEVEL_STARTUP ?= warning
+RUN_FAST_LOG_FILE ?= false
+RUN_FAST_LOG_UI_CMD ?= false
+RUN_FAST_TRACE_EVENT ?= false
+RUN_FAST_BROWSER_LOGGING ?= false
+RUN_FAST_LOG_PROTOCOL ?= false
+RUN_FAST_PRESPAWN_CHILDREN ?= 4
+
 QUIET_SAMPLES = $(QUIET_SAMPLES_$(V))
 QUIET_SAMPLES_ = $(QUIET_SAMPLES_$(AM_DEFAULT_VERBOSITY))
 QUIET_SAMPLES_0 = @echo "  SAMPLES " $@;
@@ -663,6 +673,21 @@ COMMON_PARAMS = \
 	--o:admin_console.username=admin --o:admin_console.password=admin
 
 run: setup-wsd
+	@if test "${TEST_APPARMOR}" = "enabled"; then \
+		echo apparmor_restrict_unprivileged_userns is enabled, which blocks user namespaces; \
+	        (which podman > /dev/null 2>&1 && echo "Using podman unshare to workaround") || \
+		(echo "WARNING: install podman to workaround this" && false); \
+	fi
+	$(ENABLE_NAMESPACE) ./coolwsd $(COMMON_PARAMS) \
+			--o:logging.file[@enable]=${RUN_FAST_LOG_FILE} --o:logging.level=${RUN_FAST_LOG_LEVEL} \
+			--o:logging.level_startup=${RUN_FAST_LOG_LEVEL_STARTUP} \
+			--o:logging_ui_cmd.file[@enable]=${RUN_FAST_LOG_UI_CMD} \
+			--o:trace_event[@enable]=${RUN_FAST_TRACE_EVENT} \
+			--o:logging.protocol=${RUN_FAST_LOG_PROTOCOL} \
+			--o:browser_logging=${RUN_FAST_BROWSER_LOGGING} \
+			--o:num_prespawn_children=${RUN_FAST_PRESPAWN_CHILDREN}
+
+run-debug: setup-wsd
 	@if test "${TEST_APPARMOR}" = "enabled"; then \
 		echo apparmor_restrict_unprivileged_userns is enabled, which blocks user namespaces; \
 	        (which podman > /dev/null 2>&1 && echo "Using podman unshare to workaround") || \
