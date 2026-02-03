@@ -11,6 +11,9 @@ window.app = {
 	console: {}
 };
 
+// Ensure JSDialog exists before jsdialog utilities attach methods.
+window.JSDialog = window.JSDialog || {};
+
 // For typings (including the global object), please see browser/src/global.d.ts
 
 // This function may look unused, but it's needed in Android to send data through the fake websocket. Please
