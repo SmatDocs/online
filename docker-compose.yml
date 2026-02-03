@@ -2,25 +2,11 @@
 services:
   coolwsd:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: online/Dockerfile
     image: smartdocs_coolwsd
     container_name: smartdocs_coolwsd
-    ports:
-      - "9985:9980"
-    volumes:
-      # Mount the entire online source code directory at the SAME path as host
-      # (Makefile has absolute paths from ./configure)
-      - .:/srv/apps/online:rw
-      # Mount LibreOffice core (required for coolwsd)
-      - /srv/apps/libreoffice-mini:/srv/apps/libreoffice-mini:ro
-      # Optional local LibreOffice core (used if present)
-      - ../libreoffice-mini-25:/srv/apps/libreoffice-mini-25:ro
-      # Persist build artifacts and cache
-      - coolwsd-build-cache:/srv/apps/online/.libs
-      - coolwsd-cache:/srv/apps/online/cache
-    networks:
-      - smartdocs_network
+    network_mode: host
     restart: on-failure
     # Security capabilities needed for coolwsd
     cap_add:
@@ -46,11 +32,8 @@ services:
       - -c
       - |
         set -e
-        rm -rf browser/25.04.9.0
-        cd /srv/apps/online/browser && npm install
-        cd /srv/apps/online && make -j $(nproc)
         mkdir -p /tmp/systemplate /tmp/jails /tmp/cache
-        LO_ROOT="${LO_ROOT:-/srv/apps/libreoffice-mini/instdir}"
+        LO_ROOT="${LO_ROOT:-/srv/apps/libreoffice-mini-25/instdir}"
         ./coolwsd-systemplate-setup /tmp/systemplate "$LO_ROOT"
         # Copy Python scripts into systemplate so LibreOffice can find them
         mkdir -p /tmp/systemplate/lo/share/Scripts/python
@@ -87,13 +70,3 @@ services:
           --o:logging.protocol=false \
           --o:browser_logging=false \
           --o:num_prespawn_children=4
-
-networks:
-  smartdocs_network:
-    external: true
-
-volumes:
-  coolwsd-build-cache:
-    name: smartdocs-coolwsd-build-cache
-  coolwsd-cache:
-    name: smartdocs-coolwsd-cache

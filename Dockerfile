@@ -62,11 +62,23 @@ RUN git config --global --add safe.directory '*'
 # Create the cool user (coolwsd refuses to run as root)
 RUN adduser --quiet --system --group --home /opt/cool cool
 
-# Set the working directory (must match host path since Makefile has absolute paths)
+# Set the working directory
 WORKDIR /srv/apps/online
 
-# The source code will be mounted via volume
-# This allows for development with hot-reload capability
+# Copy source, LibreOffice core, and branding into the image (portable build/run)
+COPY online/ /srv/apps/online/
+COPY libreoffice-mini-25/ /srv/apps/libreoffice-mini-25/
+COPY collabora-branding/ /srv/apps/collabora-branding/
+
+# Install browser deps, configure and build
+RUN cd /srv/apps/online/browser && npm install
+RUN if [ ! -x /srv/apps/online/configure ]; then cd /srv/apps/online && ./autogen.sh; fi
+RUN cd /srv/apps/online \
+    && ./configure --with-lo-path=/srv/apps/libreoffice-mini-25/instdir \
+       --with-lokit-path=/srv/apps/libreoffice-mini-25/include \
+       --with-app-branding=/srv/apps/collabora-branding/themes/smartdocs-neutral \
+    && make -j $(nproc) \
+    && /srv/apps/collabora-branding/install.sh
 
 # Expose the default coolwsd port
 EXPOSE 9980
@@ -78,5 +90,5 @@ EXPOSE 9980
 # The Makefile's 'run' target already handles switching to cool user internally
 # But if it doesn't, we'll handle it in the command
 
-# Default command - builds as root, runs coolwsd
-CMD ["sh", "-c", "set -e; LO_ROOT=${LO_ROOT:-/srv/apps/libreoffice-mini/instdir}; cd /srv/apps/online/browser && npm install && cd /srv/apps/online && make -j $(nproc) LO_PATH=$LO_ROOT && make run LO_PATH=$LO_ROOT"]
+# Default command - runs coolwsd
+CMD ["sh", "-c", "set -e; LO_ROOT=${LO_ROOT:-/srv/apps/libreoffice-mini-25/instdir}; cd /srv/apps/online && make run LO_PATH=$LO_ROOT"]
