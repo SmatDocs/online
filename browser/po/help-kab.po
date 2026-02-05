@@ -2,9 +2,9 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-01-19 22:57+0200\n"
-"PO-Revision-Date: 2026-01-20 23:01+0000\n"
-"Last-Translator: Amadɣas <massiin@proton.me>\n"
+"POT-Creation-Date: 2026-02-03 23:25+0200\n"
+"PO-Revision-Date: 2026-02-03 12:24+0000\n"
+"Last-Translator: ButterflyOfFire <boffire@users.noreply.hosted.weblate.org>\n"
 "Language-Team: Kabyle <https://hosted.weblate.org/projects/collabora-online/"
 "help/kab/>\n"
 "Language: kab\n"
@@ -12,7 +12,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=n > 1;\n"
-"X-Generator: Weblate 5.16-dev\n"
+"X-Generator: Translate Toolkit 3.6.0\n"
 "X-POOTLE-MTIME: 1475585999.000000\n"
 
 #: html/cool-help.html%2Bdiv.h1:6-5
@@ -1299,15 +1299,15 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.h2:132-9
 msgid "Navigating in Spreadsheets"
-msgstr ""
+msgstr "Asikel deg tfelwitin tiliktṛunanin"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:134-38
 msgid "Moves the cursor to the first cell in the sheet (A1)."
-msgstr "Smutti taḥnaccaḍt ɣer tebniqt tamezwarut n ifer (A1)."
+msgstr "Smutti taḥnaccaḍt ɣer tebniqt tamezwarut n tferkit (A1)."
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:135-38
 msgid "Moves the cursor to the last cell on the sheet that contains data."
-msgstr "Smutti taḥnaccaḍt ɣer tebniqt taneggarut deg ifer ideg llan yisefka."
+msgstr "Smutti taḥnaccaḍt ɣer tebniqt taneggarut deg tferkit ideg llan yisefka."
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:136-38
 msgid "Moves the cursor to the first cell of the current row."
@@ -1435,7 +1435,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:146-38
 msgid "Go to next sheet."
-msgstr "Ddu ɣer ifer i d-iteddun."
+msgstr "Ddu ɣer tferkit i d-iteddun."
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:146-82
 #, fuzzy
@@ -1449,7 +1449,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:147-38
 msgid "Go to previous sheet."
-msgstr "Ddu ɣer ifer yezrin."
+msgstr "Ddu ɣer tferkit yezrin."
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:147-86
 #, fuzzy
@@ -1482,7 +1482,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:149-38
 msgid "Moves one sheet to the left."
-msgstr "Senkez ifer ɣer tama tazelmaḍt."
+msgstr "Senkez tiferkit ɣer tama tazelmaḍt."
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:149-93
 #, fuzzy
@@ -1511,6 +1511,9 @@ msgid ""
 "sheets in a spreadsheet are selected, this shortcut key combination only "
 "selects the previous sheet. Makes the previous sheet the current sheet."
 msgstr ""
+"Ad yernu tiferkit yezrin ɣer tefrayt tamirant n tferkiyin. Ma yella akk "
+"tferkiyin n tferkit n usiḍen ttwafernent, tasuddest-agi tanegzumt ad fernent "
+"kan i tferkit yezrin. Ad d-yeg tiferkit tuzwirt d tiferkit tamirant."
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:151-280
 msgid ""
@@ -1528,6 +1531,9 @@ msgid ""
 "a spreadsheet are selected, this shortcut key combination only selects the "
 "next sheet. Makes the next sheet the current sheet."
 msgstr ""
+"Ad yernu tiferkit tuḍfirt ɣer tefrayt tamirant n tferkiwin. Ma yella akk "
+"tferkiyin n tferkit n usiḍen ttwafernent, tasuddest-agi tanegzumt ad fernent "
+"kan i tferkit tuḍfirt. Ad d-yeg tiferkit tuḍfirt d tiferkit tamirant."
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:152-268
 msgid ""
@@ -1812,9 +1818,8 @@ msgid "Select all in drawing page"
 msgstr "Fren akk deg umray / sebter n usunneɣ"
 
 #: html/cool-help.html%2Bdiv.h1:323-5
-#, fuzzy
 msgid "<span class=\"productname\">{productname}</span> Help"
-msgstr "<span class=\"productname\">{isem n ufaris}</span> imbellezen"
+msgstr "<span class=\"productname\">{isem n ufaris}</span> Tallelt"
 
 #: html/cool-help.html%2Bdiv.h2:324-5
 #: html/cool-help.html%2Bdiv.div.h3:359-5
@@ -1848,12 +1853,13 @@ msgstr "Tiwuriwin tinaẓiyin"
 #: html/cool-help.html%2Bdiv.div.h2:330-9
 #: html/cool-help.html%2Bdiv.div.h3:483-5
 msgid "<span class=\"productname\">{productname}</span> spreadsheets"
-msgstr "<span class=\"productname\">{isem n ufaris}</span> imbellezen"
+msgstr ""
+"<span class=\"productname\">{isem n ufaris}</span> tifelwitin tiliktṛunanin"
 
 #: html/cool-help.html%2Bdiv.div.h2:331-9
 #: html/cool-help.html%2Bdiv.div.div.h3:485-5
 msgid "Editing spreadsheets"
-msgstr "Asiẓreg n imbellezen"
+msgstr "Asiẓreg n tfelwitin tiliktṛunanin"
 
 #: html/cool-help.html%2Bdiv.div.h2:332-9
 #: html/cool-help.html%2Bdiv.div.div.h3:489-5
@@ -1864,12 +1870,12 @@ msgstr "Tinfaliyin"
 #: html/cool-help.html%2Bdiv.div.h2:333-9
 #: html/cool-help.html%2Bdiv.div.div.h3:498-5
 msgid "Formatting spreadsheets"
-msgstr "Amasal n imbellezen"
+msgstr "Amasal n tfelwitin tiliktṛunanin"
 
 #: html/cool-help.html%2Bdiv.div.h2:335-9
 #: html/cool-help.html%2Bdiv.div.div.h3:759-5
 msgid "Spreadsheets"
-msgstr "Imbellezen"
+msgstr "Tifelwitin tiliktṛunanin"
 
 #: html/cool-help.html%2Bdiv.div.h2:338-9
 #: html/cool-help.html%2Bdiv.div.h3:547-5
@@ -1899,27 +1905,27 @@ msgstr "Isemliyen n uḍris"
 #: html/cool-help.html%2Bdiv.div.h2:345-9
 #: html/cool-help.html%2Bdiv.div.h3:596-5
 msgid "<span class=\"productname\">{productname}</span> presentations"
-msgstr "<span class=\"productname\">{isem n ufaris}</span> isenkiden"
+msgstr "<span class=\"productname\">{isem n ufaris}</span> tihawin"
 
 #: html/cool-help.html%2Bdiv.div.h2:346-9
 #: html/cool-help.html%2Bdiv.div.div.h3:598-5
 msgid "Editing presentations"
-msgstr ""
+msgstr "Asiẓreg n tihawin"
 
 #: html/cool-help.html%2Bdiv.div.h2:347-9
 #: html/cool-help.html%2Bdiv.div.div.h3:602-5
 msgid "Slide show"
-msgstr ""
+msgstr "Tigri n tugna"
 
 #: html/cool-help.html%2Bdiv.div.h2:348-9
 #: html/cool-help.html%2Bdiv.div.div.h3:609-5
 msgid "Slide pane"
-msgstr ""
+msgstr "Tigri n ugalis"
 
 #: html/cool-help.html%2Bdiv.div.h2:350-9
 #: html/cool-help.html%2Bdiv.div.div.h3:798-5
 msgid "Presentations"
-msgstr "Asenked"
+msgstr "Tihawin"
 
 #: html/cool-help.html%2Bdiv.h2:352-5
 #: html/cool-help.html%2Bdiv.div.h3:628-5
@@ -1933,6 +1939,10 @@ msgid ""
 "directly in your browser, in a simple and straight-forward way. You can work "
 "alone on a document, or collaboratively as part of a team."
 msgstr ""
+"<span class=\"productname\">{isem n ufaris}</span> ad k-yeǧǧ ad d-tesnulfuḍ "
+"yerna ad tẓergeḍ isemliyen uḍris n uwurmahil, Tifelwitin tiliktṛunanin, "
+"akked tihawin srid deg uminig-ik·im, s wudem aḥerfi usrid. Tzemreḍ ad "
+"txedmeḍ weḥd-k·m deg isemli, neɣ ad yili d aḥric n terbaɛt."
 
 #: html/cool-help.html%2Bdiv.div.div.ul.li:362-7
 msgid ""
@@ -1966,14 +1976,18 @@ msgid ""
 "<span class=\"def\">The document area:</span> The application area shows the "
 "document contents, either spreadsheets, presentations or text documents."
 msgstr ""
+"<span class=\"def\">Tamnaḍt n isemli:</span> Tamnaḍt n usnas teskanay agbur "
+"n isemli, ama d tifelwitin tiliktṛunanin, tihawin neɣ isemliyen n uḍris."
 
 #: html/cool-help.html%2Bdiv.div.div.p:375-5
 msgid ""
-"<span class=\"def\">The menu bar:</span> The main menu is placed on the top "
-"and includes many options, commands for printing, editing, viewing and other "
-"advanced commands. You can hide the menu bar clicking on the <span class"
-"=\"w2ui-icon fold icon-size\"></span> icon on the far right. Click on the "
-"<span class=\"w2ui-icon unfold icon-size\"></span> icon to show the menu."
+"<span class=\"def\">The menu bar:</span> The main menu is at the top and "
+"includes many options, such as commands for printing, editing, viewing, and "
+"other advanced commands. You can hide the menu bar by clicking the hide icon "
+"<span class=\"w2ui-icon fold icon-size\" role=\"img\" aria-label=\"hide menu "
+"bar\" title=\"Hide menu bar\"></span> on the far right. To show it again, "
+"click the show icon <span class=\"w2ui-icon unfold icon-size\" role=\"img\" "
+"aria-label=\"show menu bar\" title=\"Show menu bar\"></span>."
 msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.p:378-5
@@ -2256,6 +2270,8 @@ msgid ""
 "Select a table in text document, a range in a spreadsheet or a table in a "
 "presentation."
 msgstr ""
+"Fren tafelwit deg isemli aḍris, azilal deg tifelwitin tiliktṛunanin neɣ "
+"tafelwit deg tihawt."
 
 #: html/cool-help.html%2Bdiv.div.div.ol.li:451-7
 msgid ""
@@ -2379,9 +2395,10 @@ msgid ""
 "with suggested misspelling corrections."
 msgstr ""
 "<span class=\"productname\">{isem n ufaris}</span> tzemreḍ ad tessenqed tira "
-"deg isemliyen n uḍris, ambellez akked isenkaden. Ajerriḍ azeggaɣ mmalen-d "
-"awalen ur yettwarun akken iwata. Sit ɣef tqeffalt tayeffust n tɣerdayt i "
-"wakken ad teldiḍ umuɣ n usatal s uskan i d-yettwasumren i yiseɣtiyen."
+"deg isemliyen n uḍris, tiferkiyin n usiḍen akked tihawin. Ajerriḍ azeggaɣ "
+"mmalen-d awalen ur yettwarun akken iwata. Sit ɣef tqeffalt tayeffust n "
+"tɣerdayt i wakken ad teldiḍ umuɣ n usatal s uskan i d-yettwasumren i "
+"yiseɣtiyen."
 
 #: html/cool-help.html%2Bdiv.div.div.div.img[alt]:478-29
 msgid "spellchecking"
@@ -2404,6 +2421,15 @@ msgid ""
 "cursor to the next cell to the right, and with an <kbd>Enter</kbd> to the "
 "cell below for easy further data entry."
 msgstr ""
+"Teẓrigeḍ tiferkit n usiḍen deg uẓeṭṭa am akken ad tẓergeḍ tiferkit n usiḍen "
+"n tnarit. Timhalin am usekcem n isefka, afran n izilalen, tigejda, aduren "
+"neɣ tiferkit kifkif-iten. Seqdec anasiw, umuɣen neɣ afeggag n yifecka i "
+"tigawin deg tferkit n usiḍen. Azuɣer n ugbur n tebniqin i taččart n tebniqin "
+"s yisefka iteddu daɣen. Nɣel, gzem yerna senteḍ tiludna yellan seg wumuɣ n "
+"usatal. Send asekcem n yisefka s usiti <kbd>Tab</kbd> ad ismutti taḥnacaḍt "
+"ɣer tebniqt tuḍfirt ɣer yeffus, Daɣen ɣef tqeffalt n <kbd>Kcem</kbd> akken "
+"ad ismutti taḥnacaḍt ɣer tebniqt n wadda akken ad tessifsuseḍ asekcem n "
+"yisefka nniḍen."
 
 #: html/cool-help.html%2Bdiv.div.div.div.p:491-5
 msgid ""
@@ -2413,6 +2439,7 @@ msgstr ""
 #: html/cool-help.html%2Bdiv.div.div.div.p:492-5
 msgid "All spreadsheets functions and mathematical rules applies."
 msgstr ""
+"Akk tiwuriwin akked ilugan n tusnakt n tfelwitin tiliktṛunanin ad ttwasnesen."
 
 #: html/cool-help.html%2Bdiv.div.div.div.p:494-5
 msgid ""
@@ -2421,6 +2448,11 @@ msgid ""
 "committees/download.php/16826/openformula-spec-20060221.html\" target="
 "\"_blank\" rel=\"noopener noreferrer\">OASIS OpenFormula specification</a>."
 msgstr ""
+"Tutlayt n tenfalit ilaq ad tili d tin yettwassnen aṭas i yal aseqdac n "
+"tfelwitin tiliktṛunanin, yerna ttunefken-d s telqey deg ttfaṣil deg <a href="
+"\"https://www.oasis-open.org/committees/download.php/16826/openformula-"
+"spec-20060221.html\" target=\"_blank\" rel=\"noopener noreferrer\">Asefru n "
+"OASIS OpenFormula</a>."
 
 #: html/cool-help.html%2Bdiv.div.div.div.p:500-5
 msgid ""
@@ -2432,6 +2464,14 @@ msgid ""
 "dialog allows complex and custom number formatting, as well as font, complex "
 "border, background, cell protection and other options."
 msgstr ""
+"<span class=\"def\">Amasal usrid:</span>Tzemreḍ ad tsedduḍ amasal i tbniqin "
+"n tferkiyin n usiḍen, tigejda, aduren akked tferkiyin s umsal srid seg "
+"wumuɣen, afeggag n yifecka neɣ umuɣen n usatal. Amsal usrid yetteddu kan ɣef "
+"tɣawsa yettwafernen. I umasal n tebniqt xas seqdec umuɣ neɣ sit ɣef "
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>1</kbd>. Tankult n udiwenni ad tesireg amsal n wuṭṭunen s "
+"wudem ameẓdan akked udmawan, am akken d tsefsit, iri ameẓdu, agilal, "
+"ammesten n tebniqt akked textiṛiyin nniḍen."
 
 #: html/cool-help.html%2Bdiv.div.div.div.div.img[alt]:501-29
 msgid "format cells"
@@ -2536,8 +2576,8 @@ msgid ""
 "the mouse on the cell to display comments."
 msgstr ""
 "<span class=\"def\">Iwenniten:</span> Deg tferkit n usiḍen ad tizmired ad "
-"tegreḍ yiwen n uwennit deg tebniqt. Ticki tferneḍ  <span class=\"ui\">Ger "
-"awennit</span>, ad d-iban usfaylu ara k-yeǧǧen ad taruḍ agbur i uwennit. "
+"tegreḍ yiwen n uwennit deg tebniqt. Ticki tferneḍ <span class=\"ui\">Ger "
+"awennit</span>, ad d-iban usfaylu ara k·kem-yeǧǧen ad taruḍ agbur i uwennit. "
 "Taneqqiḍt tazeggaɣt ad tban deg tama tayeffust n tebniqt ticki tesɛa "
 "awennit. Srifeg s tɣerdayt ɣef tebniqt akken ad tsekneḍ iwenniten."
 
@@ -2759,6 +2799,9 @@ msgid ""
 "To exit a <span class=\"productname\">{productname}</span> slide show, press "
 "the <kbd>Esc</kbd> key to return to the presentation edit mode."
 msgstr ""
+"Akken ad teffɣeḍ seg <span class=\"productname\">{isem n ufaris}</span> "
+"tigri n tugna, sit ɣef tqeffalt <kbd>Esc</kbd> akken ad tuɣaleḍ ɣer uskar n "
+"teẓrigt n tihawt."
 
 #: html/cool-help.html%2Bdiv.div.div.div.p:611-5
 msgid ""
@@ -2771,8 +2814,8 @@ msgid ""
 "Use the slide pane toolbar in the bottom to start the slideshow, add slide, "
 "duplicate or delete the current slide."
 msgstr ""
-"Seqdec afeggag n ifecka n tmeccegin deg wadda akken ad tebduḍ askan n "
-"tmeccegin, ad ternuḍ timeccegt, ad tneɣleḍ neɣ ad tekkseḍ timeccegt tamirant."
+"Seqdec afeggag n ifecka n tigri n ugalis deg wadda akken ad tebduḍ tigri n "
+"tugna, ad ternuḍ tigri, ad tneɣleḍ neɣ ad tekkseḍ tigri tamirant."
 
 #: html/cool-help.html%2Bdiv.div.div.div.p:618-5
 msgid ""
@@ -2783,7 +2826,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.div.img[alt]:619-29
 msgid "slide layouts"
-msgstr ""
+msgstr "tineɣrufin n tigri"
 
 #: html/cool-help.html%2Bdiv.div.div.div.p:621-30
 msgid ""
@@ -2832,6 +2875,8 @@ msgstr ""
 #: html/cool-help.html%2Bdiv.div.div.ul.li:634-7
 msgid "Spreadsheets: Microsoft formats XLS, XLSX, OpenDocument Format ODS"
 msgstr ""
+"Tifelwitin tiliktṛunanin: imasalen Microsoft XLS, XLSX, Amasal OpenDocument "
+"ODS"
 
 #: html/cool-help.html%2Bdiv.div.div.ul.li:635-7
 msgid "Presentations: Microsoft formats PPT, PPTX, OpenDocument Format ODP"
@@ -3213,6 +3258,8 @@ msgid ""
 "Activate the <span class=\"productname\">{productname}</span> spreadsheet "
 "window."
 msgstr ""
+"Rmed <span class=\"productname\">{isem n ufaris}</span> asfaylu n tfelwit "
+"taliktṛunant."
 
 #: html/cool-help.html%2Bdiv.div.div.div.ol.li:769-7
 msgid ""
@@ -3276,15 +3323,18 @@ msgid ""
 "right mouse button) over the sheet tab in the bottom. Enter the new sheet "
 "name in the dialog that follows."
 msgstr ""
+"Snifel isem n tferkit deg yisemli n tafelwit taliktṛunant s useqdec n wumuɣ "
+"n usatal (s useqdec n tqeffalt tayefust n tɣerdayt) ɣef yiccer n tferkit deg "
+"ukessar. Sekcem isem n tferkit tamaynut deg udiwenni ara yeḍferen."
 
 #: html/cool-help.html%2Bdiv.div.div.div.h4:800-5
 msgid "How can I run my slide show?"
-msgstr "Amek ara slekmeɣ asenked-iw tura?"
+msgstr "Amek ara slekmeɣ tigri n tugna?"
 
 #: html/cool-help.html%2Bdiv.div.div.div.ol.li:802-7
 msgid ""
 "Open the presentation in <span class=\"productname\">{productname}</span>"
-msgstr ""
+msgstr "Ldi tihawt deg <span class=\"productname\">{isem n ufaris}</span>"
 
 #: html/cool-help.html%2Bdiv.div.div.div.ol.li:803-7
 msgid ""
@@ -3295,15 +3345,15 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.ol.li.img[alt]:803-176
 msgid "slide show"
-msgstr ""
+msgstr "tigri n tugna"
 
 #: html/cool-help.html%2Bdiv.div.div.div.h4:807-5
 msgid "How can I change the line, area and position of a shape in my slides?"
-msgstr ""
+msgstr "Amek zemreɣ ad beddleɣ izirig, tamnaḍt d idig n talɣa deg tigriwin-iw?"
 
 #: html/cool-help.html%2Bdiv.div.div.div.ol.li:809-7
 msgid "Select the shape in your slide. A set of handles shows."
-msgstr ""
+msgstr "Fren talɣa deg tigri-ik·im. ad banen tagrumma n ifassen."
 
 #: html/cool-help.html%2Bdiv.div.div.div.ol.li:810-7
 msgid ""
