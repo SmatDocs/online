@@ -73,6 +73,7 @@ class TreeViewControl {
 	_tbody: HTMLElement;
 	_thead: HTMLElement = null;
 	_columns: number;
+	_maxColumnsIncludingState: number = 0;
 	_hasState: boolean;
 	_hasIcon: boolean;
 	_isNavigator: boolean;
@@ -82,7 +83,6 @@ class TreeViewControl {
 	readonly PAGE_ENTRY_PREFIX = '-$#~';
 	readonly PAGE_ENTRY_SUFFIX = '~#$-';
 	readonly PAGE_DIVIDER_ROW_CLASS = 'page-divider-row';
-	_ignoreFocus: boolean = false;
 
 	constructor(data: TreeWidgetJSON, builder: JSBuilder) {
 		this._container = window.L.DomUtil.create(
@@ -96,7 +96,6 @@ class TreeViewControl {
 			data,
 			builder,
 		);
-		if (data.ignoreFocus !== undefined) this._ignoreFocus = data.ignoreFocus;
 	}
 
 	get Container() {
@@ -369,6 +368,9 @@ class TreeViewControl {
 		let dummyColumns = 0;
 		if (this._hasState) dummyColumns++;
 		tr.style.gridColumn = '1 / ' + (this._columns + dummyColumns + 1);
+		if (this._columns + dummyColumns + 1 > this._maxColumnsIncludingState) {
+			this._maxColumnsIncludingState = this._columns + dummyColumns + 1;
+		}
 		if (
 			this.isPageDivider(entry, this.PAGE_ENTRY_PREFIX, this.PAGE_ENTRY_SUFFIX)
 		) {
@@ -460,7 +462,7 @@ class TreeViewControl {
 		if (level !== undefined && this._isRealTree)
 			tr.setAttribute('aria-level', '' + level);
 
-		if (entry.selected === true) this.selectEntry(tr, selectionElement);
+		if (entry.selected === true) this.selectEntry(tr, selectionElement, false);
 
 		const disabled = entry.enabled === false;
 		if (disabled) window.L.DomUtil.addClass(tr, 'disabled');
@@ -963,16 +965,20 @@ class TreeViewControl {
 		$(span).toggleClass('collapsed');
 	}
 
-	selectEntry(span: HTMLElement, checkbox: HTMLInputElement) {
+	selectEntry(
+		span: HTMLElement,
+		checkbox: HTMLInputElement,
+		shouldFocus: boolean = false,
+	) {
 		window.L.DomUtil.addClass(span, 'selected');
 		span.setAttribute('aria-selected', 'true');
 		span.tabIndex = 0;
-		if (!this._ignoreFocus) span.focus();
+		if (shouldFocus) span.focus();
 
 		if (checkbox) checkbox.removeAttribute('tabindex');
 	}
 
-	selectEntryByRow(row: number) {
+	selectEntryByRow(row: number, shouldFocus: boolean = false) {
 		const rowElement = this._rows.get(String(row));
 		if (!rowElement) {
 			console.warn('TreeView onSelect: row "' + row + '" not found');
@@ -988,7 +994,7 @@ class TreeViewControl {
 
 		// Select the target row
 		const checkbox = rowElement.querySelector('input') as HTMLInputElement;
-		this.selectEntry(rowElement, checkbox);
+		this.selectEntry(rowElement, checkbox, shouldFocus);
 	}
 
 	unselectEntry(item: HTMLElement) {
@@ -1022,7 +1028,7 @@ class TreeViewControl {
 					this.unselectEntry(item);
 				});
 
-			this.selectEntry(parentContainer, checkbox);
+			this.selectEntry(parentContainer, checkbox, true);
 			if (checkbox && (!e || e.target === checkbox))
 				this.changeCheckboxStateOnClick(checkbox, treeViewData, builder, entry);
 
@@ -1620,6 +1626,29 @@ class TreeViewControl {
 		if (level === 1 && !hasSelectedEntry) this.makeTreeViewFocusable(true);
 	}
 
+	showSearchBar(parent: HTMLElement) {
+		const searchBox = document.createElement('input');
+		searchBox.id = JSDialog.MakeIdUnique('ui-treeview-search-input'); // Form fields should have either a name or an ID - using this instead of a class
+		searchBox.type = 'search';
+		searchBox.setAttribute(
+			'class',
+			'jsdialog ui-edit ui-treeview-search-input',
+		);
+		searchBox.setAttribute('aria-label', _('Search items'));
+		searchBox.setAttribute('aria-controls', this._container.id);
+		searchBox.placeholder = _('Search...');
+		searchBox.addEventListener('input', () =>
+			this.filterEntries(searchBox.value),
+		);
+
+		const searchContainer = document.createElement('div');
+		searchContainer.className = 'ui-treeview-search-container';
+		searchContainer.style.gridColumn = '1 / ' + this._maxColumnsIncludingState;
+		searchContainer.appendChild(searchBox);
+
+		parent.insertAdjacentElement('afterbegin', searchContainer);
+	}
+
 	fillEntry(
 		data: TreeWidgetJSON,
 		entry: TreeEntryJSON,
@@ -1643,6 +1672,9 @@ class TreeViewControl {
 			let dummyColumns = 0;
 			if (this._hasState) dummyColumns++;
 			subGrid.style.gridColumn = '1 / ' + (this._columns + dummyColumns + 1);
+			if (this._columns + dummyColumns + 1 > this._maxColumnsIncludingState) {
+				this._maxColumnsIncludingState = this._columns + dummyColumns + 1;
+			}
 
 			this.fillEntries(data, entry.children, builder, level + 1, subGrid);
 		}
@@ -1718,6 +1750,11 @@ class TreeViewControl {
 		});
 	}
 
+	isMenu(data: TreeWidgetJSON): boolean {
+		if (data.type === 'menu') return true;
+		return false;
+	}
+
 	isListbox(data: TreeWidgetJSON): boolean {
 		if (this.isRealTree(data)) return false;
 
@@ -1750,7 +1787,7 @@ class TreeViewControl {
 
 		this._tbody = this._container;
 		(this._container as any).onSelect = (position: number) => {
-			this.selectEntryByRow(position);
+			this.selectEntryByRow(position, false);
 		};
 		(this._container as any).filterEntries = this.filterEntries.bind(this);
 		(this._container as any).highlightEntries =
@@ -1775,6 +1812,10 @@ class TreeViewControl {
 		this.preprocessColumnData(data.entries);
 		this.fillHeaders(data.headers, builder);
 		this.fillEntries(data, data.entries, builder, 1, this._tbody);
+
+		if (this._isListbox && !data.noSearchField && !this.isMenu(data)) {
+			this.showSearchBar(this._container);
+		}
 
 		return true;
 	}

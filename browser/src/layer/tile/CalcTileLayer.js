@@ -802,8 +802,17 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 
 		this._replayPrintTwipsMsgs(differentSheet);
 
-		this.sheetGeometry.setViewArea(this._pixelsToTwips(this._map._getTopLeftPoint()),
-			this._pixelsToTwips(this._map.getSize()));
+		if (this.sheetGeometry.autoFilterChanged) {
+			this.sheetGeometry.autoFilterChanged = false;
+			let firstVisibleRow = this.sheetGeometry.getFirstNewVisibleRow();
+			app.activeDocument.activeLayout.scrollTo(
+				this._map._getTopLeftPoint().x,
+				this.sheetGeometry.getRowsGeometry().getElementData(firstVisibleRow).startpos);
+		} else {
+			this.sheetGeometry.setViewArea(
+				this._pixelsToTwips(this._map._getTopLeftPoint()),
+				this._pixelsToTwips(this._map.getSize()));
+		}
 
 		this._addRemoveGroupSections();
 
@@ -930,6 +939,10 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		}
 		else if (e.commandName === 'AutoFilterInfo') {
 			app.calc.autoFilterCell = { 'row': e.state.row, 'column': e.state.column };
+		}
+		else if (e.commandName === 'AutoFilterChange')
+		{
+			this.sheetGeometry.autoFilterChanged = true;
 		}
 		else if (e.commandName === 'PivotTableFilterInfo') {
 			app.calc.pivotTableFilterCell = { 'row': e.state.row, 'column': e.state.column };
@@ -1090,17 +1103,10 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 			// When insertMode is false, this is a cell selection message.
 			textMsg = textMsg.replace('textselection:', '').trim();
 			if (textMsg !== 'EMPTY' && textMsg !== '') {
-				this._cellSelections = textMsg.split(';');
-				var that = this;
-				this._cellSelections = this._cellSelections.map(function(element) {
-					element = element.split(',');
-					var topLeftTwips = new cool.Point(parseInt(element[0]), parseInt(element[1]));
-					var offset = new cool.Point(parseInt(element[2]), parseInt(element[3]));
-					var bottomRightTwips = topLeftTwips.add(offset);
-					var boundsTwips = that._convertToTileTwipsSheetArea(new cool.Bounds(topLeftTwips, bottomRightTwips));
+				this._cellSelections = this._getRawRectangles(textMsg);
 
-					element = app.LOUtil.createRectangle(boundsTwips.min.x * app.twipsToPixels, boundsTwips.min.y * app.twipsToPixels, boundsTwips.getSize().x * app.twipsToPixels, boundsTwips.getSize().y * app.twipsToPixels);
-					return element;
+				this._cellSelections = this._cellSelections.map(function(element) {
+					return new cool.SimpleRectangle(element[0], element[1], element[2], element[3]);
 				});
 			}
 			else {

@@ -70,7 +70,13 @@ JSDialog.grid = function (
 
 	if (data.allyRole) {
 		table.role = data.allyRole;
+
+		if (data.allyRole === 'listbox')
+			table.setAttribute('aria-activedescendant', data.initialSelectedId);
 	}
+
+	if (data.tabIndex !== undefined)
+		table.setAttribute('tabindex', data.tabIndex);
 
 	const gridRowColStyle =
 		'grid-template-rows: repeat(' +
@@ -154,6 +160,8 @@ JSDialog.toolbox = function (
 			data.children[index].enabled = false;
 		}
 	}
+
+	JSDialog.SetupA11yLabelForNonLabelableElement(toolbox, data, builder);
 
 	const enabledCallback = function (enable: boolean) {
 		for (const j in data.children) {

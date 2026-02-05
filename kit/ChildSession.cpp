@@ -25,7 +25,6 @@
 #include <Poco/StreamCopier.h>
 #include <Poco/URI.h>
 #include <Poco/BinaryReader.h>
-#include <Poco/Base64Decoder.h>
 #if !MOBILEAPP
 #include <Poco/Net/HTTPResponse.h>
 #include <Poco/Net/HTTPSClientSession.h>
@@ -1225,7 +1224,7 @@ bool ChildSession::getCommandValues(const StringVector& tokens)
         LOKitHelper::ScopedString values(getLOKitDocument()->getCommandValues(".uno:Redo"));
         LOKitHelper::ScopedString undo(getLOKitDocument()->getCommandValues(".uno:Undo"));
         std::ostringstream jsonTemplate;
-        jsonTemplate << "{\"commandName\":\".uno:DocumentRepair\",\"Redo\":"
+        jsonTemplate << R"({"commandName":".uno:DocumentRepair","Redo":)"
                      << (values.get() == nullptr ? "" : values.get())
                      << ",\"Undo\":" << (undo.get() == nullptr ? "" : undo.get()) << "}";
         std::string json = jsonTemplate.str();
@@ -1814,6 +1813,8 @@ bool ChildSession::insertFile(const StringVector& tokens)
     if (type == "graphic" ||
         type == "graphicurl" ||
         type == "selectbackground" ||
+        type == "comparedocuments" ||
+        type == "comparedocumentsurl" ||
         type == "multimedia" ||
         type == "multimediaurl" )
     {
@@ -1821,12 +1822,13 @@ bool ChildSession::insertFile(const StringVector& tokens)
 
         if constexpr (!Util::isMobileApp())
         {
-            if (type == "graphic" || type == "selectbackground" || type == "multimedia")
+            if (type == "graphic" || type == "selectbackground" || type == "multimedia" ||
+                type == "comparedocuments")
             {
                 std::string jailDoc = getJailDocRoot();
                 url = "file://" + jailDoc + "insertfile/" + name;
             }
-            else if (type == "graphicurl" || type == "multimediaurl")
+            else if (type == "graphicurl" || type == "multimediaurl" || type == "comparedocumentsurl")
             {
                 URI::decode(name, url);
                 if (!Util::toLower(url).starts_with("http"))
@@ -1884,6 +1886,15 @@ bool ChildSession::insertFile(const StringVector& tokens)
                     "}"
                 "}"
             "}";
+        }
+        else if (type == "comparedocuments" || type == "comparedocumentsurl")
+        {
+            command = ".uno:CompareDocuments";
+            arguments = "{"
+                "\"URL\":{"
+                    "\"type\":\"string\","
+                    "\"value\":\"" + url + "\""
+                "}}";
         } else {
             command = (type == "selectbackground" ? ".uno:SelectBackground" : ".uno:InsertGraphic");
             arguments = "{"
@@ -2165,7 +2176,7 @@ bool ChildSession::contentControlEvent(const StringVector& tokens)
         sendTextFrameAndLogError("error: cmd=contentcontrolevent kind=syntax");
         return false;
     }
-    std::string arguments = "{\"type\":\"" + type + "\",";
+    std::string arguments = R"({"type":")" + type + "\",";
 
     if (type == "picture")
     {
@@ -2174,7 +2185,7 @@ bool ChildSession::contentControlEvent(const StringVector& tokens)
         {
             std::string jailDoc = getJailDocRoot();
             std::string url = "file://" + jailDoc + "insertfile/" + name;
-            arguments += "\"changed\":\"" + url + "\"}";
+            arguments += R"("changed":")" + url + "\"}";
         }
     }
     else if (type == "pictureurl")
@@ -2184,14 +2195,14 @@ bool ChildSession::contentControlEvent(const StringVector& tokens)
         {
             std::string url;
             URI::decode(name, url);
-            arguments = "{\"type\":\"picture\",\"changed\":\"" + url + "\"}";
+            arguments = R"({"type":"picture","changed":")" + url + "\"}";
         }
     }
     else if (type == "date" || type == "drop-down")
     {
         std::string data;
         getTokenString(tokens[2], "selected", data);
-        arguments += "\"selected\":\"" + data + "\"" + "}";
+        arguments += R"("selected":")" + data + "\"" + "}";
     }
 
     getLOKitDocument()->setView(_viewId);
@@ -2634,7 +2645,7 @@ bool ChildSession::renderSlide(const StringVector& tokens)
                                                            &bufferWidth, &bufferHeight,
                                                            renderBackground, renderMasterPage);
     if (!success) {
-        sendTextFrame("sliderenderingcomplete: {\"status\": \"fail\"}");
+        sendTextFrame(R"(sliderenderingcomplete: {"status": "fail"})");
         return false;
     }
 
@@ -3473,11 +3484,11 @@ std::string ChildSession::getBlockedCommandType(std::string command)
 bool ChildSession::sendProgressFrame(const char* id, const std::string& jsonProps,
                                      const std::string& forcedID)
 {
-    std::string msg = "progress: { \"id\":\"";
+    std::string msg = R"(progress: { "id":")";
     msg += id;
     msg += "\"";
     if (_docManager->isBackgroundSaveProcess())
-        msg += ", \"type\":\"bg\"";
+        msg += R"(, "type":"bg")";
     if (!jsonProps.empty())
     {
         msg += ", ";
@@ -3485,7 +3496,7 @@ bool ChildSession::sendProgressFrame(const char* id, const std::string& jsonProp
     }
     if (!forcedID.empty())
     {
-        msg += ", \"forceid\": \"" + forcedID + "\"";
+        msg += R"(, "forceid": ")" + forcedID + "\"";
     }
     msg += " }";
     return sendTextFrame(msg);
@@ -3745,7 +3756,8 @@ void ChildSession::loKitCallback(const int type, const std::string& payload)
         sendTextFrame("contextmenu: " + payload);
         break;
     case LOK_CALLBACK_STATUS_INDICATOR_START:
-        sendProgressFrame("start", std::string("\"text\": \"") + JsonUtil::escapeJSONValue(payload) + "\"");
+        sendProgressFrame("start",
+                          std::string(R"("text": ")") + JsonUtil::escapeJSONValue(payload) + "\"");
         break;
     case LOK_CALLBACK_STATUS_INDICATOR_SET_VALUE:
         sendProgressFrame("setvalue", std::string("\"value\": ") + payload);

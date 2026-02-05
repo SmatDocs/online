@@ -540,7 +540,7 @@ window.L.Map = window.L.Evented.extend({
 	},
 
 	zoomToFactor: function (zoom) {
-		return Math.pow(1.2, (zoom - this.options.zoom));
+		return Math.pow(this.options.crs.SCALE, (zoom - this.options.zoom));
 	},
 
 	getDesktopCalcZoomCenter: function() {
@@ -780,25 +780,6 @@ window.L.Map = window.L.Evented.extend({
 		}
 	},
 
-	setDocBounds: function (bounds) {
-		bounds = window.L.latLngBounds(bounds);
-		this.options.docBounds = bounds;
-	},
-
-	hasDocBounds: function () {
-		return this.options.docBounds;
-	},
-
-	getCorePxDocBounds: function () {
-		if (!this.options.docBounds)
-			return new cool.Bounds(0, 0);
-
-		var topleft = this.project(this.options.docBounds.getNorthWest());
-		var bottomRight = this.project(this.options.docBounds.getSouthEast());
-		return new cool.Bounds(this._docLayer._cssPixelsToCore(topleft),
-			this._docLayer._cssPixelsToCore(bottomRight));
-	},
-
 	panInsideBounds: function (bounds) {
 		var center = this.getCenter(),
 		    newCenter = this._limitCenter(center, this._zoom, bounds);
@@ -1020,11 +1001,6 @@ window.L.Map = window.L.Evented.extend({
 			this.latLngToLayerPoint(this.options.maxBounds.getSouthEast()));
 	},
 
-	getLayerDocBounds: function () {
-		return cool.Bounds.toBounds(this.latLngToLayerPoint(this.options.docBounds.getNorthWest()),
-			this.latLngToLayerPoint(this.options.docBounds.getSouthEast()));
-	},
-
 	getSize: function () {
 		if (!this._size || this._sizeChanged) {
 			this._size = new cool.Point(
@@ -1099,7 +1075,7 @@ window.L.Map = window.L.Evented.extend({
 
 	getScaleZoom: function (scale, fromZoom) {
 		fromZoom = fromZoom === undefined ? this.getZoom() : fromZoom;
-		return fromZoom + (Math.log(scale) / Math.log(1.2));
+		return fromZoom + (Math.log(scale) / Math.log(this.options.crs.SCALE));
 	},
 
 

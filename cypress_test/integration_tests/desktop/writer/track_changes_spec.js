@@ -45,7 +45,6 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 			cy.cGet('#insertannotation').click();
 			cy.cGet('#annotation-modify-textarea-new').type('some text' + n, { force: true });
 			cy.cGet('#annotation-save-new').click({force: true});
-			cy.cGet('.jsdialog-overlay').click();
 			// Wait for animation
 			cy.wait(500);
 		}
@@ -55,7 +54,6 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 		cy.cGet('#insertannotation').click();
 		cy.cGet('#annotation-modify-textarea-new').type('some text2', { force: true });
 		cy.cGet('#annotation-save-new').click({force: true});
-		cy.cGet('.jsdialog-overlay').click();
 		cy.wait(500);
 		helper.typeIntoDocument('{home}');
 		cy.cGet('div.cool-annotation').should('have.length', 3);
@@ -91,7 +89,6 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 			cy.cGet('#insertannotation').click();
 			cy.cGet('#annotation-modify-textarea-new').type('some text' + n, { force: true });
 			cy.cGet('#annotation-save-new').click({force: true});
-			cy.cGet('.jsdialog-overlay').click();
 			// Wait for animation
 			cy.wait(500);
 		}
@@ -101,7 +98,6 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 		cy.cGet('#insertannotation').click();
 		cy.cGet('#annotation-modify-textarea-new').type('some text2', { force: true });
 		cy.cGet('#annotation-save-new').click({force: true});
-		cy.cGet('.jsdialog-overlay').click();
 		cy.wait(500);
 		helper.typeIntoDocument('{home}');
 		cy.cGet('div.cool-annotation').should('have.length', 3);
@@ -131,13 +127,28 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 		helper.expectTextForClipboard('Hello World');
 	});
 
+	it('Compare documents', function () {
+		// Given an ~empty (new) document:
+		desktopHelper.switchUIToNotebookbar();
+		cy.cGet('#Review-tab-label').click();
+
+		// When comparing it with an old document that has some content:
+		// Without the accompanying fix in place, this test would have failed with:
+		// - Timed out retrying after 10000ms: Expected to find element: #Review-container .unoCompareDocuments, but never found it.
+		// i.e. the notebookbar didn't have a doc compare button.
+		cy.cGet('#Review-container .unoCompareDocuments').filter(':visible').click();
+		cy.cGet('#comparedocuments[type=file]').attachFile({ filePath: 'desktop/writer/track_changes_old.odt', encoding: 'binary' });
+
+		// Then make sure the manage changes dialog finds a deletion:
+		cy.cGet('#AcceptRejectChangesDialog img.swresredline_deletedimg').should('be.visible');
+	});
+
 	it.skip('Comment Undo-Redo', function () {
 		for (var n = 0; n < 2; n++) {
 			desktopHelper.getCompactIconArrow('DefaultNumbering').click();
 			cy.cGet('#insertannotation').click();
 			cy.cGet('#annotation-modify-textarea-new').type('some text' + n);
 			cy.cGet('#annotation-save-new').click();
-			cy.cGet('.jsdialog-overlay').click();
 			// Wait for animation
 			cy.wait(500);
 		}

@@ -254,14 +254,17 @@ COOL_JS_LST =\
 	src/docdispatcher.ts \
 	src/app/DocEvents.ts \
 	src/core/geometry.ts \
+	src/core/TimerRegistry.ts \
 	src/app/GraphicSelectionMiddleware.ts \
 	src/app/TextSelectionMiddleware.ts \
 	src/app/CellSelectionMarkerMiddleware.ts \
 	src/app/TableMiddleware.ts \
 	src/app/ImpressSelectionMiddleware.ts \
 	src/app/ViewLayout.ts \
+	src/app/ViewLayoutNewBase.ts \
 	src/app/ViewLayoutWriter.ts \
 	src/app/ViewLayoutMultiPage.ts \
+	src/app/ViewLayoutCompareChanges.ts \
 	src/app/DocumentBase.ts \
 	src/app/DocumentView.ts \
 	src/app/TilesMiddleware.ts \
@@ -279,7 +282,7 @@ COOL_JS_LST =\
 	src/app/Log.ts \
 	src/app/Debug.ts \
 	src/app/A11yValidator.ts \
-	src/app/SocketBase.ts \
+	src/app/Socket.ts \
 	src/app/TracingEvents.ts \
 	src/app/ServerCommand.ts \
 	src/Leaflet.js \
@@ -289,7 +292,6 @@ COOL_JS_LST =\
 	src/core/Util.js \
 	src/core/Class.js \
 	src/core/Events.js \
-	src/core/Socket.js \
 	src/geometry/Point.ts \
 	src/geometry/Bounds.ts \
 	src/geometry/Transformation.ts \
@@ -358,6 +360,7 @@ COOL_JS_LST =\
 	src/layer/vector/CanvasOverlay.ts \
 	src/canvas/sections/ScrollSection.ts \
 	src/canvas/sections/MouseControl.ts \
+	src/app/LayerUtil.ts \
 	src/layer/tile/CanvasTileLayer.js \
 	src/layer/vector/CDarkOverlay.ts \
 	src/layer/SplitPanesContext.ts \
@@ -398,6 +401,7 @@ COOL_JS_LST =\
 	src/map/handler/Map.StateChanges.js \
 	src/map/handler/Map.WOPI.js \
 	src/control/jsdialog/Util.UniqueId.ts \
+	src/control/jsdialog/Definitions.MenuCommands.ts \
 	src/control/Control.AboutDialog.ts \
 	src/control/Control.Toolbar.js \
 	src/control/Control.Command.js \
@@ -466,6 +470,7 @@ COOL_JS_LST =\
 	src/control/jsdialog/Widget.IconView.ts \
 	src/control/jsdialog/Widget.NotebookbarIconView.ts \
 	src/control/jsdialog/Widget.MenuButton.js \
+	src/control/jsdialog/Widget.Listbox.ts \
 	src/control/jsdialog/Widget.MobileBorderSelector.js \
 	src/control/jsdialog/Widget.MobileTabControl.js \
 	src/control/jsdialog/Widget.MultilineEdit.js \
@@ -532,6 +537,7 @@ COOL_JS_LST =\
 	src/control/Ruler.ts \
 	src/control/VRuler.ts \
 	src/control/HRuler.ts \
+	src/control/PermissionMode.ts \
 	src/slideshow/SlideCache.ts \
 	src/slideshow/SlideCompositor.ts \
 	src/slideshow/LayerRenderer.ts \
@@ -1105,6 +1111,7 @@ pot:
 		src/canvas/sections/GenericButtonSection.ts \
 		src/canvas/sections/ChartContextButtonSection.ts \
 		src/canvas/sections/DiagramButtonSection.ts \
+		src/control/jsdialog/Definitions.MenuCommands.ts \
 		src/control/ColorPicker.ts \
 		src/control/Control.AboutDialog.ts \
 		src/control/Control.AddressInputField.ts \
@@ -1159,6 +1166,7 @@ pot:
 		src/control/Signing.js \
 		src/control/Toolbar.js \
 		src/control/VRuler.ts \
+		src/control/PermissionMode.ts \
 		src/control/jsdialog/Definitions.Menu.ts \
 		src/control/jsdialog/Util.SnackbarController.ts \
 		src/control/jsdialog/Widget.ColorPicker.ts \
@@ -1170,10 +1178,9 @@ pot:
 		src/control/jsdialog/Widget.RadioButton.ts \
 		src/control/jsdialog/Widget.SidebarContainers.ts \
 		src/control/jsdialog/Widget.TreeView.ts \
-		src/app/SocketBase.ts \
+		src/app/Socket.ts \
 		src/app/TracingEvents.ts \
 		src/app/ServerCommand.ts \
-		src/core/Socket.js \
 		src/docdispatcher.ts \
 		src/docstate.ts \
 		src/docstatefunctions.js \

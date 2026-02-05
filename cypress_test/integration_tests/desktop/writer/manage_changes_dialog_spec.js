@@ -7,6 +7,9 @@ describe(['tagdesktop', 'tagnextcloud', 'tagscreenshot'], 'Manage Changes Dialog
 
 	beforeEach(function () {
 		helper.setupAndLoadDocument('writer/manage_tracking_changes.odt');
+		cy.getFrameWindow().then((win) => {
+			this.win = win;
+		});
 	});
 
 	it('Manage changes dialog visual test', function () {
@@ -15,10 +18,10 @@ describe(['tagdesktop', 'tagnextcloud', 'tagscreenshot'], 'Manage Changes Dialog
 		desktopHelper.getNbIcon('AcceptTrackedChanges', 'Review').click();
 		cy.cGet('#AcceptRejectChangesDialog').should('be.visible');
 		cy.cGet('#writerchanges .ui-treeview-entry.ui-treeview-expandable[aria-level="1"] .ui-treeview-expander-column').click();
-		cy.wait(100);
+		helper.processToIdle(this.win);
 		cy.cGet('#writerchanges .ui-treeview-entry.ui-treeview-expandable[aria-level="2"][aria-expanded="false"] .ui-treeview-expander-column')
 			.eq(0).click();
-		cy.wait(100);
+		helper.processToIdle(this.win);
 		cy.cGet('#writerchanges .ui-treeview-entry.ui-treeview-expandable[aria-level="2"][aria-expanded="false"] .ui-treeview-expander-column')
 			.eq(0).click();
 		cy.cGet('#writerchanges').compareSnapshot('writer_manage_changes_tree', 0.1);
