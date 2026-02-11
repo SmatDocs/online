@@ -32,6 +32,11 @@ interface UIModeCommand {
 	mode: UIMode;
 }
 
+// Type of the 'statusindicator' event payload.
+interface StatusIndicatorEvent {
+	statusType: string;
+}
+
 /**
  * UIManager class – initializes UI elements (toolbars, menubar, ruler, etc.) and controls their visibility.
  */
@@ -549,6 +554,23 @@ class UIManager extends window.L.Control {
 				this.map.quickFindPanel = JSDialog.QuickFindPanel(this.map);
 				this.map.addControl(this.map.quickFindPanel);
 			}
+
+			if (this.getStartCompareChanges()) {
+				// Don't switch to the comparechanges view yet, first wait for the
+				// initializationcomplete event, which fires after
+				// app.activeDocument.fileSize is set, otherwise the tile manager
+				// would discard valid tiles.
+				const enterCompareChanges = (
+					e: StatusIndicatorEvent,
+				) => {
+					if (e.statusType !== 'initializationcomplete') {
+						return;
+					}
+					app.dispatcher.dispatch('comparechanges');
+					this.map.off('statusindicator', enterCompareChanges);
+				};
+				this.map.on('statusindicator', enterCompareChanges);
+			}
 		}
 
 		if (this.map.isPresentationOrDrawing() && (isDesktop || window.mode.isTablet())) {
@@ -563,7 +585,7 @@ class UIManager extends window.L.Control {
 
 		this.refreshTheme();
 
-		var startFolloMePresntationGet = this.map.isPresentationOrDrawing() && window.coolParams.get('startFollowMePresentation');
+		var startFolloMePresntationGet = this.map.isPresentationOrDrawing();
 		var presentationLeaderIdGet = this.map.isPresentationOrDrawing() && window.coolParams.get('presentationLeaderId');
 		var startPresentationGet = this.map.isPresentationOrDrawing() && window.coolParams.get('startPresentation');
 		if (this.map.wopi.PresentationLeader)
@@ -573,7 +595,7 @@ class UIManager extends window.L.Control {
 		// check for "presentation" dispatch event only after document gets fully loaded
 		// in case if the leader is defined we have to wait a little longer to get the viewer info
 		const startPresentation = () => {
-			if (startFolloMePresntationGet === 'true' || startFolloMePresntationGet === '1') {
+			if (startFolloMePresntationGet) {
 				const dispatchFollowPresentation = () => {
 					app.dispatcher.dispatch('followpresentation');
 					this.map.off('slideshowfollowon', dispatchFollowPresentation);
@@ -1129,13 +1151,21 @@ class UIManager extends window.L.Control {
 
 		var found = false;
 		if (this.getCurrentMode() === 'classic') {
-			found ||= this.showCommandInClassicToolbar(command, show);
-			found ||= this.showCommandInMenubar(command, show);
+			if (this.showCommandInClassicToolbar(command, show)) {
+				found = true;
+			}
+			if (this.showCommandInMenubar(command, show)) {
+				found = true;
+			}
 		}
 
 		if (this.notebookbar) {
-			if (this.getCurrentMode() === 'notebookbar') this.notebookbar.reloadShortcutsBar();
-			found ||= this.notebookbar.showNotebookbarCommand(command, show);
+			if (this.getCurrentMode() === 'notebookbar') {
+				this.notebookbar.reloadShortcutsBar();
+			}
+			if (this.notebookbar.showNotebookbarCommand(command, show)) {
+				found = true;
+			}
 		}
 
 		if (!found)
@@ -2342,5 +2372,10 @@ class UIManager extends window.L.Control {
 	getBooleanDocTypePref(name: string, defaultValue: boolean = false): boolean {
 		const docType = this.map.getDocType();
 		return window.prefs.getBoolean(`${docType}.${name}`, defaultValue);
+	}
+
+	getStartCompareChanges(): boolean {
+		const compareChangesOption = window.coolParams.get('comparechanges');
+		return compareChangesOption === 'true' || compareChangesOption === '1';
 	}
 }

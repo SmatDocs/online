@@ -3016,10 +3016,7 @@ kbd,
 }
 
 /* Apply label styling to static text for consistent appearance */
-#FormulaDialog #ParameterPage :is(#editdesc, #pardesc),
-#FormulaDialog #ALTBOX #funcdesc,
-#GotoPageDialog #grid1 #page_count,
-#TocDialog #entries #box1 span.ui-text {
+.static-label {
 	margin: auto 0px;
 	color: var(--color-main-text);
 	font-size: var(--default-font-size);
@@ -3087,4 +3084,8 @@ div [id^='themeview'].ui-iconview-entry, div [id^='themeview1col'].ui-iconview-e
 
 #imSetInsMode {
 	content: url('images/queryinsmode.svg');
+}
+
+#ManageStylePage #box1 #desc {
+	display: block;
 }

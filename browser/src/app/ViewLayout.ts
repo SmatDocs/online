@@ -74,6 +74,11 @@ class ViewLayoutBase {
 		);
 	}
 
+	public adjustViewZoomLevel() {
+		if (app.map._docLayer)
+			app.map._docLayer._fitWidthZoom(undefined, undefined, true);
+	}
+
 	public documentToViewY(point: cool.SimplePoint): number {
 		return (
 			point.pY - this._viewedRectangle.pY1 + this._documentAnchorPosition[1]
@@ -289,17 +294,16 @@ class ViewLayoutBase {
 		this.scrollProperties.horizontalScrollStep = documentAnchor.size[0] / 2;
 	}
 
-	public areViewTilesReady(request = false): boolean {
+	// This function doesn't do well. It seems we don't need this function.
+	// Tiles middleware seems to manage redraw requests when tiles are ready.
+	public areViewTilesReady(): boolean {
 		let allReady = true;
 
 		for (let i = 0; i < this.currentCoordList.length; i++) {
 			const tempTile = TileManager.get(this.currentCoordList[i]);
 
-			if (!tempTile || tempTile.needsFetch()) allReady = false;
+			if (!tempTile || !tempTile.isReady()) allReady = false;
 		}
-
-		if (!allReady && request)
-			TileManager.checkRequestTiles(this.currentCoordList);
 
 		return allReady;
 	}

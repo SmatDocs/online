@@ -246,7 +246,8 @@ class Dispatcher {
 			app.map.setZoom(app.map.options.zoom, null, true);
 		};
 		this.actionsMap['fitwidthzoom'] = () => {
-			app.map._docLayer._fitWidthZoom(undefined, undefined, true);
+			if (app.activeDocument.activeLayout)
+				app.activeDocument.activeLayout.adjustViewZoomLevel();
 		};
 
 		this.actionsMap['searchprev'] = () => {
@@ -451,6 +452,18 @@ class Dispatcher {
 		};
 		this.actionsMap['focusonaddressinput'] = function () {
 			document.getElementById('#addressInput input').focus();
+		};
+
+		this.actionsMap['apply-table-style'] = function (entry: MenuDefinition) {
+			const windowId = WindowId.Notebookbar;
+			const data = entry.pos + ';' + entry.text;
+			const message =
+				'dialogevent ' +
+				windowId +
+				' {"id":"tablestyles_cb2", "cmd": "selected", "data": "' +
+				data +
+				'", "type": "combobox"}';
+			app.socket.sendMessage(message);
 		};
 
 		// sheets toolbar
@@ -725,6 +738,7 @@ class Dispatcher {
 				let commandState = false;
 				if (app.activeDocument.activeLayout.type === 'ViewLayoutMultiPage') {
 					app.activeDocument.activeLayout = new ViewLayoutWriter();
+					app.activeDocument.activeLayout.adjustViewZoomLevel();
 				} else {
 					app.activeDocument.activeLayout = new ViewLayoutMultiPage();
 					commandState = true;
@@ -756,9 +770,14 @@ class Dispatcher {
 					? new ViewLayoutWriter()
 					: new ViewLayoutCompareChanges();
 
-				TileManager.redraw();
-				app.activeDocument.activeLayout.sendClientVisibleArea();
-				app.sectionContainer.requestReDraw();
+				// Do this only if we are switching to Writer normal layout.
+				// Try to handle this in constructor for compare-changes layout.
+				if (commandState) {
+					TileManager.redraw();
+					app.map._docLayer._fitWidthZoom(null, null, true);
+					app.activeDocument.activeLayout.sendClientVisibleArea();
+					app.sectionContainer.requestReDraw();
+				}
 			}
 		};
 	}

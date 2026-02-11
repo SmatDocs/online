@@ -1436,14 +1436,12 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 	_fixedtextControl: function(parentContainer, data, builder) {
 		// Check if this label should render as static content(i.e. span) instead of interactive label
-		// This property is set by LibreOffice Kit when accessible-role="static" is detected
-		if(data.renderAsStatic)
+		if (!data.labelFor)
 			return JSDialog.StaticText(parentContainer, data, builder);
 
 		var fixedtext = window.L.DomUtil.create('label', builder.options.cssClass, parentContainer);
 
-		if (data.labelFor)
-			fixedtext.htmlFor = data.labelFor + '-input';
+		fixedtext.htmlFor = data.labelFor + '-input';
 
 		if (data.text)
 			fixedtext.textContent = builder._cleanText(data.text);
@@ -1453,7 +1451,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		var accKey = builder._getAccessKeyFromText(data.text);
 		builder._stressAccessKey(fixedtext, accKey);
 
-		const labelableElements = ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'METER', 'OUTPUT', 'PROGRESS'];
+		const labelableElements = ['INPUT', 'SELECT', 'TEXTAREA', 'METER', 'OUTPUT', 'PROGRESS'];
 
 		const updateLabelForAttribute = function(label, labelledControl) {
 			const isLabelable = labelableElements.includes(labelledControl.nodeName);
@@ -2535,6 +2533,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			&& data.type !== 'edit'
 			&& data.type !== 'deck'
 			&& data.type !== 'pushbutton'
+			&& data.type !== 'iconview'
 			)
 			control.setAttribute('tabIndex', '0');
 	},

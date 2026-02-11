@@ -1049,33 +1049,38 @@ bool ChildSession::loadDocument(const StringVector& tokens)
 // attempt to shutdown threads, fork and execute in the background
 bool ChildSession::saveDocumentBackground([[maybe_unused]] const StringVector& tokens)
 {
-#if MOBILEAPP
+    if constexpr (!Util::isMobileApp())
+    {
+        LOG_TRC("Attempting background save");
+        _logUiSaveBackGroundTimeStart = std::chrono::steady_clock::now();
+
+        // Keep the session alive over the lifetime of an async save
+        if (_docManager->forkToSave(
+                [this, tokens]
+                {
+                    // Called back in the bgsave process: so do the save !
+
+                    // FIXME: re-directing our sockets perhaps over
+                    // a pipe to our parent process ?
+                    unoCommand(tokens);
+
+                    // FIXME: did we send our responses properly ? ...
+                    SigUtil::addActivity("async save process exiting");
+
+                    LOG_TRC("Finished synchronous background saving ...");
+                    // Next: we wait for an async UNO_COMMAND_RESULT on .uno:Save
+                    // cf. Document::handleSaveMessage.
+                },
+                getViewId()))
+        {
+            LOG_TRC("saveDocumentBackground returns successful start");
+            return true;
+        }
+
+        // fork failed
+    }
+
     return false;
-#else
-    LOG_TRC("Attempting background save");
-    _logUiSaveBackGroundTimeStart = std::chrono::steady_clock::now();
-
-    // Keep the session alive over the lifetime of an async save
-    if (!_docManager->forkToSave([this, tokens]{
-
-        // Called back in the bgsave process: so do the save !
-
-        // FIXME: re-directing our sockets perhaps over
-        // a pipe to our parent process ?
-        unoCommand(tokens);
-
-        // FIXME: did we send our responses properly ? ...
-        SigUtil::addActivity("async save process exiting");
-
-        LOG_TRC("Finished synchronous background saving ...");
-        // Next: we wait for an async UNO_COMMAND_RESULT on .uno:Save
-        // cf. Document::handleSaveMessage.
-    }, getViewId()))
-        return false; // fork failed
-
-    LOG_TRC("saveDocumentBackground returns successful start.");
-    return true;
-#endif // !MOBILEAPP
 }
 
 bool ChildSession::sendFontRendering(const StringVector& tokens)
@@ -1417,7 +1422,8 @@ bool ChildSession::downloadAs(const StringVector& tokens)
     const std::string tmpDir = FileUtil::createRandomDir(jailDoc);
     const std::string urlToSend = tmpDir + '/' + filenameParam.getFileName();
     const std::string url = jailDoc + urlToSend;
-    const std::string urlAnonym = jailDoc + tmpDir + '/' + Poco::Path(nameAnonym).getFileName();
+    const std::string filename = Poco::Path(nameAnonym).getFileName();
+    const std::string urlAnonym = jailDoc + tmpDir + '/' + filename;
 
     LOG_DBG("Calling LOK's saveAs with URL: ["
             << urlAnonym << "], Format: [" << (format.empty() ? "(nullptr)" : format.c_str())
@@ -1441,8 +1447,8 @@ bool ChildSession::downloadAs(const StringVector& tokens)
     _docManager->sendFrame(docBrokerMessage.c_str(), docBrokerMessage.length());
 
     // Send download id to the client
-    sendTextFrame("downloadas: downloadid=" + tmpDir +
-                  " port=" + std::to_string(ClientPortNumber) + " id=" + id);
+    sendTextFrame("downloadas: downloadid=" + tmpDir + " port=" + std::to_string(ClientPortNumber) +
+                  " id=" + id + " filename=" + filename);
 #endif
     return true;
 }

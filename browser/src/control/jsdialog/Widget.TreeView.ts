@@ -198,6 +198,7 @@ class TreeViewControl {
 			builder.options.cssClass + ' ui-treeview-checkbox',
 			parent,
 		);
+		checkbox.id = `${treeViewData.id}-checkbox-${entry.row}`;
 		checkbox.type = 'checkbox';
 		checkbox.tabIndex = -1;
 
@@ -218,6 +219,7 @@ class TreeViewControl {
 			builder.options.cssClass + ' ui-treeview-checkbox',
 			parent,
 		);
+		radioButton.id = `${treeViewData.id}-radio-${entry.row}`;
 		radioButton.type = 'radio';
 		radioButton.tabIndex = -1;
 
@@ -333,11 +335,12 @@ class TreeViewControl {
 		span.innerText = header.text;
 
 		if (header.sortable !== false) {
-			window.L.DomUtil.create(
+			const icon = window.L.DomUtil.create(
 				'span',
 				builder.options.cssClass + ' ui-treeview-header-sort-icon',
 				span,
 			);
+			if (header.arrow) window.L.DomUtil.addClass(icon, header.arrow);
 		}
 	}
 
@@ -500,6 +503,7 @@ class TreeViewControl {
 		parent: HTMLElement,
 		entry: TreeEntryJSON,
 		index: any,
+		selectionElement: HTMLInputElement,
 		builder: JSBuilder,
 	) {
 		const text =
@@ -555,11 +559,15 @@ class TreeViewControl {
 				treeViewData.highlightTerm,
 			);
 		} else {
+			const elementType = selectionElement ? 'label' : 'span';
 			cell = window.L.DomUtil.create(
-				'span',
+				elementType,
 				builder.options.cssClass + ` ui-treeview-cell-text-content`,
 				parent,
 			);
+			if (selectionElement) {
+				cell.setAttribute('for', selectionElement.id);
+			}
 			cell.innerText = text;
 		}
 
@@ -750,7 +758,14 @@ class TreeViewControl {
 				entry.columns[index].text &&
 				!this.isSeparator(entry.columns[index])
 			) {
-				this.createTextCell(treeViewData, text, entry, index, builder);
+				this.createTextCell(
+					treeViewData,
+					text,
+					entry,
+					index,
+					selectionElement,
+					builder,
+				);
 			}
 
 			// row sub-elements
@@ -1529,7 +1544,11 @@ class TreeViewControl {
 		});
 	}
 
-	fillHeaders(headers: Array<TreeHeaderJSON>, builder: JSBuilder) {
+	fillHeaders(
+		data: TreeWidgetJSON,
+		headers: Array<TreeHeaderJSON>,
+		builder: JSBuilder,
+	) {
 		if (!headers) return;
 
 		this._thead = window.L.DomUtil.create(
@@ -1563,9 +1582,12 @@ class TreeViewControl {
 
 			var clickFunction = (columnIndex: number, icon: HTMLSpanElement) => {
 				return () => {
-					if (window.L.DomUtil.hasClass(icon, 'down'))
-						this.sortByColumn(icon, columnIndex + dummyCells, true);
-					else this.sortByColumn(icon, columnIndex + dummyCells, false);
+					if (data.sortLocally) {
+						if (window.L.DomUtil.hasClass(icon, 'down'))
+							this.sortByColumn(icon, columnIndex + dummyCells, true);
+						else this.sortByColumn(icon, columnIndex + dummyCells, false);
+					} else
+						builder.callback('treeview', 'columnclick', data, index, builder);
 				};
 			};
 
@@ -1810,7 +1832,7 @@ class TreeViewControl {
 		else this._container.setAttribute('role', 'grid');
 
 		this.preprocessColumnData(data.entries);
-		this.fillHeaders(data.headers, builder);
+		this.fillHeaders(data, data.headers, builder);
 		this.fillEntries(data, data.entries, builder, 1, this._tbody);
 
 		if (this._isListbox && !data.noSearchField && !this.isMenu(data)) {
