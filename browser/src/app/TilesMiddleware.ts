@@ -1323,10 +1323,18 @@ class TileManager {
 	}
 
 	private static updateTileDistance(tile: Tile, zoom: number) {
+		let modes = [app.map._docLayer._selectedMode];
+		if (
+			app.activeDocument &&
+			app.activeDocument.activeLayout.type === 'ViewLayoutCompareChanges'
+		) {
+			// 2 modes are active at the same time in compare changes view mode.
+			modes = [TileMode.LeftSide, TileMode.RightSide];
+		}
 		if (
 			tile.coords.z !== zoom ||
 			tile.coords.part !== app.map._docLayer._selectedPart ||
-			tile.coords.mode !== app.map._docLayer._selectedMode
+			!modes.includes(tile.coords.mode)
 		)
 			tile.distanceFromView = Number.MAX_SAFE_INTEGER;
 		else {
@@ -1371,12 +1379,26 @@ class TileManager {
 	}
 
 	private static getMissingTiles(
-		pixelBounds: any,
+		pixelBounds: cool.Bounds,
 		zoom: number,
 		isCurrent: boolean = false,
 	) {
+		if (
+			['ViewLayoutCompareChanges', 'ViewLayoutMultiPage'].includes(
+				app.activeDocument.activeLayout.type,
+			)
+		) {
+			this.beginTransaction();
+			const queue = this.checkRequestTiles(
+				app.activeDocument.activeLayout.getCurrentCoordList(),
+				false,
+			);
+			this.endTransaction(null);
+			return queue;
+		}
+
 		var tileRanges = this.pxBoundsToTileRanges(pixelBounds);
-		var queue = [];
+		const queue = [];
 
 		// If we're looking for tiles for the current (visible) area, update tile distance.
 		if (isCurrent) {
@@ -1549,6 +1571,10 @@ class TileManager {
 
 	public static get(coords: TileCoordData): Tile {
 		return this.tiles.get(coords.key());
+	}
+
+	public static getTiles(): Map<string, Tile> {
+		return this.tiles;
 	}
 
 	private static pixelCoordsToTwipTileBounds(coords: TileCoordData): number[] {
@@ -2248,18 +2274,25 @@ class TileManager {
 		);
 	}
 
-	public static checkRequestTiles(coordList: TileCoordData[]): void {
+	// The "currentCoordList" is the currently visible coordinates list.
+	public static checkRequestTiles(
+		currentCoordList: TileCoordData[],
+		sendTileCombine = true,
+	): TileCoordData[] {
 		const tileCombineQueue = [];
-		for (var i = 0; i < coordList.length; i++) {
-			let tile = TileManager.get(coordList[i]);
+		for (var i = 0; i < currentCoordList.length; i++) {
+			let tile = TileManager.get(currentCoordList[i]);
 
-			if (!tile) tile = TileManager.createTile(coordList[i]);
+			if (!tile) tile = TileManager.createTile(currentCoordList[i]);
 
-			if (tile.needsFetch()) tileCombineQueue.push(coordList[i]);
+			if (tile.needsFetch()) tileCombineQueue.push(currentCoordList[i]);
 			else this.makeTileCurrent(tile);
 		}
 
-		TileManager.sendTileCombineRequest(tileCombineQueue);
+		// Prefetching algortihm etc doesn't need this function to send tile combine request.
+		if (sendTileCombine) TileManager.sendTileCombineRequest(tileCombineQueue);
+
+		return tileCombineQueue;
 	}
 
 	public static updateFileBasedView(

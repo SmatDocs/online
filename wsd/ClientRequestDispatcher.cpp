@@ -1001,7 +1001,11 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
                                                                               ssize_t headerSize)
 {
     const bool closeConnection = !request.getKeepAlive(); // HTTP/1.1: closeConnection true w/ "Connection: close" only!
-    LOG_DBG("Handling request: " << request.getURI() << ", closeConnection " << closeConnection);
+    LOG_DBG("Handling request: " << request.getMethod() << request.getVersion() << ' '
+                                 << request.getURI() << ", content " << request.getContentLength64()
+                                 << ", chunked " << request.getChunkedTransferEncoding()
+                                 << ", closeConnection " << closeConnection << ", "
+                                 << [&](auto& log) { Util::joinPair(log, request, " / "); });
 
     // denotes whether the request has been served synchronously
     bool servedSync = false;
@@ -1262,11 +1266,15 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
             return MessageResult::Ignore;
         }
     }
-    catch (const BadRequestException& ex)
+    catch (const BadRequestException& exc)
     {
-        LOG_ERR('#' << socket->getFD() << " bad request: ["
-                    << COOLProtocol::getAbbreviatedMessage(socket->getInBuffer())
-                    << "]: " << ex.what());
+        LOG_ERR("Bad request: " << request.getMethod() << request.getVersion() << ' '
+                                << request.getURI() << ", length: " << request.getContentLength64()
+                                << ", chunked: " << request.getChunkedTransferEncoding()
+                                << ", closeConnection " << closeConnection << ", " << [&](auto& log)
+                { Util::joinPair(log, request, " / "); } << ", socket-data: ["
+                                << COOLProtocol::getAbbreviatedMessage(socket->getInBuffer())
+                                << "]: " << exc.what());
 
         // Bad request.
         HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket);
@@ -1274,9 +1282,13 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
     }
     catch (const std::exception& exc)
     {
-        LOG_ERR('#' << socket->getFD() << " Exception while processing incoming request: ["
-                    << COOLProtocol::getAbbreviatedMessage(socket->getInBuffer())
-                    << "]: " << exc.what());
+        LOG_ERR("Exception while processing incoming request: "
+                << request.getMethod() << request.getVersion() << ' ' << request.getURI()
+                << ", length: " << request.getContentLength64() << ", chunked: "
+                << request.getChunkedTransferEncoding() << ", closeConnection " << closeConnection
+                << ", " << [&](auto& log) { Util::joinPair(log, request, " / "); }
+                << ", socket-data: [" << COOLProtocol::getAbbreviatedMessage(socket->getInBuffer())
+                << "]: " << exc.what());
 
         // Bad request.
         // NOTE: Check _wsState to choose between HTTP response or WebSocket (app-level) error.
@@ -2779,17 +2791,21 @@ std::string getCapabilitiesJson(bool convertToAvailable)
     // Set the Server ID
     capabilities->set("serverId", Util::getProcessIdentifier());
 
-    // Set the product version
-    capabilities->set("productVersion", Util::getCoolVersion());
+    CONFIG_STATIC const bool sig = ConfigUtil::getBool("security.server_signature", false);
+    if (sig)
+    {
+        // Set the product version
+        capabilities->set("productVersion", Util::getCoolVersion());
 
-    // Set the product version hash
-    capabilities->set("productVersionHash", Util::getCoolVersionHash());
+        // Set the product version hash
+        capabilities->set("productVersionHash", Util::getCoolVersionHash());
 
-    // Set the kit version
-    capabilities->set("productKitVersion", COOLWSD::LOKitVersionNumber);
+        // Set the kit version
+        capabilities->set("productKitVersion", COOLWSD::LOKitVersionNumber);
 
-    // Set the kit version hash
-    capabilities->set("productKitVersionHash", COOLWSD::LOKitVersionHash);
+        // Set the kit version hash
+        capabilities->set("productKitVersionHash", COOLWSD::LOKitVersionHash);
+    }
 
     // Set that this is a proxy.php-enabled instance
     capabilities->set("hasProxyPrefix", COOLWSD::IsProxyPrefixEnabled);

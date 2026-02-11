@@ -1549,7 +1549,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 
 		this._map.hideBusy();
 		if (this._map['wopi'].DownloadAsPostMessage) {
-			this._map.fire('postMessage', {msgId: 'Download_As', args: {Type: command.id, URL: url}});
+			this._map.fire('postMessage', {msgId: 'Download_As', args: {Type: command.id, URL: url, filename: command.filename}});
 		}
 		else if (command.id === 'print') {
 			if (this._map.options.print === false || window.L.Browser.cypressTest) {
@@ -3148,6 +3148,12 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 	_fitWidthZoom: function (e, maxZoom, recalcFirstFit=false) {
 		if (this.isCalc() || this.isDraw())
 			return;
+
+		if (this._map.uiManager.getStartCompareChanges()) {
+			// comparechanges view, don't zoom in, to have space for two pages side by
+			// side.
+			return;
+		}
 
 		if (this.isImpress() && !maxZoom)
 			maxZoom = 10;

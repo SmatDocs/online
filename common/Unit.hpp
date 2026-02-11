@@ -306,7 +306,7 @@ public:
     static std::string getUnitLibPath() { return std::string(UnitLibPath); }
 
     const std::string& getTestname() const { return testname; }
-    void setTestname(const std::string& name) { testname = name; }
+    void setTestname(std::string name) { testname = std::move(name); }
 
     std::shared_ptr<SocketPoll> socketPoll();
 
@@ -317,7 +317,7 @@ private:
     /// Dynamically load the unit-test .so.
     static UnitBase** linkAndCreateUnit(UnitType type, const std::string& unitLibPath);
 
-    /// Close the dynamicallu loaded unit-test .so.
+    /// Close the dynamically loaded unit-test .so.
     static void closeUnit();
 
     /// Initialize the Test Suite options.
@@ -356,11 +356,6 @@ private:
     }
 
     std::string getReason() const;
-
-    static UnitBase* get(UnitType type);
-
-    /// setup global instance for get() method
-    static void rememberInstance(UnitType type, UnitBase* instance);
 
     static void* DlHandle; ///< The handle to the unit-test .so.
     static char *UnitLibPath;
@@ -726,5 +721,13 @@ private:
 
 #define LOK_ASSERT_STATE(VAR, STATE)                                                               \
     LOK_ASSERT_MESSAGE("Expected " #VAR " to be in " #STATE " but was " << name(VAR), VAR == STATE)
+
+#ifdef ENABLE_DEBUG
+#define UNITWSD_CALL(X) UnitWSD::get().X
+#define UNITWSD_CALL_INSTANCE(INST, X) ((INST) ? (INST)->X : decltype((INST)->X)())
+#else // !ENABLE_DEBUG
+#define UNITWSD_CALL(X) (void)0
+#define UNITWSD_CALL_INSTANCE(INST, X) false
+#endif // !ENABLE_DEBUG
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

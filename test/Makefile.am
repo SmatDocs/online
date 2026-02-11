@@ -158,6 +158,7 @@ test_base_sources = \
 	WopiProofTests.cpp \
 	UriTests.cpp \
 	TestGlobals.cpp \
+	HostUtilTests.cpp \
 	$(wsd_sources)
 
 common_sources = \
@@ -187,7 +188,9 @@ common_sources = \
 	../net/HttpRequest.cpp \
 	../net/Socket.cpp \
 	../net/NetUtil.cpp \
-	../wsd/Auth.cpp
+	../wsd/Auth.cpp \
+	../common/CommandControl.cpp \
+	../wsd/HostUtil.cpp
 
 globals_sources = ../common/Globals.cpp
 
@@ -203,7 +206,7 @@ unittest_SOURCES = \
 	../wsd/TestStubs.cpp \
 	test.cpp
 
-unittest_LDADD = $(CPPUNIT_LIBS)
+unittest_LDADD = $(top_builddir)/libsimd.a $(CPPUNIT_LIBS)
 if ENABLE_SSL
 unittest_SOURCES += ../net/Ssl.cpp
 unithttplib_SOURCES += ../net/Ssl.cpp
