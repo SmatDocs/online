@@ -202,15 +202,15 @@ $(eval $(call file_targets,$(COOL_CSS)))
 WORKER_NODE_MODULES_JS =\
 	node_modules/fzstd/umd/index.js
 
-$(DIST_FOLDER)/src/layer/tile/TileWorker.js: \
-	$(srcdir)/src/layer/tile/CanvasTileWorker.js.m4 \
-	$(srcdir)/src/layer/tile/CanvasTileWorkerSrc.js \
+$(DIST_FOLDER)/src/app/TaskWorker.js: \
+	$(srcdir)/src/app/TaskWorker.js.m4 \
+	$(srcdir)/src/app/TaskWorkerSrc.js \
 	$(WORKER_NODE_MODULES_JS)
 
 	$(QUIET_M4) m4 -PE -DDEBUG=$(ENABLE_DEBUG) \
 		-DNODE_MODULES_JS=$(subst $(SPACE),$(COMMA),$(WORKER_NODE_MODULES_JS)) \
-		-DWORKER_JS=$(srcdir)/src/layer/tile/CanvasTileWorkerSrc.js \
-		$(srcdir)/src/layer/tile/CanvasTileWorker.js.m4 > $@
+		-DWORKER_JS=$(srcdir)/src/app/TaskWorkerSrc.js \
+		$(srcdir)/src/app/TaskWorker.js.m4 > $@
 
 NODE_MODULES_JS =\
 	$(if $(IS_SEPARATE),node_modules/hammerjs/hammer.js,node_modules/hammerjs/hammer.min.js) \
@@ -268,7 +268,6 @@ COOL_JS_LST =\
 	src/app/DocumentBase.ts \
 	src/app/DocumentView.ts \
 	src/app/TilesMiddleware.ts \
-	src/app/SlideshowMiddleware.ts \
 	src/app/SearchService.ts \
 	src/app/BaseClass.ts \
 	src/app/Events.ts \
@@ -311,6 +310,7 @@ COOL_JS_LST =\
 	src/canvas/CanvasSectionContainer.ts \
 	src/canvas/CanvasSectionObject.ts \
 	src/canvas/sections/HTMLObjectSection.ts \
+	src/canvas/sections/CompareChangesLabelSection.ts \
 	src/canvas/sections/CommentMarkerSubSection.ts \
 	src/canvas/sections/CommentSection.ts \
 	src/canvas/sections/CommentListSection.ts \
@@ -546,6 +546,7 @@ COOL_JS_LST =\
 	src/slideshow/RenderContext.ts \
 	src/slideshow/VideoRenderer.ts \
 	src/slideshow/SlideRenderer.ts \
+	src/slideshow/SlideshowMiddleware.ts \
 	src/slideshow/SlideShowPresenter.ts \
 	src/slideshow/PresenterConsole.js \
 	src/slideshow/SimpleTextureRenderer.ts \
@@ -660,7 +661,7 @@ COOL_TS_SRC = $(filter %.ts,$(COOL_JS_WEBORDER))
 
 # beware these are not helpfully ordered
 COOL_TS_JS_DST = $(patsubst src/%.ts,$(DIST_FOLDER)/src/%.js,$(COOL_TS_SRC))
-COOL_JS_DST = $(patsubst src/%.js,$(DIST_FOLDER)/src/%.js,$(COOL_JS_SRC)) $(COOL_TS_JS_DST) $(DIST_FOLDER)/src/layer/tile/TileWorker.js
+COOL_JS_DST = $(patsubst src/%.js,$(DIST_FOLDER)/src/%.js,$(COOL_JS_SRC)) $(COOL_TS_JS_DST) $(DIST_FOLDER)/src/app/TaskWorker.js
 # should be no lingering / obsolete files:
 COOL_ASSERT_INTERSECT = $(filter $(COOL_JS_SRC), $(patsubst %.ts,%.js,$(COOL_TS_SRC)))
 
@@ -1084,9 +1085,10 @@ endif
 install-data-hook:
 	mkdir -p $(DESTDIR)$(pkgdatadir)/browser
 	rsync -a $(EXCLUDES) dist $(DESTDIR)$(pkgdatadir)/browser/
+	mkdir -p $(DESTDIR)$(pkgdatadir)/browser/dist/src/app
 	mkdir -p $(DESTDIR)$(pkgdatadir)/browser/dist/src/layer/tile
 	cp -a dist/src/layer/tile/CanvasTileUtils.js $(DESTDIR)$(pkgdatadir)/browser/dist/src/layer/tile/CanvasTileUtils.js
-	cp -a dist/src/layer/tile/TileWorker.js $(DESTDIR)$(pkgdatadir)/browser/dist/src/layer/tile/TileWorker.js
+	cp -a dist/src/app/TaskWorker.js $(DESTDIR)$(pkgdatadir)/browser/dist/src/app/TaskWorker.js
 	$(WASM_BROTLI_CMD)
 endif
 
@@ -1112,6 +1114,7 @@ pot:
 		src/app/IconUtil.ts \
 		src/canvas/sections/CommentListSection.ts \
 		src/canvas/sections/CommentSection.ts \
+		src/canvas/sections/CompareChangesLabelSection.ts \
 		src/canvas/sections/ShapeHandlesSection.ts \
 		src/canvas/sections/URLPopUpSection.ts \
 		src/canvas/sections/TableInsertMarkerSection.ts \
