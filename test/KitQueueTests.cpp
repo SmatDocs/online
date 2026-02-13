@@ -38,6 +38,8 @@ class KitQueueTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST(testSenderQueueLog);
     CPPUNIT_TEST(testSenderQueueProgress);
     CPPUNIT_TEST(testSenderQueueTileDeduplication);
+    CPPUNIT_TEST(testSenderQueueInteractivePriority);
+    CPPUNIT_TEST(testSenderQueueTextSelectionDeduplication);
     CPPUNIT_TEST(testInvalidateViewCursorDeduplication);
     CPPUNIT_TEST(testCallbackModifiedStatusIsSkipped);
     CPPUNIT_TEST(testCallbackInvalidation);
@@ -57,6 +59,8 @@ class KitQueueTests : public CPPUNIT_NS::TestFixture
     void testSenderQueueLog();
     void testSenderQueueProgress();
     void testSenderQueueTileDeduplication();
+    void testSenderQueueInteractivePriority();
+    void testSenderQueueTextSelectionDeduplication();
     void testInvalidateViewCursorDeduplication();
     void testCallbackModifiedStatusIsSkipped();
     void testCallbackInvalidation();
@@ -536,6 +540,67 @@ void KitQueueTests::testSenderQueueTileDeduplication()
 
     // The last one should persist.
     LOK_ASSERT_EQUAL(dup_messages[2], msgStr(item));
+
+    LOK_ASSERT_EQUAL(static_cast<size_t>(0), queue.size());
+}
+
+void KitQueueTests::testSenderQueueInteractivePriority()
+{
+    constexpr std::string_view testname = __func__;
+
+    SenderQueue<std::shared_ptr<Message>> queue;
+
+    std::shared_ptr<Message> item;
+
+    queue.enqueue(std::make_shared<Message>(
+        "tile: nviewid=0 part=0 width=180 height=135 tileposx=0 tileposy=0 tilewidth=15875 tileheight=11906 ver=0",
+        Message::Dir::Out));
+    queue.enqueue(std::make_shared<Message>(
+        "tile: nviewid=0 part=1 width=180 height=135 tileposx=0 tileposy=0 tilewidth=15875 tileheight=11906 ver=0",
+        Message::Dir::Out));
+    queue.enqueue(std::make_shared<Message>("textselectionstart: 100,200,50,50", Message::Dir::Out));
+
+    LOK_ASSERT_EQUAL(static_cast<size_t>(3), queue.size());
+
+    LOK_ASSERT_EQUAL_STR(true, queue.dequeue(item));
+    LOK_ASSERT(item);
+    LOK_ASSERT_EQUAL(std::string("textselectionstart: 100,200,50,50"), msgStr(item));
+
+    LOK_ASSERT_EQUAL_STR(true, queue.dequeue(item));
+    LOK_ASSERT(item);
+    LOK_ASSERT_EQUAL(
+        std::string("tile: nviewid=0 part=0 width=180 height=135 tileposx=0 tileposy=0 tilewidth=15875 tileheight=11906 ver=0"),
+        msgStr(item));
+}
+
+void KitQueueTests::testSenderQueueTextSelectionDeduplication()
+{
+    constexpr std::string_view testname = __func__;
+
+    SenderQueue<std::shared_ptr<Message>> queue;
+
+    std::shared_ptr<Message> item;
+
+    queue.enqueue(std::make_shared<Message>("textselection: one", Message::Dir::Out));
+    queue.enqueue(std::make_shared<Message>("textselectionstart: start-one", Message::Dir::Out));
+    queue.enqueue(std::make_shared<Message>("textselectionend: end-one", Message::Dir::Out));
+    queue.enqueue(std::make_shared<Message>("textselection: two", Message::Dir::Out));
+    queue.enqueue(std::make_shared<Message>("textselectionstart: start-two", Message::Dir::Out));
+    queue.enqueue(std::make_shared<Message>("textselectionend: end-two", Message::Dir::Out));
+
+    LOK_ASSERT_EQUAL(static_cast<size_t>(3), queue.size());
+
+    LOK_ASSERT_EQUAL_STR(true, queue.dequeue(item));
+    LOK_ASSERT(item);
+    LOK_ASSERT_EQUAL(std::string("textselection: two"), msgStr(item));
+
+    LOK_ASSERT_EQUAL_STR(true, queue.dequeue(item));
+    LOK_ASSERT(item);
+    LOK_ASSERT_EQUAL(std::string("textselectionstart: start-two"), msgStr(item));
+
+    LOK_ASSERT_EQUAL_STR(true, queue.dequeue(item));
+    LOK_ASSERT(item);
+    LOK_ASSERT_EQUAL(std::string("textselectionend: end-two"), msgStr(item));
 
     LOK_ASSERT_EQUAL(static_cast<size_t>(0), queue.size());
 }

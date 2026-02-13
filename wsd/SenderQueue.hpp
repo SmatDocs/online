@@ -53,8 +53,47 @@ public:
 
         if (!_queue.empty())
         {
+            auto dequeueAt = [this, &item](typename std::deque<Item>::iterator it)
+            {
+                item = *it;
+                _queue.erase(it);
+            };
+
+            const auto nextInteractive = std::find_if(
+                _queue.begin(), _queue.end(), [](const Item& candidate)
+                {
+                    return SenderQueue::isInteractionMessage(candidate);
+                });
+            if (_priorityBurstCount < kMaxInteractionBurst &&
+                nextInteractive != _queue.end())
+            {
+                dequeueAt(nextInteractive);
+                ++_priorityBurstCount;
+                return true;
+            }
+
+            if (_priorityBurstCount >= kMaxInteractionBurst)
+            {
+                const auto nextNonInteractive = std::find_if(
+                    _queue.begin(), _queue.end(), [](const Item& candidate)
+                    {
+                        return !SenderQueue::isInteractionMessage(candidate);
+                    });
+
+                if (nextNonInteractive != _queue.end())
+                {
+                    dequeueAt(nextNonInteractive);
+                    _priorityBurstCount = 0;
+                    return true;
+                }
+            }
+
             item = _queue.front();
             _queue.pop_front();
+            if (isInteractionMessage(item))
+                ++_priorityBurstCount;
+            else
+                _priorityBurstCount = 0;
             return true;
         }
 
@@ -137,7 +176,11 @@ private:
                 _queue.erase(pos);
         }
         else if (command == "invalidatecursor:" ||
-                 command == "setpart:")
+                 command == "setpart:" ||
+                 command == "textselection:" ||
+                 command == "textselectionstart:" ||
+                 command == "textselectionend:" ||
+                 command == "cursorvisible:")
         {
             // Remove previous identical entries of this command,
             // if any, and use most recent (incoming).
@@ -199,9 +242,20 @@ private:
         return true;
     }
 
+    static bool isInteractionMessage(const Item& item)
+    {
+        return item->firstTokenMatches("textselection:") ||
+               item->firstTokenMatches("textselectionstart:") ||
+               item->firstTokenMatches("textselectionend:") ||
+               item->firstTokenMatches("invalidatecursor:") ||
+               item->firstTokenMatches("cursorvisible:");
+    }
+
 private:
+    static constexpr std::size_t kMaxInteractionBurst = 4;
     mutable std::mutex _mutex;
     std::deque<Item> _queue;
+    std::size_t _priorityBurstCount = 0;
     using queue_item_t = typename std::deque<Item>::value_type;
 };
 

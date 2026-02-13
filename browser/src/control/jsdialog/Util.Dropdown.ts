@@ -13,7 +13,7 @@
  * Util.Dropdown - helper to create dropdown menus for JSDialogs
  */
 
-declare var JSDialog: any;
+declare var JSDialog
 
 function _createDropdownId(id: string) {
 	return id + '-dropdown';

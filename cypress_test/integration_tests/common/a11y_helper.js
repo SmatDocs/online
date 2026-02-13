@@ -141,6 +141,23 @@ function closeActiveDialog(level) {
 }
 
 /**
+ * Close the active warning dialog at a specific nesting level.
+ * @param {number} level - The dialog nesting level
+ * @param {string} buttonSelector - The button to close the dialog with.
+ */
+function closeActiveWarningDialog(level, buttonSelector = '#no-button') {
+	getActiveDialog(level)
+		.parents('.jsdialog-window')
+		.invoke('attr', 'id')
+		.then(dialogId => {
+			cy.cGet(`#${CSS.escape(dialogId)} ` + buttonSelector)
+				.click();
+		});
+
+	cy.cGet('.ui-dialog[role="dialog"]').should('have.length', level - 1);
+}
+
+/**
  * Get the active tab panel for a given tab.
  * @param {jQuery} $container - The container element
  * @param {string} activeTabId - The ID of the active tab
@@ -325,8 +342,9 @@ function handleTabsInDialog(win, level, command) {
  * @param {Object} win - The frame window object
  * @param {number} level - The dialog nesting level
  * @param {string} command - The uno command that opened the dialog (optional)
+ * @param {boolean} isWarningDialog - If this is a warning dialog
  */
-function handleDialog(win, level, command) {
+function handleDialog(win, level, command, isWarningDialog) {
 	getActiveDialog(level)
 		.then(() => {
 			return helper.processToIdle(win);
@@ -339,7 +357,8 @@ function handleDialog(win, level, command) {
 			if (command == '.uno:EditRegion' ||
 			    command == '.uno:InsertCaptionDialog' ||
 			    command == '.uno:SpellDialog' ||
-			    command == '.uno:SpellingAndGrammarDialog') {
+			    command == '.uno:SpellingAndGrammarDialog' ||
+			    command == '.uno:DataDataPilotRun:Field') {
 				cy.cGet('#options-button').click();
 				handleDialog(win, level + 1);
 			} else if (command == '.uno:InsertIndexesEntry') {
@@ -362,10 +381,20 @@ function handleDialog(win, level, command) {
 				handleDialog(win, level + 1);
 				cy.cGet('#sign-button').should('be.enabled').click();
 				handleDialog(win, level + 1);
+			} else if (command == '.uno:DataDataPilotRun') {
+				cy.cGet('#listbox-page .ui-treeview-entry > div:first-child').dblclick();
+				handleDialog(win, level + 1, '.uno:DataDataPilotRun:Field');
+
+				cy.cGet('#listbox-data .ui-treeview-entry > div:first-child').dblclick();
+				handleDialog(win, level + 1, '.uno:DataDataPilotRun:Data');
 			}
 
 			handleTabsInDialog(win, level, command);
-			closeActiveDialog(level);
+			if (isWarningDialog) {
+				closeActiveWarningDialog(level);
+			} else {
+				closeActiveDialog(level);
+			}
 		});
 }
 
@@ -412,22 +441,7 @@ const needLinguisticDataDialogs = [
 ];
 
 const buggyCommonDialogs = [
-	// TODO: fix newly added
-	'.uno:AcceptTrackedChanges',
-	'.uno:HyperlinkDialog',
-	'.uno:InsertQrCode',
-	'.uno:InsertSymbol',
-	'.uno:RunMacro',
-	'.uno:Signature',
-
-	'.uno:SearchDialog',
-	'.uno:SetDocumentProperties',
-	'.uno:SpellDialog',
-	'.uno:SpellingAndGrammarDialog',
-	'.uno:SplitCell',
-	'.uno:StyleNewByExample',
 	'.uno:ThesaurusDialog',
-	'.uno:WidgetTestDialog',
 ];
 
 /**

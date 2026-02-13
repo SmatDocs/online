@@ -1,28 +1,37 @@
 #!/bin/bash
-# start-coolwsd.sh - Optimized Collabora Online startup script
+# start-coolwd.sh - Optimized Collabora Online startup script
 #
 # This script starts coolwsd with performance-optimized settings for remote server deployment.
-# Copy this to /srv/apps/collabora-code/ on your server and run: ./start-coolwsd.sh
+# Copy this to /srv/apps/collabora-code/ on your server and run: ./start-coolwd.sh
 #
 # Performance optimizations included:
-#   - logging.level=warning: Reduces log I/O overhead by ~99%
-#   - browser_logging=false: Eliminates browser→server log round-trips
-#   - trace_event=false: Disables performance tracing instrumentation
-#   - num_prespawn_children=4: Pre-warms Kit processes to avoid cold start delays
+#   - logging.level=warning: reduces log I/O overhead
+#   - browser_logging=false: eliminates browser→server log round-trips
+#   - trace_event=false: disables tracing instrumentation
+#   - num_prespawn_children=4: pre-warms Kit processes to avoid cold start delays
 #
-# Expected improvement: 21s → 5-10s (remaining is network latency)
+# Expected improvement: 21s → 5-10s (remaining is network latency).
 
 
-./coolwsd \
-  --o:sys_template_path="./systemplate" \
-  --o:child_root_path="./jails" \
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+exec "${SCRIPT_DIR}/coolwsd" \
+  --o:sys_template_path="${SCRIPT_DIR}/systemplate" \
+  --o:child_root_path="${SCRIPT_DIR}/jails" \
+  --o:cache_files.path="${SCRIPT_DIR}/cache" \
   --o:storage.filesystem[@allow]=true \
   --o:ssl.enable=false \
+  --o:ssl.termination=true \
   --o:admin_console.username=admin \
   --o:admin_console.password=admin \
-  '--o:net.content_security_policy=frame-ancestors *;' \
+  --o:net.content_security_policy="frame-ancestors *;" \
   --o:logging.level=warning \
   --o:logging.level_startup=warning \
+  --o:logging.file[@enable]=false \
+  --o:logging_ui_cmd.file[@enable]=false \
+  --o:logging.protocol=false \
   --o:browser_logging=false \
-  '--o:trace_event[@enable]=false' \
+  --o:trace_event[@enable]=false \
   --o:num_prespawn_children=4

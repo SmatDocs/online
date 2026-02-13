@@ -46,6 +46,9 @@ class Socket {
 	private _slurpTimerDelay: number | undefined;
 	private _slurpTimerLaunchTime: number | undefined;
 	private timer: ReturnType<typeof setInterval> | undefined;
+	private workers: Worker[] = [];
+	private workerMessageHandlers: Map<string, any> = new Map();
+	private workerErrorHandlers: any[] = [];
 	public threadLocalLoggingLevelToggle: boolean;
 
 	private socket?: SockInterface;
@@ -71,6 +74,68 @@ class Socket {
 		this.timer = undefined;
 		this.socket = undefined;
 		this.traceEvents = new TraceEvents(this);
+
+		if (window.Worker && !(window as any).ThisIsAMobileApp) {
+			window.app.console.info('Creating TaskWorkers');
+			for (let i = 0; i < 4; ++i) {
+				this.workers.push(
+					new Worker(app.LOUtil.getURL('/src/app/TaskWorker.js')),
+				);
+				this.workers[i].addEventListener('message', (e: any) =>
+					this.onWorkerMessage(e),
+				);
+				this.workers[i].addEventListener('error', (e: any) =>
+					this.onWorkerError(e),
+				);
+			}
+		}
+	}
+
+	public getTaskWorkers(): Worker[] {
+		return this.workers.slice();
+	}
+
+	public setTaskHandler(message: string, callback: any) {
+		if (this.workerMessageHandlers.has(message))
+			window.app.console.warn(
+				'Duplicate task handler for ' + message,
+				callback,
+			);
+		this.workerMessageHandlers.set(message, callback);
+	}
+
+	public addTaskErrorHandler(callback: any) {
+		this.workerErrorHandlers.push(callback);
+	}
+
+	private onWorkerMessage(e: any) {
+		const callback = this.workerMessageHandlers.get(e.data.message);
+		if (!callback) {
+			window.app.console.warn('Unhandled worker message', e);
+			return;
+		}
+
+		callback(e);
+	}
+
+	private onWorkerError(e: any) {
+		if (e) window.app.console.error('Worker-related error encountered', e);
+		while (this.workers.length) {
+			const worker = this.workers.shift();
+			if (!worker) continue;
+			try {
+				worker.terminate();
+			} catch (e) {
+				window.app.console.error('Error terminating worker thread', e);
+			}
+		}
+		this.workerMessageHandlers.clear();
+		if (e) for (const callback of this.workerErrorHandlers) callback(e);
+		this.workerErrorHandlers = [];
+	}
+
+	public disableTaskWorkers() {
+		this.onWorkerError(null);
 	}
 
 	public sendMessage(msg: MessageInterface): void {
@@ -1061,6 +1126,9 @@ class Socket {
 		} else if (textMsg.startsWith('slidelayer:')) {
 			this._onSlideLayerMsg(textMsg, e);
 			return;
+		} else if (textMsg.startsWith('zstdslidelayer:')) {
+			this._onZstdSlideLayerMsg(textMsg, e);
+			return;
 		} else if (textMsg.startsWith('sliderenderingcomplete:')) {
 			this._onSlideRenderingCompleteMsg(textMsg, e);
 			return;
@@ -1069,6 +1137,7 @@ class Socket {
 			!textMsg.startsWith('delta:') &&
 			!textMsg.startsWith('renderfont:') &&
 			!textMsg.startsWith('slidelayer:') &&
+			!textMsg.startsWith('zstdslidelayer:') &&
 			!textMsg.startsWith('windowpaint:')
 		) {
 			if (imgBytes !== undefined) {
@@ -1159,6 +1228,7 @@ class Socket {
 				e.data.startsWith('renderfont:') ||
 				e.data.startsWith('rendersearchlist:') ||
 				e.data.startsWith('slidelayer:') ||
+				e.data.startsWith('zstdslidelayer:') ||
 				e.data.startsWith('windowpaint:')
 			) {
 				let index: number;
@@ -1182,15 +1252,6 @@ class Socket {
 			if (this.image) return !!this.imageIsComplete;
 			return true;
 		};
-
-		// slide rendering is using zstd compressed images (EXPERIMENTAL)
-		const isSlideLayer = e.textMsg.startsWith('slidelayer:');
-		const isSlideRenderComplete = e.textMsg.startsWith(
-			'sliderenderingcomplete:',
-		);
-		const isZstdSlideshowEnabled = app.isExperimentalMode();
-		if (isZstdSlideshowEnabled && (isSlideLayer || isSlideRenderComplete))
-			return;
 
 		const isTile = e.textMsg.startsWith('tile:');
 		const isDelta = e.textMsg.startsWith('delta:');
@@ -2172,15 +2233,26 @@ class Socket {
 		textMsg: string,
 		e: SlurpMessageEvent | MinimalMessageEvent,
 	): void {
-		if (app.isExperimentalMode()) {
-			SlideBitmapManager.handleRenderSlideEvent(e);
-		} else {
-			const content = JSON.parse(textMsg.substring('slidelayer:'.length + 1));
+		const content = JSON.parse(textMsg.substring('slidelayer:'.length + 1));
+		this._map.fire('slidelayer', {
+			message: content,
+			image: (e as SlurpMessageEvent).image,
+		});
+	}
+
+	// 'zstdslidelayer: ' message.
+	private _onZstdSlideLayerMsg(
+		textMsg: string,
+		e: SlurpMessageEvent | MinimalMessageEvent,
+	): void {
+		const content = JSON.parse(textMsg.substring('zstdslidelayer:'.length + 1));
+		const event = e as SlurpMessageEvent;
+		if (event.imgBytes && event.imgIndex !== undefined)
 			this._map.fire('slidelayer', {
 				message: content,
-				image: (e as SlurpMessageEvent).image,
+				imgBytes: event.imgBytes.subarray(event.imgIndex),
 			});
-		}
+		else window.app.console.warn('zstdslidelayer with no image');
 	}
 
 	// 'sliderenderingcomplete: ' message.
@@ -2188,16 +2260,13 @@ class Socket {
 		textMsg: string,
 		e: SlurpMessageEvent | MinimalMessageEvent,
 	): void {
-		if (app.isExperimentalMode()) {
-			SlideBitmapManager.handleSlideRenderingComplete(e);
-		} else {
-			const json = JSON.parse(
-				textMsg.substring('sliderenderingcomplete:'.length + 1),
-			);
-			this._map.fire('sliderenderingcomplete', {
-				success: json.status === 'success',
-			});
-		}
+		const json = JSON.parse(
+			textMsg.substring('sliderenderingcomplete:'.length + 1),
+		);
+		this._map.fire('sliderenderingcomplete', {
+			message: json,
+			success: json.status === 'success',
+		});
 	}
 
 	// 'progress: ' message.
