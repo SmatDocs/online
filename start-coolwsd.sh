@@ -15,8 +15,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${COOLWSD_CONFIG_FILE:-${SCRIPT_DIR}/coolwsd.xml}"
 
 exec "${SCRIPT_DIR}/coolwsd" \
+  --config-file="${CONFIG_FILE}" \
   --o:sys_template_path="${SCRIPT_DIR}/systemplate" \
   --o:child_root_path="${SCRIPT_DIR}/jails" \
   --o:cache_files.path="${SCRIPT_DIR}/cache" \
