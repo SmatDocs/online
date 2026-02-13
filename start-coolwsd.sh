@@ -12,6 +12,7 @@
 #
 # Expected improvement: 21s → 5-10s (remaining is network latency).
 
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
