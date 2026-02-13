@@ -106,8 +106,7 @@ all_la_unit_tests = \
 	unit-timeout_none.la \
 	unit-serversock_accept1.la \
 	unit-streamsock_ctor1.la \
-	unit-kit-child-session.la \
-	unit-base.la
+	unit-kit-child-session.la
 #	unit-admin.la
 #	unit-tilecache.la # Empty test.
 
@@ -150,6 +149,7 @@ test_base_sources = \
 	RequestDetailsTests.cpp \
 	StringVectorTests.cpp \
 	FileServeWhiteBoxTests.cpp \
+	LoggingWhiteBoxTests.cpp \
 	NetUtilWhiteBoxTests.cpp \
 	WhiteBoxTests.cpp \
 	HttpWhiteBoxTests.cpp \
@@ -158,6 +158,7 @@ test_base_sources = \
 	WopiProofTests.cpp \
 	UriTests.cpp \
 	TestGlobals.cpp \
+	HostUtilTests.cpp \
 	$(wsd_sources)
 
 common_sources = \
@@ -187,7 +188,9 @@ common_sources = \
 	../net/HttpRequest.cpp \
 	../net/Socket.cpp \
 	../net/NetUtil.cpp \
-	../wsd/Auth.cpp
+	../wsd/Auth.cpp \
+	../common/CommandControl.cpp \
+	../wsd/HostUtil.cpp
 
 globals_sources = ../common/Globals.cpp
 
@@ -203,15 +206,13 @@ unittest_SOURCES = \
 	../wsd/TestStubs.cpp \
 	test.cpp
 
-unittest_LDADD = $(CPPUNIT_LIBS)
-unit_base_la_LIBADD = $(CPPUNIT_LIBS)
+unittest_LDADD = $(top_builddir)/libsimd.a $(CPPUNIT_LIBS)
 if ENABLE_SSL
 unittest_SOURCES += ../net/Ssl.cpp
 unithttplib_SOURCES += ../net/Ssl.cpp
 else
 unittest_LDADD += -lssl -lcrypto
 unithttplib_LDADD += -lssl -lcrypto
-unit_base_la_LIBADD += -lssl -lcrypto
 endif
 
 fakesockettest_CPPFLAGS = -g
@@ -219,7 +220,6 @@ fakesockettest_SOURCES = fakesockettest.cpp  ../net/FakeSocket.cpp ../common/Dum
 fakesockettest_LDADD = $(CPPUNIT_LIBS)
 
 # old-style unit tests - bootstrapped via UnitClient
-unit_base_la_SOURCES = UnitClient.cpp ${test_base_sources}
 unit_tiletest_la_SOURCES = UnitClient.cpp TileCacheTests.cpp KitPidHelpers.cpp
 unit_tiletest_la_LIBADD = $(CPPUNIT_LIBS)
 unit_integration_la_SOURCES = UnitClient.cpp integration-http-server.cpp KitPidHelpers.cpp

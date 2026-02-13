@@ -83,9 +83,24 @@ class NotebookbarBase extends JSDialogComponent {
 	protected onJSUpdate(e: any) {
 		if (super.onJSUpdate(e)) {
 			this.impl?.setInitialized(true);
+			this._updateTableStyleStatus(e.data);
 			return true;
 		}
 		return false;
+	}
+
+	private _updateTableStyleStatus(data: any) {
+		const control = data.control;
+		if (
+			control.id === 'tablestyles_cb2' &&
+			control.selectedEntries.length > 0
+		) {
+			const index = parseInt(control.selectedEntries[0]);
+			this.map['stateChangeHandler'].setItemValue(
+				'.uno:TableStyleStatus',
+				index,
+			);
+		}
 	}
 
 	protected onJSAction(e: any) {
@@ -116,8 +131,8 @@ class NotebookbarBase extends JSDialogComponent {
 		this.impl?.reloadShortcutsBar();
 	}
 
-	public showNotebookbarCommand(commandId: string, show: boolean) {
-		this.impl?.showNotebookbarCommand(commandId, show);
+	public showNotebookbarCommand(commandId: string, show: boolean): boolean {
+		return this.impl?.showNotebookbarCommand(commandId, show);
 	}
 
 	// tabs

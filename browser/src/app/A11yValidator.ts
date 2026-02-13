@@ -15,6 +15,8 @@ class A11yValidatorException extends Error {
 	constructor(message: string) {
 		super(message);
 		this.name = A11yValidatorException.PREFIX;
+		// Fix prototype chain for TypeScript extending built-in classes
+		Object.setPrototypeOf(this, A11yValidatorException.prototype);
 	}
 }
 
@@ -28,17 +30,16 @@ class A11yValidator {
 	private setupChecks(): void {
 		this.checks.push(this.checkNativeButtonElement.bind(this));
 		this.checks.push(this.checkImageAltAttribute.bind(this));
+		this.checks.push(this.checkLabelElement.bind(this));
+		this.checks.push(this.checkElementHasLabel.bind(this));
 	}
 
 	checkWidget(type: string, element: HTMLElement): void {
-		if (!window.L.Browser.cypressTest) return;
-
 		for (const check of this.checks) {
 			try {
 				check(type, element);
 			} catch (error) {
-				if (error instanceof A11yValidatorException)
-					console.error(error.message);
+				if (error instanceof A11yValidatorException) console.error(error);
 				throw error;
 			}
 		}
@@ -50,7 +51,7 @@ class A11yValidator {
 			element.getAttribute('role') === 'button'
 		) {
 			throw new A11yValidatorException(
-				`For widget of type '${type}' found ${element.tagName} element with role="button". It should use native <button> element instead.`,
+				`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': widget of type '${type}' has ${element.tagName} element with role="button". It should use native <button> element instead.`,
 			);
 		}
 
@@ -71,17 +72,18 @@ class A11yValidator {
 
 			if (!this.isVisible(img)) return; // skip hidden images
 
-			if (!hasAlt)
+			if (!hasAlt) {
 				throw new A11yValidatorException(
-					`Image element with id: ${img.id} in widget of type '${type}' is missing alt attribute`,
+					`In '${this.getDialogTitle(element)}' at '${this.getElementPath(img)}': image in widget of type '${type}' is missing alt attribute`,
 				);
+			}
 
 			const parent = img.parentElement;
 			const span =
 				parent && (parent.querySelector('span.unolabel') as HTMLSpanElement);
 			const explicitLabel = span && span.innerText.trim().length > 0;
 			const visibleLabel =
-				parent && document.querySelector(`label[for^="${parent.id}-"]`);
+				parent && document.querySelector(`label[for="${parent.id}"]`);
 
 			const parentHasLabel =
 				parent &&
@@ -90,20 +92,122 @@ class A11yValidator {
 					visibleLabel ||
 					explicitLabel);
 
+			const isFocusable = img.tabIndex === 0;
+
 			if (altValue === '' && parent) {
 				const isDecorativeImg = img.classList.contains('ui-decorative-image'); // exclude ui-decorative-image decorative images - they can have empty alt
 
-				if (!parentHasLabel && !isDecorativeImg)
+				if (isFocusable) {
 					throw new A11yValidatorException(
-						`Image element with id: ${img.id} inside parent with id: ${parent.id} in widget of type '${type}' has empty alt attribute but parent element lacks label`,
+						`In '${this.getDialogTitle(element)}' at '${this.getElementPath(img)}': focusable image in widget of type '${type}' has empty alt attribute (screen readers need alt text for focusable images) or make it decorative by removing tabIndex`,
 					);
+				}
+
+				if (!parentHasLabel && !isDecorativeImg) {
+					throw new A11yValidatorException(
+						`In '${this.getDialogTitle(element)}' at '${this.getElementPath(img)}': image in widget of type '${type}' has empty alt attribute but parent element lacks label`,
+					);
+				}
 			}
 
-			if (altValue !== '' && parentHasLabel)
+			if (altValue !== '' && parentHasLabel && !isFocusable) {
 				throw new A11yValidatorException(
-					`Image element with id: ${img.id} inside parent with id: ${parent.id} in widget of type '${type}' has non-empty alt attribute but parent element also has label (should not duplicate)`,
+					`In '${this.getDialogTitle(element)}' at '${this.getElementPath(img)}': image in widget of type '${type}' has non-empty alt attribute but parent element also has label (should not duplicate)`,
 				);
+			}
 		});
+	}
+
+	private checkElementHasLabel(type: string, element: HTMLElement): void {
+		if (element.hasAttribute('aria-labelledby')) {
+			const labelledbyId = element.getAttribute('aria-labelledby') as string;
+
+			const referencedElement = document.getElementById(labelledbyId);
+
+			if (!referencedElement) {
+				throw new A11yValidatorException(
+					`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': element in widget of type '${type}' has aria-labelledby attribute pointing to non-existing element with id: '${labelledbyId}'`,
+				);
+			} else {
+				const labelHasHtmlFor =
+					referencedElement.tagName === 'LABEL' &&
+					(referencedElement as HTMLLabelElement).htmlFor;
+
+				const htmlForPointsToThisElement =
+					labelHasHtmlFor &&
+					(referencedElement as HTMLLabelElement).htmlFor === element.id;
+
+				if (htmlForPointsToThisElement) {
+					throw new A11yValidatorException(
+						`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': element in widget of type '${type}' has aria-labelledby attribute pointing to label element with id: '${labelledbyId}', but that label also has htmlFor attribute pointing to this element. Should not duplicate labelling.`,
+					);
+				}
+			}
+		} else {
+			const visibleLabel = document.querySelector(`label[for="${element.id}"]`);
+			if (!visibleLabel) {
+				const ariaLabel = element.getAttribute('aria-label') ?? '';
+				const hasAriaLabel = ariaLabel.trim() !== '';
+
+				// Form elements must have a label
+				const formElements = ['INPUT', 'SELECT', 'TEXTAREA'];
+
+				if (formElements.includes(element.tagName) && !hasAriaLabel) {
+					throw new A11yValidatorException(
+						`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': element in widget of type '${type}' is missing label: it should have either <label>, aria-labelledby or aria-label attribute.`,
+					);
+				}
+			}
+		}
+
+		for (let i = 0; i < element.children.length; i++) {
+			const child = element.children[i];
+			if (child instanceof HTMLElement) {
+				this.checkElementHasLabel(type, child);
+			}
+		}
+	}
+
+	private checkLabelElement(type: string, element: HTMLElement): void {
+		if (element.tagName === 'LABEL') {
+			const htmlFor = (element as HTMLLabelElement).htmlFor?.trim();
+			if (htmlFor) {
+				const referencedElement = document.getElementById(htmlFor);
+				const labelableElements = [
+					'INPUT',
+					'SELECT',
+					'TEXTAREA',
+					'METER',
+					'OUTPUT',
+					'PROGRESS',
+				];
+				if (!referencedElement) {
+					throw new A11yValidatorException(
+						`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': label element in widget of type '${type}' has htmlFor attribute pointing to non-existing element with id '${htmlFor}'`,
+					);
+				} else if (!labelableElements.includes(referencedElement.tagName)) {
+					throw new A11yValidatorException(
+						`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': label element in widget of type '${type}' references non-labelable element <${referencedElement.tagName.toLowerCase()}> via htmlFor attribute. Try using aria-labelledby on the referenced element instead.`,
+					);
+				} else if (
+					referencedElement.hasAttribute('aria-labelledby') ||
+					referencedElement.hasAttribute('aria-label')
+				) {
+					throw new A11yValidatorException(
+						`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': label element in widget of type '${type}' is associated with element with id: '${htmlFor}' via htmlFor, but that element also has aria-label or aria-labelledby attribute. Should not duplicate labelling.`,
+					);
+				}
+			} else {
+				const referencedElement = document.querySelector(
+					`[aria-labelledby="${element.id}"]`,
+				);
+				if (!referencedElement) {
+					throw new A11yValidatorException(
+						`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': label element in widget of type '${type}' is not associated with any element via htmlFor or aria-labelledby. Should this element really be a label? If it just represent static text then try converting it into a <span> element instead.`,
+					);
+				}
+			}
+		}
 	}
 
 	private isVisible(element: HTMLElement): boolean {
@@ -111,6 +215,111 @@ class A11yValidator {
 		if (style.visibility === 'hidden') return false;
 
 		return element.getClientRects().length > 0;
+	}
+
+	private getDialogTitle(element: HTMLElement): string {
+		const dialog = element.closest('.ui-dialog');
+		if (!dialog) return 'unknown dialog';
+
+		const title = dialog.querySelector('h2.ui-dialog-title');
+		return title?.textContent?.trim() || 'untitled dialog';
+	}
+
+	private getElementPath(element: HTMLElement): string {
+		const ids: string[] = [];
+		let current: HTMLElement | null = element;
+		const dialog = element.closest('.ui-dialog');
+
+		while (current && current !== dialog) {
+			if (current.id) {
+				ids.unshift(current.id);
+			}
+			current = current.parentElement;
+		}
+
+		return ids.length > 0 ? ids.join(' > ') : '(no ids in path)';
+	}
+
+	validateContainer(dialogElement: HTMLElement): number {
+		// Find all widgets in the dialog that have an id
+		const widgets = dialogElement.querySelectorAll('[id]');
+		let errorCount = 0;
+
+		widgets.forEach((widget) => {
+			if (widget instanceof HTMLElement) {
+				const widgetType = widget.getAttribute('id') || 'unknown';
+				try {
+					this.checkWidget(widgetType, widget);
+				} catch (error) {
+					errorCount++;
+					// Error already logged in checkWidget
+				}
+			}
+		});
+
+		return errorCount;
+	}
+
+	validateDialog(dialogElement: HTMLElement): void {
+		const content = dialogElement.querySelector('.ui-dialog-content');
+
+		let errorCount = this.validateContainer(dialogElement);
+
+		// Also validate the dialog content container itself
+		if (content instanceof HTMLElement) {
+			try {
+				this.checkWidget('dialog-content', content);
+			} catch (error) {
+				errorCount++;
+			}
+		}
+
+		if (errorCount === 0) {
+			console.error('A11yValidator: dialog passed all checks');
+		} else {
+			console.error(
+				`A11yValidator: dialog has ${errorCount} accessibility issues`,
+			);
+		}
+	}
+
+	validateAllOpenDialogs(): void {
+		const jsdialog = app.map?.jsdialog;
+		if (!jsdialog || !jsdialog.dialogs) {
+			console.error('A11yValidator: no jsdialog manager found');
+			return;
+		}
+
+		const dialogIds = Object.keys(jsdialog.dialogs);
+		if (dialogIds.length === 0) {
+			console.error('A11yValidator: no open dialogs to validate');
+			return;
+		}
+
+		for (const dialogId of dialogIds) {
+			const dialogInfo = jsdialog.dialogs[dialogId];
+			if (dialogInfo && dialogInfo.container) {
+				this.validateDialog(dialogInfo.container);
+			}
+		}
+	}
+
+	validateSidebar(): void {
+		const currentSidebar = app.map?.sidebar;
+		if (!currentSidebar) {
+			console.error('A11yValidator: no open sidebar to validate');
+			return;
+		}
+
+		const errorCount = this.validateContainer(currentSidebar.container);
+
+		if (errorCount === 0) {
+			console.error('A11yValidator: sidebar passed all checks');
+		} else {
+			console.error(
+				`A11yValidator: sidebar has ${errorCount} accessibility issues`,
+			);
+		}
 	}
 }
 

@@ -102,7 +102,9 @@ window.L.Control.JSDialog = window.L.Control.extend({
 				this.closePopover(id, sendCloseEvent);
 			else
 				this.closeDialog(id, sendCloseEvent);
+			return true;
 		}
+		return false;
 	},
 
 	closeAll: function(leaveSnackbar) {
@@ -186,6 +188,9 @@ window.L.Control.JSDialog = window.L.Control.extend({
 			return;
 
 		const dialog = this.dialogs[id];
+		if (!dialog)
+			return;
+
 		app.layoutingService.appendLayoutingTask(() => {
 			if (!dialog.lastFocusedElement) {
 				this.map.focus();
@@ -200,6 +205,26 @@ window.L.Control.JSDialog = window.L.Control.extend({
 				this.map.focus();
 			}
 		});
+	},
+
+	// Manage focus after a close
+	// hadOpenedDialog: whether there were dialogs open before the close
+	// dialogKeys: snapshot of dialog keys taken before the close
+	focusAfterClose: function(hadOpenedDialog, dialogKeys) {
+		if (hadOpenedDialog && dialogKeys.length) {
+			var lastKey = dialogKeys[dialogKeys.length - 1];
+			const lastDialog = this.dialogs[lastKey];
+			const lastContainer = lastDialog ? lastDialog.container : null;
+			if (lastDialog && lastDialog.canHaveFocus && lastContainer) {
+				var initialFocusElement = JSDialog.GetFocusableElements(lastContainer);
+				if (initialFocusElement && initialFocusElement.length)
+					initialFocusElement[0].focus();
+				else
+					lastContainer.focus();
+			}
+		} else if (hadOpenedDialog) {
+			this.map.focus();
+		}
 	},
 
 	setTabs: function() {
@@ -299,8 +324,9 @@ window.L.Control.JSDialog = window.L.Control.extend({
 
 		instance.form = window.L.DomUtil.create('form', 'jsdialog-container ui-dialog ui-widget-content lokdialog_container', instance.container);
 		instance.form.setAttribute('role', 'dialog');
-		instance.form.setAttribute('aria-labelledby', instance.title);
 		instance.form.setAttribute('autocomplete', 'off');
+		if (instance.title)
+			instance.form.setAttribute('aria-labelledby', instance.title);
 		// Prevent overlay from getting the click, except if we want click to dismiss
 		// Like in the case of the inactivity message.
 		// https://github.com/CollaboraOnline/online/issues/7403
@@ -483,7 +509,7 @@ window.L.Control.JSDialog = window.L.Control.extend({
 		// this will only search in current instance and not in whole document
 		const tabControlWidget = this.findTabControl(instance);
 
-		let focusWidget, firstFocusableElement ;
+		let focusWidget, firstFocusableElement;
 
 		if (tabControlWidget && !instance.init_focus_id) {
 			// get DOM element of tabControl from current instance
@@ -500,7 +526,7 @@ window.L.Control.JSDialog = window.L.Control.extend({
 				if (focusables && focusables.length) firstFocusableElement = focusables[0];
 			}
 
-			if (firstFocusableElement && !JSDialog.IsFocusable(firstFocusableElement)){
+			if (firstFocusableElement && !JSDialog.IsFocusable(firstFocusableElement)) {
 				firstFocusableElement = JSDialog.FindFocusableWithin(firstFocusableElement, 'next');
 			}
 		}
@@ -816,22 +842,11 @@ window.L.Control.JSDialog = window.L.Control.extend({
 			const dialogs = Object.keys(this.dialogs);
 			const hadOpenedDialog = dialogs.length > 0;
 
-			this.close(instance.id, false);
+			const didClose = this.close(instance.id, false);
 
-			// Manage focus
-			if (hadOpenedDialog && dialogs.length) {
-				var lastKey = dialogs[dialogs.length - 1];
-				const lastDialog = this.dialogs[lastKey];
-				const lastContainer = lastDialog.container;
-				if (lastDialog.canHaveFocus && lastContainer) {
-					var initialFocusElement = JSDialog.GetFocusableElements(lastContainer);
-					if (initialFocusElement && initialFocusElement.length)
-						initialFocusElement[0].focus();
-					else
-						lastContainer.focus();
-				}
-			} else if (hadOpenedDialog){
-				this.map.focus();
+			if (didClose) {
+				// Manage focus
+				this.focusAfterClose(hadOpenedDialog, dialogs);
 			}
 		}
 		else {

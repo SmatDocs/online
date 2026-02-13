@@ -50,9 +50,9 @@ JSDialog.OpenDropdown = function (
 				cols: 1,
 				rows: entries.length,
 				children: [] as Array<WidgetJSON>,
-			},
+			} as GridWidgetJSON,
 		],
-	};
+	} as JSDialogJSON;
 
 	if (
 		popupParent &&
@@ -70,7 +70,28 @@ JSDialog.OpenDropdown = function (
 		else return false;
 	};
 
-	for (const i in entries) {
+	for (let i = 0; i < entries.length; i++) {
+		if (entries[i].statusCommand) {
+			const items = window.L.Map.THIS['stateChangeHandler'];
+			const val = items.getItemValue(entries[i].statusCommand);
+			if (val) {
+				const index = parseInt(val);
+				if (index === i) {
+					entries[i].selected = true;
+				} else {
+					entries[i].selected = false;
+				}
+			}
+		}
+	}
+
+	const shouldSelectFirstEntry =
+		entries.length > 0
+			? !entries.some((entry) => entry.selected === true)
+			: false;
+	let initialSelectedId;
+
+	for (let i = 0; i < entries.length; i++) {
 		const checkedValue =
 			entries[i].checked === undefined
 				? undefined
@@ -109,8 +130,11 @@ JSDialog.OpenDropdown = function (
 			case 'json':
 				entry =
 					typeof entries[i].content !== 'undefined'
-						? (entries[i].content as WidgetJSON)
+						? (entries[i].content as ComboBoxEntry)
 						: null;
+				initialSelectedId = entry
+					? (entry as ComboBoxEntry).initialSelectedId
+					: undefined;
 				if (entry?.type === 'grid') json.gridKeyboardNavigation = true;
 				break;
 
@@ -138,13 +162,20 @@ JSDialog.OpenDropdown = function (
 					w2icon: entries[i].icon, // FIXME: DEPRECATED
 					icon: entries[i].img,
 					checked: entries[i].checked || checkedValue,
-					selected: entries[i].selected,
+					selected:
+						i === 0 && shouldSelectFirstEntry ? true : entries[i].selected,
 					hasSubMenu: !!entries[i].items,
 				} as ComboBoxEntry;
+				if ((entry as ComboBoxEntry).selected) initialSelectedId = entry.id;
 				break;
 		}
 
-		if (entry) json.children[0].children.push(entry);
+		if (entry && json?.children?.length) json.children[0].children?.push(entry);
+	}
+
+	if (initialSelectedId && json?.children?.length) {
+		json.init_focus_id = initialSelectedId;
+		(json.children[0] as ComboBoxEntry).initialSelectedId = initialSelectedId;
 	}
 
 	const generateCallback = function (
@@ -168,6 +199,9 @@ JSDialog.OpenDropdown = function (
 			if (typeof data === 'number') pos = data;
 			else pos = data ? parseInt(data.substr(0, data.indexOf(';'))) : -1;
 			const entry = targetEntries && pos >= 0 ? targetEntries[pos] : null;
+			if (entry) {
+				entry.pos = pos;
+			}
 			const subMenuId = object.id + '-' + pos;
 
 			if (eventType === 'selected' || eventType === 'showsubmenu') {

@@ -3,6 +3,17 @@
 // Find dialog related helper methods
 var helper = require('./helper');
 
+// Wait for Find/Replace dialog to be fully visible
+// (fadein animation complete and dialog exists)
+function waitForFindReplaceDialog() {
+    cy.cGet('.jsdialog-window.fadein').should('have.css', 'opacity', '1');
+    cy.cGet('#FindReplaceDialog').should('be.visible');
+    // Wait for dialog initialization to complete (grab_focus messages etc)
+    cy.getFrameWindow().then(function(win) {
+        helper.processToIdle(win);
+    });
+}
+
 // Open the find dialog
 function openFindDialog() {
     cy.log('>> openFindDialog - start');
@@ -11,8 +22,7 @@ function openFindDialog() {
 
     helper.typeIntoDocument('{ctrl}f');
 
-    cy.cGet('.jsdialog-window').should('exist');
-    cy.cGet('#FindReplaceDialog').should('exist');
+    waitForFindReplaceDialog();
 
     cy.log('<< openFindDialog - end');
 }
@@ -24,7 +34,7 @@ function openFindDialog() {
 function typeIntoSearchField(text) {
     cy.log('>> typeIntoSearchField - start');
 
-    cy.cGet('input#searchterm-input-dialog').clear().type(text);
+    cy.cGet('input#searchterm-input-dialog').type('{selectall}{backspace}' + text);
     cy.cGet('input#searchterm-input-dialog').should('have.prop', 'value', text);
 
     cy.cGet('#search').should('not.be.disabled');
@@ -68,6 +78,7 @@ function closeFindDialog() {
     cy.log('<< closeFindDialog - end');
 }
 
+module.exports.waitForFindReplaceDialog = waitForFindReplaceDialog;
 module.exports.openFindDialog = openFindDialog;
 module.exports.typeIntoSearchField = typeIntoSearchField;
 module.exports.findNext = findNext;

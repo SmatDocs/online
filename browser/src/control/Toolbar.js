@@ -360,8 +360,8 @@ window.L.Map.include({
 
 		if ((command.startsWith('.uno:Sidebar') && !command.startsWith('.uno:SidebarShow')) ||
 			command.startsWith('.uno:CustomAnimation') || command.startsWith('.uno:ModifyPage') ||
-			command.startsWith('.uno:MasterSlidesPanel') || command.startsWith('.uno:SidebarDeck') || 
-			command.startsWith('.uno:EditStyle')) {
+			command.startsWith('.uno:MasterSlidesPanel') || command.startsWith('.uno:SidebarDeck') ||
+			(command.startsWith('.uno:EditStyle') && command.indexOf('Family:short=') == -1)) {
 
 			// sidebar control is present only in desktop/tablet case
 			if (this.sidebar) {
@@ -461,6 +461,10 @@ window.L.Map.include({
 
 	selectBackground: function (file) {
 		this.fire('selectbackground', {file: file});
+	},
+
+	compareDocuments: function (file) {
+		this.fire('comparedocuments', {file: file});
 	},
 
 	onHelpOpen: function(id, map, productName) {

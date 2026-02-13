@@ -12,11 +12,10 @@
 #
 # Expected improvement: 21s → 5-10s (remaining is network latency)
 
-cd /srv/apps/collabora-code
 
 ./coolwsd \
-  --o:sys_template_path="/srv/apps/collabora-code/systemplate" \
-  --o:child_root_path="/srv/apps/collabora-code/jails" \
+  --o:sys_template_path="./systemplate" \
+  --o:child_root_path="./jails" \
   --o:storage.filesystem[@allow]=true \
   --o:ssl.enable=false \
   --o:admin_console.username=admin \

@@ -82,9 +82,15 @@ using Poco::Net::NameValueCollection;
 using Poco::Util::Application;
 
 // We have files that are at least 2.5 MB already.
-// WASM files are in the order of 30 MB, however,
-constexpr auto MaxFileSizeToCacheInBytes = 50 * 1024 * 1024;
-constexpr std::string_view MetaViewPort = "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, minimum-scale=1, interactive-widget=resizes-content\">";
+// WASM files are in the order of 30 MB (250 MB in debug builds), however,
+constexpr auto MaxFileSizeToCacheInBytes = 1024 * 1024 *
+#if ENABLE_WASM_SUPPORT && ENABLE_DEBUG
+    500;
+#else
+    50;
+#endif
+constexpr std::string_view MetaViewPort =
+    R"(<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, interactive-widget=resizes-content">)";
 
 namespace
 {
@@ -468,8 +474,10 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
             fileInfo->set("Size", localFile->size);
             fileInfo->set("Version", "1.0");
             fileInfo->set("OwnerId", "test");
-            // usually in debug mode with debug.html the user that opening the document is same therefore set the static userId
-            fileInfo->set("UserId", "0");
+            // usually in debug mode with debug.html the user that opening the document is same therefore set a static userId
+            // if this is not the same as the OwnerId then the user is not considered the owner and cannot change the password
+            // via document, properties
+            fileInfo->set("UserId", "test");
             fileInfo->set("UserFriendlyName", userNameString);
 
             //allow &configid to override etag to force another subforkit
@@ -575,8 +583,8 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
                         std::ostreambuf_iterator<char>(outfile));
             outfile.close();
 
-            std::string body = "{\"LastModifiedTime\": \"" +
-                localFile->getLastModifiedTime() + "\" }";
+            std::string body =
+                R"({"LastModifiedTime": ")" + localFile->getLastModifiedTime() + "\" }";
             http::Response httpResponse(http::StatusCode::OK);
             FileServerRequestHandler::hstsHeaders(httpResponse);
             httpResponse.setBody(std::move(body), "application/json; charset=utf-8");
@@ -624,7 +632,7 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
             {
                 Poco::Path filePath(item.second);
                 uri += filePath.parent().toString();
-                std::string fileName = filePath.getFileName();
+                const std::string& fileName = filePath.getFileName();
                 uri += "?file_name=" + fileName;
                 queryDelim = '&';
             }
@@ -854,7 +862,7 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
 
                 std::string timestamp =
                     Util::getIso8601FracformatTime(std::chrono::system_clock::now());
-                std::string body = "{\"LastModifiedTime\": \"" + timestamp + "\" }";
+                std::string body = R"({"LastModifiedTime": ")" + timestamp + "\" }";
                 http::Response httpResponse(http::StatusCode::OK);
                 FileServerRequestHandler::hstsHeaders(httpResponse);
                 httpResponse.setBody(std::move(body), "application/json; charset=utf-8");
@@ -894,7 +902,7 @@ bool FileServerRequestHandler::isAdminLoggedIn(const HTTPRequest& request, http:
 
             std::string timestamp =
                 Util::getIso8601FracformatTime(std::chrono::system_clock::now());
-            std::string body = "{\"LastModifiedTime\": \"" + timestamp + "\" }";
+            std::string body = R"({"LastModifiedTime": ")" + timestamp + "\" }";
             http::Response httpResponse(http::StatusCode::OK);
             FileServerRequestHandler::hstsHeaders(httpResponse);
             httpResponse.setBody(std::move(body), "application/json; charset=utf-8");
@@ -1529,6 +1537,7 @@ static const std::string WOPI_SETTING_BASE_URL = "%WOPI_SETTING_BASE_URL%";
 static const std::string IFRAME_TYPE = "%IFRAME_TYPE%";
 static const std::string UI_THEME = "%UI_THEME%";
 static const std::string VERSION = "%VERSION%";
+static const std::string EXPERIMENTAL_FEATURES = "%EXPERIMENTAL_FEATURES%";
 
 /// Per user request variables.
 /// Holds access_token, css_variables, postmessage_origin, etc.
@@ -1746,6 +1755,8 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
                          checkFileInfoToJSON(urv[CHECK_FILE_INFO_OVERRIDE]));
     Poco::replaceInPlace(preprocess, WOPI_SETTING_BASE_URL, urv[WOPI_SETTING_BASE_URL]);
     Poco::replaceInPlace(preprocess, std::string("%WOPI_HOST_ID%"), form.get("host_session_id", ""));
+    Poco::replaceInPlace(preprocess, EXPERIMENTAL_FEATURES,
+                         std::string(EnableExperimental ? "true" : "false"));
 
     const auto& config = Application::instance().config();
 
@@ -1797,6 +1808,7 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
         }
         Poco::replaceInPlace(preprocess, std::string("%PRODUCT_BRANDING_NAME%"), std::string());
         Poco::replaceInPlace(preprocess, std::string("%PRODUCT_BRANDING_URL%"), std::string());
+        Poco::replaceInPlace(preprocess, std::string("%LOGO_URL%"), std::string());
     #else // configurable
         std::string enableWelcomeMessage = stringifyBoolFromConfig(config, "welcome.enable", false);
         std::string autoShowWelcome = stringifyBoolFromConfig(config, "welcome.enable", false);
@@ -2274,6 +2286,7 @@ void FileServerRequestHandler::fetchSettingFile(const Poco::Net::HTTPRequest& re
     http::Response clientResponse(http::StatusCode::OK);
     clientResponse.set("Content-Type", "text/plain; charset=utf-8");
     clientResponse.set("Cache-Control", "no-cache");
+    clientResponse.set("Content-Disposition", "attachment");
     clientResponse.setBody(httpResponse->getBody());
     socket->send(clientResponse);
     LOG_DBG("Successfully fetched setting file from [" << uriAnonym << "]");
@@ -2662,7 +2675,7 @@ void FileServerRequestHandler::updateThemeResources(std::string& fileContent,
         if (!key.verify() || key.validDaysRemaining() <= 0)
         {
             std::ostringstream ossBrandCSS;
-            ossBrandCSS << "<link rel=\"stylesheet\" href=\"" << responseRoot << "/browser/"
+            ossBrandCSS << R"(<link rel="stylesheet" href=")" << responseRoot << "/browser/"
                         << COOLWSD_VERSION_HASH << "/" << themePrefix
                         << SUPPORT_KEY_BRANDING_UNSUPPORTED << ".css\">";
             brandCSS = ossBrandCSS.str();
@@ -2678,7 +2691,7 @@ void FileServerRequestHandler::updateThemeResources(std::string& fileContent,
     if (brandCSS.empty())
     {
         std::ostringstream ossBrandCSS;
-        ossBrandCSS << "<link rel=\"stylesheet\" href=\"" << responseRoot << "/browser/"
+        ossBrandCSS << R"(<link rel="stylesheet" href=")" << responseRoot << "/browser/"
                     << COOLWSD_VERSION_HASH << "/" << themePrefix << BRANDING << ".css\">";
         brandCSS = ossBrandCSS.str();
     }
