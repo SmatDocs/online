@@ -658,6 +658,14 @@ class TileManager {
 		} else return false;
 	}
 
+	private static isInteractionSensitivePhase(): boolean {
+		return (
+			!!app.sectionContainer &&
+			typeof app.sectionContainer.isDraggingSomething === 'function' &&
+			app.sectionContainer.isDraggingSomething()
+		);
+	}
+
 	private static getMaxTileCountToPrefetch(tileSize: number): number {
 		const viewTileWidth = Math.floor(
 			(app.sectionContainer.getWidth() + tileSize - 1) / tileSize,
@@ -670,7 +678,7 @@ class TileManager {
 		// Read-only views can much more agressively pre-load
 		return (
 			Math.ceil((viewTileWidth * viewTileHeight) / 4) *
-			(!this._hasEditPerm ? 4 : 1)
+			(!this._hasEditPerm ? 4 : 2)
 		);
 	}
 
@@ -1114,6 +1122,8 @@ class TileManager {
 
 		this._adjacentTilePreFetcher = setTimeout(
 			function () {
+				if (app.map.isEditMode() && this.isInteractionSensitivePhase()) return;
+
 				// Extend what we request to include enough to populate a full
 				// scroll in the direction we were going after or before
 				// the current viewport
@@ -1204,6 +1214,7 @@ class TileManager {
 		tileCombineQueue: Array<TileCoordData>,
 	) {
 		if (tileCombineQueue.length <= 0) return;
+		const interactionSensitive = this.isInteractionSensitivePhase();
 
 		// Sort into buckets of consistent part & mode.
 		const partMode: any = {};
@@ -1264,7 +1275,11 @@ class TileManager {
 			);
 
 			// When Writer requests mode=2, also request mode=1.
-			if (app.map._docLayer.isWriter() && mode === 2) {
+			if (
+				app.map._docLayer.isWriter() &&
+				mode === 2 &&
+				!interactionSensitive
+			) {
 				this.sendTileCombineMessage(
 					part,
 					/*mode=*/ 1,
@@ -1651,8 +1666,20 @@ class TileManager {
 
 		const propertiesUpdated = this.updateProperties();
 		const tileSize = this.tileSize;
-		const maxTilesToFetch = this.getMaxTileCountToPrefetch(tileSize);
-		const maxBorderWidth = !this._hasEditPerm ? 40 : 10;
+		const interactionSensitive =
+			this._hasEditPerm && this.isInteractionSensitivePhase();
+		const maxTilesToFetch = Math.max(
+			1,
+			Math.floor(
+				this.getMaxTileCountToPrefetch(tileSize) *
+					(interactionSensitive ? 0.5 : 1),
+			),
+		);
+		const maxBorderWidth = !this._hasEditPerm
+			? 40
+			: interactionSensitive
+				? 10
+				: 20;
 
 		// FIXME: when we are actually editing we should pre-load much less until we stop
 		/*		if (isActiveEditing()) {
