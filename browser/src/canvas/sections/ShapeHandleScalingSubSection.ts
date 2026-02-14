@@ -213,14 +213,15 @@ class ShapeHandleScalingSubSection extends CanvasSectionObject {
 			const handleId = this.sectionProperties.ownInfo.id;
 			const parentHandlerSection = this.sectionProperties.parentHandlerSection;
 
-			const shapeRecProps = this.calculateNewShapeRectangleProperties([
-				point.pX + this.position[0],
-				point.pY + this.position[1]
-			], e);
+			const p = point.clone();
+			p.pX += this.position[0];
+			p.pY += this.position[1];
+
+			const shapeRecProps = this.calculateNewShapeRectangleProperties(p, e);
 
 			const tempRectangle = cool.SimpleRectangle.fromCorePixels([
-				shapeRecProps.center[0] - shapeRecProps.width * 0.5,
-				shapeRecProps.center[1] - shapeRecProps.height * 0.5,
+				shapeRecProps.center.pX - shapeRecProps.width * 0.5,
+				shapeRecProps.center.pY - shapeRecProps.height * 0.5,
 				shapeRecProps.width, shapeRecProps.height
 			]);
 
@@ -249,8 +250,8 @@ class ShapeHandleScalingSubSection extends CanvasSectionObject {
 			const scaleX = shapeRecProps.width / this.sectionProperties.parentHandlerSection.sectionProperties.shapeRectangleProperties.width;
 			const scaleY = shapeRecProps.height / this.sectionProperties.parentHandlerSection.sectionProperties.shapeRectangleProperties.height;
 
-			let diffX = shapeRecProps.center[0] - this.sectionProperties.parentHandlerSection.sectionProperties.shapeRectangleProperties.center[0];
-			let diffY = shapeRecProps.center[1] - this.sectionProperties.parentHandlerSection.sectionProperties.shapeRectangleProperties.center[1];
+			let diffX = shapeRecProps.center.pX - this.sectionProperties.parentHandlerSection.sectionProperties.shapeRectangleProperties.center.pX;
+			let diffY = shapeRecProps.center.pY - this.sectionProperties.parentHandlerSection.sectionProperties.shapeRectangleProperties.center.pY;
 
 			diffX = diffX / app.dpiScale;
 			diffY = diffY / app.dpiScale;
@@ -261,12 +262,13 @@ class ShapeHandleScalingSubSection extends CanvasSectionObject {
 		}
 	}
 
-	private calculateRatioPoint(point: number[], shapeRecProps: any) {
+	// Uses the given "point" parameter and modifies it.
+	private calculateRatioPoint(point: cool.SimplePoint, shapeRecProps: any) {
 		const isVerticalHandler = ['2', '7'].includes(this.sectionProperties.ownInfo.kind);
 
 		const primaryDelta = isVerticalHandler
-			? point[1] - shapeRecProps.center[1]
-			: point[0] - shapeRecProps.center[0];
+			? point.pY - shapeRecProps.center.pY
+			: point.pX - shapeRecProps.center.pX;
 
 		const aspectRatio = isVerticalHandler
 			? shapeRecProps.width / shapeRecProps.height
@@ -276,31 +278,29 @@ class ShapeHandleScalingSubSection extends CanvasSectionObject {
 
 		const direction = ['3', '4', '6', '2'].includes(this.sectionProperties.ownInfo.kind) ? -1 : 1;
 
-		if (isVerticalHandler) {
-			point[0] = shapeRecProps.center[0] + secondaryDelta * direction;
-		} else {
-			point[1] = shapeRecProps.center[1] + secondaryDelta * direction;
-		}
-
-		return point;
+		if (isVerticalHandler)
+			point.pX = shapeRecProps.center.pX + secondaryDelta * direction;
+		else
+			point.pY = shapeRecProps.center.pY + secondaryDelta * direction;
 	}
 
-	calculateNewShapeRectangleProperties(point: number[], e: MouseEvent) {
-		const shapeRecProps: any = JSON.parse(JSON.stringify(this.sectionProperties.parentHandlerSection.sectionProperties.shapeRectangleProperties));
+	calculateNewShapeRectangleProperties(point: cool.SimplePoint, e: MouseEvent) {
+		const shapeRecProps: any = structuredClone(this.sectionProperties.parentHandlerSection.sectionProperties.shapeRectangleProperties);
+		shapeRecProps.center = this.sectionProperties.parentHandlerSection.sectionProperties.shapeRectangleProperties.center.clone();
 		const keepRatio = this.doWeKeepRatio(e);
 
 		if (keepRatio)
-			point = this.calculateRatioPoint(point, shapeRecProps);
+			this.calculateRatioPoint(point, shapeRecProps);
 
-		const diff = [point[0] - shapeRecProps.center[0], -(point[1] - shapeRecProps.center[1])];
+		const diff = [point.pX - shapeRecProps.center.pX, -(point.pY - shapeRecProps.center.pY)];
 		const length = Math.pow(Math.pow(diff[0], 2) + Math.pow(diff[1], 2), 0.5);
 		const pointAngle = Math.atan2(diff[1], diff[0]);
-		point[0] = shapeRecProps.center[0] + length * Math.cos(pointAngle - shapeRecProps.angleRadian);
-		point[1] = shapeRecProps.center[1] - length * Math.sin(pointAngle - shapeRecProps.angleRadian);
+		point.pX = shapeRecProps.center.pX + length * Math.cos(pointAngle - shapeRecProps.angleRadian);
+		point.pY = shapeRecProps.center.pY - length * Math.sin(pointAngle - shapeRecProps.angleRadian);
 
 		const rectangle = new cool.SimpleRectangle(
-			(shapeRecProps.center[0] - shapeRecProps.width * 0.5) * app.pixelsToTwips,
-			(shapeRecProps.center[1] - shapeRecProps.height * 0.5) * app.pixelsToTwips,
+			(shapeRecProps.center.pX - shapeRecProps.width * 0.5) * app.pixelsToTwips,
+			(shapeRecProps.center.pY - shapeRecProps.height * 0.5) * app.pixelsToTwips,
 			shapeRecProps.width * app.pixelsToTwips,
 			shapeRecProps.height * app.pixelsToTwips
 		);
@@ -309,25 +309,25 @@ class ShapeHandleScalingSubSection extends CanvasSectionObject {
 
 		if (['1', '4', '6'].includes(this.sectionProperties.ownInfo.kind)) {
 			const pX2 = rectangle.pX2;
-			rectangle.pX1 = point[0];
+			rectangle.pX1 = point.pX;
 			rectangle.pX2 = pX2;
 		}
 		else if (['3', '5', '8'].includes(this.sectionProperties.ownInfo.kind))
-			rectangle.pX2 = point[0];
+			rectangle.pX2 = point.pX;
 
 		if (['1', '2', '3'].includes(this.sectionProperties.ownInfo.kind)) {
 			const pY2 = rectangle.pY2;
-			rectangle.pY1 = point[1];
+			rectangle.pY1 = point.pY;
 			rectangle.pY2 = pY2;
 		}
 		else if (['6', '7', '8'].includes(this.sectionProperties.ownInfo.kind))
-			rectangle.pY2 = point[1];
+			rectangle.pY2 = point.pY;
 
 		if (keepRatio) {
 			if (['4', '5'].includes(this.sectionProperties.ownInfo.kind)) {
-				rectangle.pY2 = point[1];
+				rectangle.pY2 = point.pY;
 			} else if (['2', '7'].includes(this.sectionProperties.ownInfo.kind)) {
-				rectangle.pX2 = point[0];
+				rectangle.pX2 = point.pX;
 			}
 		}
 
@@ -337,8 +337,8 @@ class ShapeHandleScalingSubSection extends CanvasSectionObject {
 		const x = centerLength * Math.cos(shapeRecProps.angleRadian + centerAngle);
 		const y = centerLength * Math.sin(shapeRecProps.angleRadian + centerAngle);
 
-		shapeRecProps.center[0] += x;
-		shapeRecProps.center[1] -= y;
+		shapeRecProps.center.pX += x;
+		shapeRecProps.center.pY -= y;
 		shapeRecProps.width = rectangle.pWidth;
 		shapeRecProps.height = rectangle.pHeight;
 
@@ -348,10 +348,12 @@ class ShapeHandleScalingSubSection extends CanvasSectionObject {
 	// While dragging a handle, we want to simulate handles to their final positions.
 	moveHandlesOnDrag(point: cool.SimplePoint, e: MouseEvent) {
 		Util.ensureValue(app.activeDocument);
-		const shapeRecProps = this.calculateNewShapeRectangleProperties([
-			point.pX + this.myTopLeft[0] + app.activeDocument.activeLayout.viewedRectangle.pX1 - this.containerObject.getDocumentAnchor()[0],
-			point.pY + this.myTopLeft[1] + app.activeDocument.activeLayout.viewedRectangle.pY1 - this.containerObject.getDocumentAnchor()[1]
-		], e);
+
+		const p = point.clone();
+		p.pX += this.position[0];
+		p.pY += this.position[1];
+
+		const shapeRecProps = this.calculateNewShapeRectangleProperties(p, e);
 
 		this.sectionProperties.parentHandlerSection.calculateInitialAnglesOfShapeHandlers(shapeRecProps);
 
@@ -366,8 +368,8 @@ class ShapeHandleScalingSubSection extends CanvasSectionObject {
 			const subSection = subSections[i];
 
 			pointAngle = subSection.sectionProperties.initialAngle + shapeRecProps.angleRadian;
-			x = shapeRecProps.center[0] + subSection.sectionProperties.distanceToCenter * Math.cos(pointAngle);
-			y = shapeRecProps.center[1] - subSection.sectionProperties.distanceToCenter * Math.sin(pointAngle);
+			x = shapeRecProps.center.pX + subSection.sectionProperties.distanceToCenter * Math.cos(pointAngle);
+			y = shapeRecProps.center.pY - subSection.sectionProperties.distanceToCenter * Math.sin(pointAngle);
 			subSection.setPosition(x - halfWidth, y - halfHeight);
 		}
 

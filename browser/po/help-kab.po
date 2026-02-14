@@ -2,9 +2,9 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-02-03 23:25+0200\n"
-"PO-Revision-Date: 2026-02-03 12:24+0000\n"
-"Last-Translator: ButterflyOfFire <boffire@users.noreply.hosted.weblate.org>\n"
+"POT-Creation-Date: 2026-02-13 19:20+0200\n"
+"PO-Revision-Date: 2026-02-12 19:09+0000\n"
+"Last-Translator: Amadɣas <massiin@proton.me>\n"
 "Language-Team: Kabyle <https://hosted.weblate.org/projects/collabora-online/"
 "help/kab/>\n"
 "Language: kab\n"
@@ -2162,7 +2162,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.h4:423-5
 msgid "Document repair"
-msgstr "Aṣeggem n isemli"
+msgstr "Aseɣti n isemli"
 
 #: html/cool-help.html%2Bdiv.div.div.p:424-5
 msgid ""
@@ -2182,7 +2182,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.img[alt]:426-29
 msgid "document repair"
-msgstr "aseggem n isemli"
+msgstr "aseɣti n isemli"
 
 #: html/cool-help.html%2Bdiv.div.div.p:427-5
 msgid ""

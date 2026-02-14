@@ -1308,7 +1308,7 @@ class TileManager {
 		return boundList.map((x: any) => this.pxBoundsToTileRange(x));
 	}
 
-	private static updateTileDistance(tile: Tile, zoom: number) {
+	private static getModeArray() {
 		let modes = [app.map._docLayer._selectedMode];
 		if (
 			app.activeDocument &&
@@ -1317,6 +1317,11 @@ class TileManager {
 			// 2 modes are active at the same time in compare changes view mode.
 			modes = [TileMode.LeftSide, TileMode.RightSide];
 		}
+		return modes;
+	}
+
+	private static updateTileDistance(tile: Tile, zoom: number) {
+		const modes = this.getModeArray();
 		if (
 			tile.coords.z !== zoom ||
 			tile.coords.part !== app.map._docLayer._selectedPart ||
@@ -1436,10 +1441,12 @@ class TileManager {
 		const part: number = app.map._docLayer._selectedPart;
 		const mode: number = app.map._docLayer._selectedMode;
 
+		const modes = this.getModeArray();
+
 		for (let i = coordsQueue.length - 1; i > 0; i--) {
 			if (
 				coordsQueue[i].part !== part ||
-				coordsQueue[i].mode !== mode ||
+				!modes.includes(coordsQueue[i].mode) ||
 				!this.tileNeedsFetch(coordsQueue[i].key())
 			) {
 				coordsQueue.splice(i, 1);
