@@ -24,8 +24,14 @@ class CompareChangesLabelSection extends HTMLObjectSection {
 	anchor: string[] = ['top', 'left'];
 
 	private readonly labelHeight: number = 32;
-	private leftLabel: HTMLSpanElement;
-	private rightLabel: HTMLSpanElement;
+
+	// Left and right labels, a title & optional subtitle inside each.
+	private leftLabel: HTMLDivElement;
+	private leftTitle: HTMLDivElement;
+	private leftSubtitle: HTMLDivElement;
+	private rightLabel: HTMLDivElement;
+	private rightTitle: HTMLDivElement;
+	private rightSubtitle: HTMLDivElement;
 
 	constructor() {
 		super(
@@ -35,8 +41,12 @@ class CompareChangesLabelSection extends HTMLObjectSection {
 			new cool.SimplePoint(0, 0),
 			'compare-changes-labels',
 		);
-		this.leftLabel = document.createElement('span');
-		this.rightLabel = document.createElement('span');
+		this.leftLabel = document.createElement('div');
+		this.leftTitle = document.createElement('div');
+		this.leftSubtitle = document.createElement('div');
+		this.rightLabel = document.createElement('div');
+		this.rightTitle = document.createElement('div');
+		this.rightSubtitle = document.createElement('div');
 		this.setupLabels();
 	}
 
@@ -47,29 +57,63 @@ class CompareChangesLabelSection extends HTMLObjectSection {
 		// Be on top of the text cursor.
 		container.style.zIndex = '1001';
 
-		this.leftLabel.textContent = '';
-		this.leftLabel.style.position = 'absolute';
-		this.leftLabel.style.height = this.labelHeight + 'px';
-		this.leftLabel.style.lineHeight = this.labelHeight + 'px';
-		this.leftLabel.style.backgroundColor = '#d63031';
-		this.leftLabel.style.color = 'white';
-		this.leftLabel.style.fontSize = '16px';
-		this.leftLabel.style.textAlign = 'center';
-		container.appendChild(this.leftLabel);
+		this.setupLabel(
+			container,
+			this.leftLabel,
+			this.leftTitle,
+			this.leftSubtitle,
+			'#d63031',
+		);
+		this.setupLabel(
+			container,
+			this.rightLabel,
+			this.rightTitle,
+			this.rightSubtitle,
+			'#00b894',
+		);
+	}
 
-		this.rightLabel.textContent = '';
-		this.rightLabel.style.position = 'absolute';
-		this.rightLabel.style.height = this.labelHeight + 'px';
-		this.rightLabel.style.lineHeight = this.labelHeight + 'px';
-		this.rightLabel.style.backgroundColor = '#00b894';
-		this.rightLabel.style.color = 'white';
-		this.rightLabel.style.fontSize = '16px';
-		this.rightLabel.style.textAlign = 'center';
-		container.appendChild(this.rightLabel);
+	private setupLabel(
+		container: HTMLDivElement,
+		label: HTMLDivElement,
+		title: HTMLDivElement,
+		subtitle: HTMLDivElement,
+		backgroundColor: string,
+	): void {
+		label.style.position = 'absolute';
+		label.style.height = this.labelHeight + 'px';
+		label.style.backgroundColor = backgroundColor;
+		label.style.color = 'white';
+		label.style.textAlign = 'center';
+		title.style.fontSize = '16px';
+		title.style.lineHeight = '16px';
+		subtitle.style.fontSize = '12px';
+		subtitle.style.lineHeight = '16px';
+		label.appendChild(title);
+		label.appendChild(subtitle);
+		container.appendChild(label);
+	}
+
+	private updateSubtitle(
+		element: HTMLDivElement,
+		info: DocumentMetadata,
+	): void {
+		const locale = String.locale;
+		const dateOptions: Intl.DateTimeFormatOptions = {
+			year: 'numeric',
+			month: 'long',
+			day: 'numeric',
+		};
+		const date = new Date(info.modificationDate).toLocaleDateString(
+			locale,
+			dateOptions,
+		);
+		element.textContent = _('Last edited by %1 on %2')
+			.replace('%1', info.modifiedBy)
+			.replace('%2', date);
 	}
 
 	override onDraw(): void {
-		this.adjustHTMLObjectPosition();
 		const container = this.getHTMLObject();
 
 		if (
@@ -80,6 +124,7 @@ class CompareChangesLabelSection extends HTMLObjectSection {
 			return;
 		}
 
+		this.adjustHTMLObjectPosition();
 		container.style.display = '';
 
 		const layout = app.activeDocument.activeLayout as ViewLayoutCompareChanges;
@@ -119,14 +164,31 @@ class CompareChangesLabelSection extends HTMLObjectSection {
 		const docName =
 			(document.getElementById('document-name-input') as HTMLInputElement)
 				?.value || '';
-		this.leftLabel.textContent = _('%1: Initial Version').replace(
+		this.leftTitle.textContent = _('%1: Initial Version').replace(
 			'%1',
 			docName,
 		);
-		this.rightLabel.textContent = _('%1: Current Version').replace(
+		this.rightTitle.textContent = _('%1: Current Version').replace(
 			'%1',
 			docName,
 		);
+
+		const props = app.writer.compareDocumentProperties;
+		if (props) {
+			this.updateSubtitle(this.leftSubtitle, props.metadata.otherDocument);
+			this.updateSubtitle(this.rightSubtitle, props.metadata.thisDocument);
+			this.leftSubtitle.style.display = '';
+			this.rightSubtitle.style.display = '';
+		} else {
+			this.leftSubtitle.style.display = 'none';
+			this.rightSubtitle.style.display = 'none';
+		}
+
+		// We only have a subtitle right after comparing; so if we don't have a subtitle,
+		// center the title vertically.
+		const titleHeight = props ? this.labelHeight / 2 : this.labelHeight;
+		this.leftTitle.style.lineHeight = titleHeight + 'px';
+		this.rightTitle.style.lineHeight = titleHeight + 'px';
 
 		this.leftLabel.style.display = '';
 		this.leftLabel.style.left = leftX + 'px';
