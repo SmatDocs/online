@@ -618,10 +618,11 @@ static void rebalanceChildren(const std::string& configId, int64_t balance)
 
     if (balance > 0 && (rebalance || OutstandingForks[configId] == 0))
     {
-        LOG_DBG("prespawnChildren: Have " << available << " spare "
-                                          << (available == 1 ? "child" : "children") << ", and "
-                                          << OutstandingForks[configId] << " outstanding, forking " << balance
-                                          << " more. Time since last request: " << durationMs);
+        LOG_DBG("prespawnChildren ["
+                << configId << "]: Have " << available << " spare "
+                << (available == 1 ? "child" : "children") << ", and " << OutstandingForks[configId]
+                << " outstanding (total: " << NewChildren.size() << "), forking " << balance
+                << " more. Time since last request: " << durationMs);
         forkChildren(configId, balance);
     }
 }
@@ -1682,10 +1683,15 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
                 "Please reduce logging level to debug or lower in coolwsd.xml to prevent leaking sensitive user data.";
             LOG_FTL(failure);
             std::cerr << '\n' << failure << std::endl;
-#if ENABLE_DEBUG
-            std::cerr << "\nIf you have used 'make run', edit coolwsd.xml and make sure you have removed "
-                         "'--o:logging.level=trace' from the command line in Makefile.am.\n" << std::endl;
-#endif
+
+            if constexpr (Util::isDebugEnabled())
+            {
+                std::cerr << "\nIf you have used 'make run', edit coolwsd.xml and make sure you "
+                             "have removed "
+                             "'--o:logging.level=trace' from the command line in Makefile.am.\n"
+                          << std::endl;
+            }
+
             Util::forcedExit(EX_SOFTWARE);
         }
     }
