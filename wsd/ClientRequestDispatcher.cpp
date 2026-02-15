@@ -529,7 +529,7 @@ public:
         };
 
         net::AsyncDNS::lookup(_addressesToResolve.front(), std::move(pushHostnameResolvedToPoll),
-                              dumpState);
+                              std::move(dumpState));
     }
 
     void hostnameResolved(const net::HostEntry& hostEntry)
@@ -1001,7 +1001,7 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
                                                                               ssize_t headerSize)
 {
     const bool closeConnection = !request.getKeepAlive(); // HTTP/1.1: closeConnection true w/ "Connection: close" only!
-    LOG_DBG("Handling request: " << request.getMethod() << request.getVersion() << ' '
+    LOG_DBG("Handling request: " << request.getMethod() << ' ' << request.getVersion() << ' '
                                  << request.getURI() << ", content " << request.getContentLength64()
                                  << ", chunked " << request.getChunkedTransferEncoding()
                                  << ", closeConnection " << closeConnection << ", "

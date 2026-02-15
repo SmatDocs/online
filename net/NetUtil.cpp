@@ -91,8 +91,8 @@ std::string HostEntry::errorMessage() const
     return std::string("[" + _requestName + "]: " + errmsg);
 }
 
-HostEntry::HostEntry(const std::string& desc)
-    : _requestName(desc)
+HostEntry::HostEntry(std::string desc)
+    : _requestName(std::move(desc))
     , _saved_errno(0)
     , _eaino(0)
 {
@@ -101,7 +101,7 @@ HostEntry::HostEntry(const std::string& desc)
     hints.ai_flags = AI_CANONNAME | AI_ADDRCONFIG;
 
     addrinfo* ainfo = nullptr;
-    int rc = getaddrinfo(desc.c_str(), nullptr, &hints, &ainfo);
+    int rc = getaddrinfo(_requestName.c_str(), nullptr, &hints, &ainfo);
     if (rc != 0)
     {
         setEAI(rc);
@@ -132,10 +132,10 @@ struct DNSCacheEntry
     HostEntry hostEntry;
     std::chrono::steady_clock::time_point lookupTime;
 
-    DNSCacheEntry(const std::string& address, const HostEntry& entry,
+    DNSCacheEntry(std::string address, HostEntry entry,
                   const std::chrono::steady_clock::time_point time)
-        : queryAddress(address)
-        , hostEntry(entry)
+        : queryAddress(std::move(address))
+        , hostEntry(std::move(entry))
         , lookupTime(time)
     {
     }
@@ -187,7 +187,9 @@ public:
     }
 };
 
-static HostEntry syncResolveDNS(const std::string& addressToCheck)
+namespace
+{
+HostEntry syncResolveDNS(const std::string& addressToCheck)
 {
 #if !MOBILEAPP
     // Where we have async DNS then use it for the sync DNS use cases too
@@ -210,7 +212,7 @@ static HostEntry syncResolveDNS(const std::string& addressToCheck)
 
     std::unique_lock<std::mutex> lock(mutex);
 
-    AsyncDNS::lookup(addressToCheck, std::move(callback), dumpState);
+    AsyncDNS::lookup(addressToCheck, std::move(callback), std::move(dumpState));
 
     cv.wait(lock, [&result]{ return static_cast<bool>(result); });
 
@@ -223,7 +225,7 @@ static HostEntry syncResolveDNS(const std::string& addressToCheck)
 
 using sockaddr_ptr = std::unique_ptr<sockaddr, void (*)(void*)>;
 
-static sockaddr_ptr dupAddrWithPort(const sockaddr* addr, socklen_t addrLen, uint16_t port)
+sockaddr_ptr dupAddrWithPort(const sockaddr* addr, socklen_t addrLen, uint16_t port)
 {
     sockaddr_ptr newAddr((sockaddr*)malloc(addrLen), free);
     memcpy(newAddr.get(), addr, addrLen);
@@ -247,6 +249,7 @@ static sockaddr_ptr dupAddrWithPort(const sockaddr* addr, socklen_t addrLen, uin
 
     return newAddr;
 }
+} // namespace
 
 #if !MOBILEAPP
 
@@ -400,10 +403,10 @@ void AsyncDNS::resolveDNS()
     }
 }
 
-void AsyncDNS::addLookup(std::string lookup, DNSThreadFn cb, const DNSThreadDumpStateFn& dumpState)
+void AsyncDNS::addLookup(std::string lookup, DNSThreadFn cb, DNSThreadDumpStateFn dumpState)
 {
     std::unique_lock<std::mutex> guard(_lock);
-    _lookups.emplace(std::move(lookup), std::move(cb), dumpState);
+    _lookups.emplace(std::move(lookup), std::move(cb), std::move(dumpState));
     guard.unlock();
     _condition.notify_one();
 }
@@ -438,16 +441,14 @@ void AsyncDNS::stopAsyncDNS()
 }
 
 //static
-void AsyncDNS::lookup(std::string searchEntry, DNSThreadFn cb,
-                      const DNSThreadDumpStateFn& dumpState)
+void AsyncDNS::lookup(std::string searchEntry, DNSThreadFn cb, DNSThreadDumpStateFn dumpState)
 {
-    AsyncDNSThread->addLookup(std::move(searchEntry), std::move(cb), dumpState);
+    AsyncDNSThread->addLookup(std::move(searchEntry), std::move(cb), std::move(dumpState));
 }
 
-void
-asyncConnect(const std::string& host, const std::string& port, const bool isSSL,
-             const std::shared_ptr<ProtocolHandlerInterface>& protocolHandler,
-             const asyncConnectCB& asyncCb)
+void asyncConnect(std::string host, const std::string& port, const bool isSSL,
+                  const std::shared_ptr<ProtocolHandlerInterface>& protocolHandler,
+                  const asyncConnectCB& asyncCb)
 {
     if (host.empty() || port.empty())
     {
@@ -536,13 +537,10 @@ asyncConnect(const std::string& host, const std::string& port, const bool isSSL,
         asyncCb(std::move(socket), result);
     };
 
-    net::AsyncDNS::DNSThreadDumpStateFn dumpState = [host, port]() -> std::string
-    {
-        std::string state = "asyncConnect: [" + host + ":" + port + "]";
-        return state;
-    };
+    std::string state = "asyncConnect: [" + host + ':' + port + ']';
+    net::AsyncDNS::DNSThreadDumpStateFn dumpState = [state]() -> std::string { return state; };
 
-    AsyncDNS::lookup(host, std::move(callback), dumpState);
+    AsyncDNS::lookup(std::move(host), std::move(callback), std::move(dumpState));
 }
 
 std::shared_ptr<StreamSocket>
