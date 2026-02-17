@@ -9,6 +9,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Unit test for document conversion functionality.
+ */
+
 #include <config.h>
 
 #include <iostream>
@@ -16,8 +20,8 @@
 #include <Common.hpp>
 #include <Protocol.hpp>
 #include <Unit.hpp>
-#include <Util.hpp>
-#include <FileUtil.hpp>
+#include <common/Util.hpp>
+#include <common/FileUtil.hpp>
 #include <helpers.hpp>
 
 #include <Poco/Net/HTTPServerRequest.h>

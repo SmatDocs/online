@@ -9,18 +9,23 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Kit process callback queue management and optimization.
+ * Classes: KitQueue, Callback - LOK callback handling and deduplication
+ */
+
 #include <config.h>
 
 #include "KitQueue.hpp"
 
+#include <common/JsonUtil.hpp>
+
+#include <algorithm>
 #include <climits>
 #include <cstring>
-#include <algorithm>
+#include <iostream>
 #include <string>
 #include <string_view>
-#include <iostream>
-
-#include "JsonUtil.hpp"
 
 /* static */ std::string KitQueue::Callback::toString(int view, int type,
                                                       const std::string& payload)

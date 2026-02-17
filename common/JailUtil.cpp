@@ -9,11 +9,17 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Jail filesystem setup and management utilities.
+ * Functions: setupJail(), cleanupJails(), loopMountroot()
+ */
+
 #include <config.h>
 
-#include "FileUtil.hpp"
 #include "JailUtil.hpp"
-#include "Log.hpp"
+
+#include <common/FileUtil.hpp>
+#include <common/Log.hpp>
 
 #include <SigUtil.hpp>
 #include <csignal>

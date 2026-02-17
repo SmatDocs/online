@@ -8,6 +8,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
+
 /* A debugging tool to detect un-shared pages between
  * forkit and its children */
 
@@ -36,7 +37,7 @@
 #include <math.h>
 
 #include <common/HexUtil.hpp>
-#include <Util.hpp>
+#include <common/Util.hpp>
 
 #ifdef __FreeBSD__
 void error(int status, int errnum, const char *format, ...)
@@ -784,7 +785,7 @@ int main(int argc, char **argv)
 
         if (*dir_proc->d_name > '0' && *dir_proc->d_name <= '9')
         {
-            unsigned pid_proc = strtoul(dir_proc->d_name, nullptr, 10);
+            const unsigned pid_proc = Util::u64FromString(dir_proc->d_name, 0).first;
 
             snprintf(path_proc, sizeof(path_proc), "/proc/%s/%s", dir_proc->d_name, "cmdline");
             if (read_buffer(cmdline, sizeof(cmdline), path_proc, ' ') &&

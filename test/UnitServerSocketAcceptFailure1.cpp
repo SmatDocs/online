@@ -9,6 +9,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Unit test for server socket accept failure scenarios.
+ */
+
 #include <config.h>
 
 #include <memory>
@@ -22,10 +26,10 @@
 
 #include <Unit.hpp>
 #include <UserMessages.hpp>
-#include <Util.hpp>
+#include <common/Util.hpp>
 #include <helpers.hpp>
 
-#include "UnitTimeoutBase.hpp"
+#include <UnitTimeoutBase.hpp>
 
 /// Test suite class for injected ServerSocket accept failures
 class UnitServerSocketAcceptFailure1 : public UnitTimeoutBase0

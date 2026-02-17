@@ -9,13 +9,17 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Utilities for file server operations.
+ * Functions: preprocessFile(), preprocessAdminFile()
+ */
+
 #include <config.h>
 
-#include "FileServer.hpp"
-
-#include <JsonUtil.hpp>
+#include <common/JsonUtil.hpp>
 #include <common/StringVector.hpp>
 #include <common/base64.hpp>
+#include <wsd/FileServer.hpp>
 
 #include <cctype>
 

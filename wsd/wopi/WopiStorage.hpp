@@ -11,10 +11,10 @@
 
 #pragma once
 
-#include "CharacterConverter.hpp"
+#include <CharacterConverter.hpp>
 #include <COOLWSD.hpp>
 #include <HttpRequest.hpp>
-#include <Log.hpp>
+#include <common/Log.hpp>
 #include <Storage.hpp>
 #include <common/Authorization.hpp>
 #include <net/HttpRequest.hpp>

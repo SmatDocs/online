@@ -9,12 +9,16 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Unit test for client join and disconnect scenarios.
+ */
+
 #include <config.h>
 
-#include "lokassert.hpp"
-#include "Unit.hpp"
+#include <lokassert.hpp>
+#include <Unit.hpp>
 #include <WopiTestServer.hpp>
-#include <Log.hpp>
+#include <common/Log.hpp>
 #include <helpers.hpp>
 #include <wsd/ClientSession.hpp>
 

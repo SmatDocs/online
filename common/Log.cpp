@@ -9,11 +9,17 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Logging infrastructure and buffering implementation.
+ * Classes: StreamLogger - Functions: initialize(), getLevel(), prefix()
+ */
+
 #include <config.h>
 
 #include "Log.hpp"
-#include "StaticLogHelper.hpp"
-#include "Util.hpp"
+
+#include <common/StaticLogHelper.hpp>
+#include <common/Util.hpp>
 
 #include <Poco/AutoPtr.h>
 #include <Poco/FileChannel.h>

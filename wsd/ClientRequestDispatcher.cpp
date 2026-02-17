@@ -9,10 +9,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Implementation of client request routing and handling.
+ * Classes: ClientRequestDispatcher
+ */
+
 #include <config.h>
 
 #if ENABLE_FEATURE_LOCK
-#include "CommandControl.hpp"
+#include <CommandControl.hpp>
 #endif
 
 #include <common/Anonymizer.hpp>
@@ -23,13 +28,13 @@
 #include <Exceptions.hpp>
 #include <FileServer.hpp>
 #include <HttpRequest.hpp>
-#include <JsonUtil.hpp>
+#include <common/JsonUtil.hpp>
 #include <ProofKey.hpp>
 #include <ProxyRequestHandler.hpp>
 #include <RequestDetails.hpp>
 #include <Socket.hpp>
 #include <UserMessages.hpp>
-#include <Util.hpp>
+#include <common/Util.hpp>
 #include <net/AsyncDNS.hpp>
 #include <net/HttpHelper.hpp>
 #include <net/NetUtil.hpp>
@@ -879,12 +884,12 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
     char* appDocIdBuffer = (char*)malloc(appDocIdLen + 1);
     memcpy(appDocIdBuffer, space + 1, appDocIdLen);
     appDocIdBuffer[appDocIdLen] = '\0';
-    unsigned appDocId = std::strtoul(appDocIdBuffer, nullptr, 10);
+    const unsigned mobileAppDocId = Util::u64FromString(appDocIdBuffer, 0).first;
     free(appDocIdBuffer);
 
     handleClientWsUpgrade(
         request, std::string(socket->getInBuffer().data(), space - socket->getInBuffer().data()),
-        disposition, socket, appDocId);
+        disposition, socket, mobileAppDocId);
 #else // IOS
     handleClientWsUpgrade(
         request,

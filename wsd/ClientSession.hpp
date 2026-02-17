@@ -9,13 +9,18 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Client session management in WSD process.
+ * Classes: ClientSession
+ */
+
 #pragma once
 
-#include "Session.hpp"
-#include "Storage.hpp"
-#include "SenderQueue.hpp"
-#include "ServerURL.hpp"
-#include "DocumentBroker.hpp"
+#include <Session.hpp>
+#include <Storage.hpp>
+#include <SenderQueue.hpp>
+#include <ServerURL.hpp>
+#include <DocumentBroker.hpp>
 
 #include <Poco/JSON/Object.h>
 #include <Poco/SharedPtr.h>
@@ -24,7 +29,7 @@
 #include <Rectangle.hpp>
 #include <deque>
 #include <utility>
-#include "Util.hpp"
+#include <common/Util.hpp>
 
 #include <optional>
 

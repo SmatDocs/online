@@ -9,6 +9,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Tile caching for rendered document tiles.
+ * Classes: TileCache
+ */
+
 #pragma once
 
 #include <iosfwd>
@@ -20,9 +25,9 @@
 
 #include <Rectangle.hpp>
 
-#include "Log.hpp"
-#include "Common.hpp"
-#include "TileDesc.hpp"
+#include <common/Log.hpp>
+#include <Common.hpp>
+#include <TileDesc.hpp>
 
 class ClientSession;
 

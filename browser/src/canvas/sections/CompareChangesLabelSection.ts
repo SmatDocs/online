@@ -57,19 +57,19 @@ class CompareChangesLabelSection extends HTMLObjectSection {
 		// Be on top of the text cursor.
 		container.style.zIndex = '1001';
 
+		this.leftLabel.id = 'compare-changes-left-label';
+		this.rightLabel.id = 'compare-changes-right-label';
 		this.setupLabel(
 			container,
 			this.leftLabel,
 			this.leftTitle,
 			this.leftSubtitle,
-			'#d63031',
 		);
 		this.setupLabel(
 			container,
 			this.rightLabel,
 			this.rightTitle,
 			this.rightSubtitle,
-			'#00b894',
 		);
 	}
 
@@ -78,13 +78,8 @@ class CompareChangesLabelSection extends HTMLObjectSection {
 		label: HTMLDivElement,
 		title: HTMLDivElement,
 		subtitle: HTMLDivElement,
-		backgroundColor: string,
 	): void {
-		label.style.position = 'absolute';
 		label.style.height = this.labelHeight + 'px';
-		label.style.backgroundColor = backgroundColor;
-		label.style.color = 'white';
-		label.style.textAlign = 'center';
 		title.style.fontSize = '16px';
 		title.style.lineHeight = '16px';
 		subtitle.style.fontSize = '12px';
@@ -161,25 +156,26 @@ class CompareChangesLabelSection extends HTMLObjectSection {
 		);
 		const rightX = layout.documentToViewX(rightOrigin);
 
-		const docName =
-			(document.getElementById('document-name-input') as HTMLInputElement)
-				?.value || '';
-		this.leftTitle.textContent = _('%1: Initial Version').replace(
-			'%1',
-			docName,
-		);
-		this.rightTitle.textContent = _('%1: Current Version').replace(
-			'%1',
-			docName,
-		);
-
 		const props = app.writer.compareDocumentProperties;
 		if (props) {
+			const docName =
+				(document.getElementById('document-name-input') as HTMLInputElement)
+					?.value || '';
+			this.leftTitle.textContent = _('%1: Initial Version').replace(
+				'%1',
+				docName,
+			);
+			this.rightTitle.textContent = _('%1: Current Version').replace(
+				'%1',
+				docName,
+			);
 			this.updateSubtitle(this.leftSubtitle, props.metadata.otherDocument);
 			this.updateSubtitle(this.rightSubtitle, props.metadata.thisDocument);
 			this.leftSubtitle.style.display = '';
 			this.rightSubtitle.style.display = '';
 		} else {
+			this.leftTitle.textContent = _('Initial Version');
+			this.rightTitle.textContent = _('Current Version');
 			this.leftSubtitle.style.display = 'none';
 			this.rightSubtitle.style.display = 'none';
 		}
