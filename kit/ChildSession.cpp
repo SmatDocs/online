@@ -9,6 +9,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Kit process child session handling LOK commands.
+ * Classes: ChildSession - Document session command processing
+ */
+
 #include <config.h>
 
 #include "ChildSession.hpp"
@@ -45,7 +50,7 @@
 #include <common/TraceEvent.hpp>
 #include <common/SpookyV2.h>
 #include <common/Uri.hpp>
-#include "KitHelper.hpp"
+#include <KitHelper.hpp>
 #include <Png.hpp>
 #include <Clipboard.hpp>
 #include <CommandControl.hpp>
@@ -56,7 +61,7 @@
 #endif
 
 #if WASMAPP
-#include "wasmapp.hpp"
+#include <wasmapp.hpp>
 #endif
 
 #include <climits>
@@ -2856,7 +2861,7 @@ bool ChildSession::resizeWindow(const StringVector& tokens)
 
 bool ChildSession::sendWindowCommand(const StringVector& tokens)
 {
-    const unsigned winId = (tokens.size() > 1 ? std::stoul(tokens[1]) : 0);
+    const unsigned winId = (tokens.size() > 1 ? Util::u64FromString(tokens[1], 0).first : 0);
 
     getLOKitDocument()->setView(_viewId);
 

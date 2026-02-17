@@ -9,9 +9,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "config.h"
-#include "Common.hpp"
-#include "Kit.hpp"
+/*
+ * Main entry point for the ForKit process.
+ * Functions: main() - Initializes and runs ForKit
+ */
+
+#include <config.h>
+#include <Common.hpp>
+#include <Kit.hpp>
 
 int ClientPortNumber = DEFAULT_CLIENT_PORT_NUMBER;
 std::string MasterLocation;

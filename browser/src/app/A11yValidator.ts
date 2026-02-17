@@ -33,6 +33,7 @@ class A11yValidator {
 		this.checks.push(this.checkImageAltAttribute.bind(this));
 		this.checks.push(this.checkLabelElement.bind(this));
 		this.checks.push(this.checkElementHasLabel.bind(this));
+		this.checks.push(this.checkAriaControls.bind(this));
 	}
 
 	checkWidget(type: string, element: HTMLElement): void {
@@ -205,6 +206,28 @@ class A11yValidator {
 		}
 	}
 
+	// TODO: there are some elements on which aria-controls only added
+	// when the relevant element exist in DOM. Need to handle that case as well.
+	private checkAriaControls(type: string, element: HTMLElement): void {
+		const controlledElementId = element.getAttribute('aria-controls') || '';
+		if (controlledElementId.trim() !== '') {
+			const referencedElement = document.getElementById(controlledElementId);
+
+			if (!referencedElement) {
+				throw new A11yValidatorException(
+					`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': element is widget of type '${type}' has aria-control attribute but mentioned element does not exist in DOM. Only add this attribute when mentioned element exist in DOM.`,
+				);
+			}
+		}
+
+		for (let i = 0; i < element.children.length; i++) {
+			const child = element.children[i];
+			if (this.shouldCheckChild(child)) {
+				this.checkAriaControls(type, child as HTMLElement);
+			}
+		}
+	}
+
 	private shouldCheckChild(child: Element): boolean {
 		return (
 			child instanceof HTMLElement &&
@@ -332,6 +355,24 @@ class A11yValidator {
 		} else {
 			console.error(
 				`A11yValidator: sidebar has ${errorCount} accessibility issues`,
+			);
+		}
+	}
+
+	validateNotebookbar(): void {
+		const notebookbar = app.map?.uiManager?.notebookbar;
+		if (!notebookbar) {
+			console.error('A11yValidator: no notebookbar to validate');
+			return;
+		}
+
+		const errorCount = this.validateContainer(notebookbar.container);
+
+		if (errorCount === 0) {
+			console.error('A11yValidator: notebookbar passed all checks');
+		} else {
+			console.error(
+				`A11yValidator: notebookbar has ${errorCount} accessibility issues`,
 			);
 		}
 	}

@@ -9,13 +9,18 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Non-blocking server socket for accepting incoming connections.
+ * Classes: ServerSocket, SocketFactory
+ */
+
 #pragma once
 
-#include "NetUtil.hpp"
-#include "memory"
+#include <NetUtil.hpp>
+#include <memory>
 
-#include "Socket.hpp"
-#include "Log.hpp"
+#include <Socket.hpp>
+#include <common/Log.hpp>
 
 class SocketFactory
 {

@@ -9,11 +9,16 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * WOPI authorization token and header management.
+ * Classes: Authorization
+ */
+
 #include <config.h>
 
 #include "Authorization.hpp"
-#include "Log.hpp"
-#include "StringVector.hpp"
+#include <common/Log.hpp>
+#include <common/StringVector.hpp>
 #include <common/Uri.hpp>
 
 #include <Poco/Net/HTTPRequest.h>

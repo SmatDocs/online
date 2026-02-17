@@ -9,7 +9,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "config.h"
+/*
+ * Implementation of non-blocking socket I/O, polling, and protocol dispatch.
+ * Classes: Socket, StreamSocket, SocketPoll, SocketDisposition, WebSocketHandler integration
+ */
+
+#include <config.h>
 
 #include "Socket.hpp"
 

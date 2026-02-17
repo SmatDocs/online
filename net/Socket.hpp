@@ -9,6 +9,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Core socket abstractions: non-blocking I/O, polling, and protocol handling.
+ * Classes: Socket, StreamSocket, SocketPoll, ProtocolHandlerInterface, SocketDisposition
+ */
+
 #pragma once
 
 #if !MOBILEAPP
@@ -34,13 +39,13 @@
 #include <thread>
 
 #include <common/StateEnum.hpp>
-#include "Log.hpp"
-#include "NetUtil.hpp"
-#include "Util.hpp"
-#include "Buffer.hpp"
-#include "SigUtil.hpp"
+#include <common/Log.hpp>
+#include <NetUtil.hpp>
+#include <common/Util.hpp>
+#include <Buffer.hpp>
+#include <SigUtil.hpp>
 
-#include "FakeSocket.hpp"
+#include <FakeSocket.hpp>
 
 #ifdef __linux__
 #define HAVE_ABSTRACT_UNIX_SOCKETS

@@ -1,4 +1,4 @@
-/* global describe expect it cy before after afterEach require */
+/* global describe expect it cy Cypress before after afterEach require */
 
 var helper = require('../../common/helper');
 var calcHelper = require('../../common/calc_helper');
@@ -23,6 +23,7 @@ const allCalcDialogs = [
     '.uno:Delete',
     '.uno:DescriptiveStatisticsDialog',
     '.uno:EditHeaderAndFooter',
+    '.uno:EditPrintArea',
     '.uno:EditStyle?Param:string=Heading&Family:short=2',
     '.uno:ExponentialSmoothingDialog',
     '.uno:FormatCellDialog',
@@ -55,7 +56,6 @@ const allCalcDialogs = [
 const excludedCommonDialogs = [
     '.uno:AcceptTrackedChanges',
     '.uno:GotoPage',
-    '.uno:Signature', // need to add signing infra
     '.uno:SpellingAndGrammarDialog',
     '.uno:SplitCell',
 ];
@@ -68,6 +68,7 @@ const buggyCalcDialogs = [
     '.uno:DefineDBName',
     '.uno:Delete',
     '.uno:EditHeaderAndFooter',
+    '.uno:EditPrintArea',
     '.uno:EditStyle?Param:string=Heading&Family:short=2',
     '.uno:FormatCellDialog',
     '.uno:FunctionDialog',
@@ -101,8 +102,7 @@ describe(['tagdesktop'], 'Accessibility Calc Dialog Tests', { testIsolation: fal
 
         cy.then(() => {
             // Go to a cell with text to enable thesaurus (if there is linguistic data available).
-            helper.typeIntoInputField(helper.addressInputSelector, 'C5');
-            calcHelper.assertAddressAfterIdle(win, 'C5');
+            calcHelper.enterCellAddressAndConfirm(win, 'C5');
         }).then(() => {
             const thesaurusState = win.app.map.stateChangeHandler.getItemValue('.uno:ThesaurusDialog');
             hasLinguisticData = (thesaurusState === 'enabled');
@@ -136,8 +136,7 @@ describe(['tagdesktop'], 'Accessibility Calc Dialog Tests', { testIsolation: fal
         a11yHelper.resetState();
 
         // make C5 the home cell for all tests
-        helper.typeIntoInputField(helper.addressInputSelector, 'C5');
-        calcHelper.assertAddressAfterIdle(win, 'C5');
+        calcHelper.enterCellAddressAndConfirm(win, 'C5');
     });
 
     a11yHelper.allCommonDialogs.forEach(function (commandSpec) {
@@ -171,7 +170,50 @@ describe(['tagdesktop'], 'Accessibility Calc Dialog Tests', { testIsolation: fal
         }
     });
 
+    it('Graphic dialog', function () {
+        cy.viewport(1920,1080);
+        helper.processToIdle(win);
+
+        desktopHelper.insertImage('calc');
+
+        a11yHelper.testDialog(win, '.uno:CompressGraphic');
+        a11yHelper.testDialog(win, '.uno:TransformDialog');
+        a11yHelper.testDialog(win, '.uno:FormatArea');
+        a11yHelper.testDialog(win, '.uno:FormatLine');
+
+        // exit shape mode
+        helper.typeIntoDocument('{esc}');
+
+        cy.viewport(Cypress.config('viewportWidth'), Cypress.config('viewportHeight'));
+        desktopHelper.selectZoomLevel('100', false);
+
+        // exit shape mode
+        helper.typeIntoDocument('{esc}');
+
+        cy.viewport(Cypress.config('viewportWidth'), Cypress.config('viewportHeight'));
+        desktopHelper.selectZoomLevel('100', false);
+    });
+
+    it('Shape paragraph dialog', function () {
+        cy.then(() => {
+            win.app.map.sendUnoCommand('.uno:BasicShapes.octagon');
+        });
+
+        cy.cGet('#test-div-shapeHandlesSection').should('exist');
+
+        helper.typeIntoDocument('{enter}');
+
+        cy.then(() => {
+            win.app.map.sendUnoCommand('.uno:ParagraphDialog');
+        });
+        a11yHelper.handleDialog(win, 1);
+
+        // exit shape mode
+        helper.typeIntoDocument('{esc}');
+    });
+
     it.skip('PasteSpecial Dialog (Buggy)', function () {
+        helper.setDummyClipboardForCopy('text/html');
         // Select some text
         helper.selectAllText();
 
@@ -182,6 +224,20 @@ describe(['tagdesktop'], 'Accessibility Calc Dialog Tests', { testIsolation: fal
             win.app.map.sendUnoCommand('.uno:PasteSpecial');
         });
         a11yHelper.handleDialog(win, 1);
+    });
+
+    it.skip('Text Import Dialog (Buggy)', function () {
+        helper.setDummyClipboardForCopy('text/plain');
+        // Select some text
+        helper.selectAllText();
+
+        helper.copy().then(() => {
+            return helper.processToIdle(win);
+        })
+        .then(() => {
+            win.app.map.sendUnoCommand('.uno:PasteTextImportDialog');
+        });
+        a11yHelper.handleDialog(win, 1, '.uno:PasteTextImportDialog');
     });
 
     it.skip('Font Dialog (Buggy)', function () {
@@ -211,7 +267,7 @@ describe(['tagdesktop'], 'Accessibility Calc Dialog Tests', { testIsolation: fal
         cy.then(() => {
             win.app.map.sendUnoCommand('.uno:DataDataPilotRun');
         });
-	// This is just the 'select source' dialog, not the pivot table dialog
+        // This is just the 'select source' dialog, not the pivot table dialog
         a11yHelper.handleDialog(win, 1);
     });
 
@@ -225,9 +281,12 @@ describe(['tagdesktop'], 'Accessibility Calc Dialog Tests', { testIsolation: fal
         cy.cGet('#spreadsheet-tab0').click();
     });
 
-    it('AutoCorrect Warning Dialog)', function () {
+    it('AutoCorrect Warning Dialog', function () {
         helper.typeIntoDocument('=2x3{enter}');
         a11yHelper.handleDialog(win, 1, '', true);
     });
 
+    it('PDF export warning dialog', function () {
+        a11yHelper.testPDFExportWarningDialog(win);
+    });
 });

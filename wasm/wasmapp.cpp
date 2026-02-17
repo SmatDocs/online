@@ -13,10 +13,10 @@
 
 #include "wasmapp.hpp"
 
-#include <FakeSocket.hpp>
-#include <Log.hpp>
-#include <COOLWSD.hpp>
-#include <Util.hpp>
+#include <common/Log.hpp>
+#include <common/Util.hpp>
+#include <net/FakeSocket.hpp>
+#include <wsd/COOLWSD.hpp>
 
 #include <emscripten/fetch.h>
 

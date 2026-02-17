@@ -9,10 +9,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Configuration file utilities and helpers.
+ * Functions: getString(), getInt(), getBool() - Config value accessors
+ */
+
 #include <config.h>
 
 #include <ConfigUtil.hpp>
-#include <Util.hpp>
+#include <common/Util.hpp>
 
 #include <Poco/Util/AbstractConfiguration.h>
 #include <Poco/Util/XMLConfiguration.h>

@@ -9,9 +9,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Socket API emulation for mobile platforms (iOS/Android).
+ * Functions: fakeSocket* family (Socket, Poll, Listen, Connect, etc.)
+ */
+
 #pragma once
 
-#include "Util.hpp"
+#include <common/Util.hpp>
 
 #if MOBILEAPP
 

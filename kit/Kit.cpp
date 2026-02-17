@@ -8,12 +8,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
+
 /*
  * The main entry point for the LibreOfficeKit process serving
  * a document editing session.
  */
 
 #include <config.h>
+
+#include "Kit.hpp"
 
 #include <common/Anonymizer.hpp>
 #include <wsd/TileDesc.hpp>
@@ -73,23 +76,22 @@
 #include <Poco/Exception.h>
 #include <Poco/URI.h>
 
-#include "ChildSession.hpp"
+#include <ChildSession.hpp>
 #include <Common.hpp>
 #include <MobileApp.hpp>
-#include <FileUtil.hpp>
+#include <common/FileUtil.hpp>
 #include <common/JsonUtil.hpp>
-#include "KitHelper.hpp"
-#include "Kit.hpp"
+#include <KitHelper.hpp>
 #include <Protocol.hpp>
-#include <Log.hpp>
+#include <common/Log.hpp>
 #include <Png.hpp>
 #include <Rectangle.hpp>
 #include <Unit.hpp>
 #include <UserMessages.hpp>
-#include <Util.hpp>
-#include <JsonUtil.hpp>
-#include "RenderTiles.hpp"
-#include "KitWebSocket.hpp"
+#include <common/Util.hpp>
+#include <common/JsonUtil.hpp>
+#include <RenderTiles.hpp>
+#include <KitWebSocket.hpp>
 #include <common/ConfigUtil.hpp>
 #include <common/Uri.hpp>
 
@@ -104,15 +106,15 @@
 #endif
 
 #if MOBILEAPP
-#include "COOLWSD.hpp"
+#include <COOLWSD.hpp>
 #ifndef IOS
-#include "SetupKitEnvironment.hpp"
+#include <SetupKitEnvironment.hpp>
 #endif
 #endif
 
 #ifdef IOS
-#include "ios.h"
-#include "DocumentBroker.hpp"
+#include <ios.h>
+#include <DocumentBroker.hpp>
 #endif
 
 using Poco::Exception;

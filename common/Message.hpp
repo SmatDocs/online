@@ -18,10 +18,10 @@
 #include <vector>
 #include <functional>
 
-#include "Protocol.hpp"
-#include "StringVector.hpp"
-#include "Log.hpp"
-#include "Util.hpp"
+#include <Protocol.hpp>
+#include <common/StringVector.hpp>
+#include <common/Log.hpp>
+#include <common/Util.hpp>
 
 /// The payload type used to send/receive data.
 class Message

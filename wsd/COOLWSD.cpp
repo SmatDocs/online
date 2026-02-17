@@ -9,6 +9,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Implementation of main server application logic.
+ * Classes: COOLWSD
+ */
+
 #include <config.h>
 #include <config_version.h>
 
@@ -33,34 +38,37 @@
 // parent process that listens on the TCP port and accepts connections from COOL clients, and a
 // number of child processes, each which handles a viewing (editing) session for one document.
 
-#include <unistd.h>
-#include <sysexits.h>
-#include <sys/resource.h>
-#include <sys/wait.h>
-
-#include <sys/types.h>
-
-#include <cassert>
-#include <clocale>
-#include <condition_variable>
-#include <cstdint>
-#include <cstdlib>
-#include <cstring>
-#include <ctime>
-#include <chrono>
-#include <iostream>
-#include <map>
-#include <memory>
-#include <mutex>
-#include <sstream>
-#include <string>
-#include <thread>
-
+#include <common/Anonymizer.hpp>
+#include <common/Clipboard.hpp>
+#include <common/Common.hpp>
 #if ENABLE_FEATURE_LOCK
-#include "CommandControl.hpp"
+#include <common/CommandControl.hpp>
 #endif
-
+#include <common/ConfigUtil.hpp>
+#include <common/Crypto.hpp>
+#include <common/FileUtil.hpp>
+#include <common/HexUtil.hpp>
+#include <common/JailUtil.hpp>
+#include <common/JsonUtil.hpp>
+#include <common/Log.hpp>
+#include <common/MobileApp.hpp>
+#include <common/Protocol.hpp>
+#include <common/RegexUtil.hpp>
+#include <common/Session.hpp>
+#include <common/SigUtil.hpp>
+#include <common/Unit.hpp>
+#include <common/Util.hpp>
+#include <net/AsyncDNS.hpp>
+#include <net/DelaySocket.hpp>
+#include <net/ServerSocket.hpp>
+#include <wsd/COOLWSDServer.hpp>
+#include <wsd/ClientRequestDispatcher.hpp>
+#include <wsd/DocumentBroker.hpp>
 #include <wsd/PlatformDesktop.hpp>
+#include <wsd/PlatformMobile.hpp>
+#include <wsd/Process.hpp>
+#include <wsd/TraceFile.hpp>
+#include <wsd/wopi/StorageConnectionManager.hpp>
 
 #include <Poco/DirectoryIterator.h>
 #include <Poco/Exception.h>
@@ -76,37 +84,27 @@
 #include <Poco/Util/ServerApplication.h>
 #include <Poco/Util/XMLConfiguration.h>
 
-#include <common/Anonymizer.hpp>
-#include <ClientRequestDispatcher.hpp>
-#include <Common.hpp>
-#include <Clipboard.hpp>
-#include <Crypto.hpp>
-#include <DelaySocket.hpp>
-#include <wsd/COOLWSDServer.hpp>
-#include <wsd/DocumentBroker.hpp>
-#include <wsd/Process.hpp>
-#include <common/FileUtil.hpp>
-#include <common/JailUtil.hpp>
-#include <common/JsonUtil.hpp>
-#include <common/RegexUtil.hpp>
+#include <cassert>
+#include <chrono>
+#include <clocale>
+#include <condition_variable>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <sstream>
+#include <string>
+#include <thread>
 
-#include <common/Log.hpp>
-#include <MobileApp.hpp>
-#include <Protocol.hpp>
-#include <Session.hpp>
-#include <wsd/wopi/StorageConnectionManager.hpp>
-#include <wsd/TraceFile.hpp>
-#include <common/ConfigUtil.hpp>
-#include <common/HexUtil.hpp>
-#include <common/SigUtil.hpp>
-#include <common/Unit.hpp>
-#include <common/Util.hpp>
-
-#include <net/AsyncDNS.hpp>
-
-#include <ServerSocket.hpp>
-
-#include <wsd/PlatformMobile.hpp>
+#include <sys/resource.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sysexits.h>
+#include <unistd.h>
 
 using Poco::Util::LayeredConfiguration;
 using Poco::Util::Option;
@@ -790,6 +788,9 @@ std::string COOLWSD::UserInterface = "default";
 bool COOLWSD::AnonymizeUserData = false;
 bool COOLWSD::CheckCoolUser = true;
 bool COOLWSD::CleanupOnly = false; ///< If we should cleanup and exit.
+#if ENABLE_DEBUG
+bool COOLWSD::FindFreePort = false; ///< If we should find a free port to listen on.
+#endif
 bool COOLWSD::IsProxyPrefixEnabled = false;
 unsigned COOLWSD::MaxConnections;
 unsigned COOLWSD::MaxDocuments;
@@ -2355,6 +2356,12 @@ void COOLWSD::defineOptions(Poco::Util::OptionSet& optionSet)
                         .repeatable(false)
                         .argument("port_number"));
 
+#if ENABLE_DEBUG
+    optionSet.addOption(Option("find-free-port", "", "Find a free port to listen on, starting from the default.")
+                        .required(false)
+                        .repeatable(false));
+#endif
+
     optionSet.addOption(Option("disable-ssl", "", "Disable SSL security layer.")
                         .required(false)
                         .repeatable(false));
@@ -2444,6 +2451,10 @@ void COOLWSD::handleOption(const std::string& optionName,
         CleanupOnly = true; // Flag for later as we need the config.
     else if (optionName == "port")
         ClientPortNumber = std::stoi(value);
+#if ENABLE_DEBUG
+    else if (optionName == "find-free-port")
+        FindFreePort = true;
+#endif
     else if (optionName == "disable-ssl")
         _overrideSettings["ssl.enable"] = "false";
     else if (optionName == "disable-cool-user-checking")
@@ -3535,7 +3546,11 @@ std::shared_ptr<ServerSocket> COOLWSDServer::findServerPort()
 #ifdef BUILDING_TESTS
            true
 #else
-           UnitWSD::isUnitTesting()
+           (UnitWSD::isUnitTesting()
+#if ENABLE_DEBUG
+            || COOLWSD::FindFreePort
+#endif
+           )
 #endif
         )
     {

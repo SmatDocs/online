@@ -9,6 +9,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Unit test for inactive session timeout functionality.
+ */
+
 #include <config.h>
 
 #include <memory>
@@ -22,11 +26,11 @@
 
 #include <Unit.hpp>
 #include <UserMessages.hpp>
-#include <Util.hpp>
+#include <common/Util.hpp>
 #include <helpers.hpp>
 #include <thread>
 
-#include "UnitTimeoutBase.hpp"
+#include <UnitTimeoutBase.hpp>
 
 using namespace std::literals;
 

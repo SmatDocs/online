@@ -9,9 +9,23 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Implementation of admin data model and document statistics.
+ * Classes: Document, Subscriber, AdminModel
+ */
+
 #include <config.h>
 
 #include "AdminModel.hpp"
+
+#include <common/ConfigUtil.hpp>
+#include <common/Log.hpp>
+#include <common/Protocol.hpp>
+#include <common/Unit.hpp>
+#include <common/Util.hpp>
+#include <net/WebSocketHandler.hpp>
+#include <wsd/COOLWSD.hpp>
+#include <wsd/Exceptions.hpp>
 
 #include <chrono>
 #include <cmath>
@@ -22,15 +36,6 @@
 #include <set>
 #include <sstream>
 #include <string>
-
-#include <Log.hpp>
-#include <Protocol.hpp>
-#include <Unit.hpp>
-#include <Util.hpp>
-#include <common/ConfigUtil.hpp>
-#include <net/WebSocketHandler.hpp>
-#include <wsd/COOLWSD.hpp>
-#include <wsd/Exceptions.hpp>
 
 #include <fnmatch.h>
 #include <dirent.h>

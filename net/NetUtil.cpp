@@ -9,17 +9,22 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Implementation of network utilities: host resolution, connection, SSL setup.
+ * Classes: net::HostEntry
+ * Functions: connect(), resolve(), localhostIPv4/IPv6()
+ */
+
 #include <config.h>
 
-#include "NetUtil.hpp"
-#include "AsyncDNS.hpp"
-#include <common/Util.hpp>
 #include <common/Unit.hpp>
+#include <common/Util.hpp>
+#include <net/AsyncDNS.hpp>
+#include <net/NetUtil.hpp>
+#include <net/Socket.hpp>
 #include <net/Uri.hpp>
-
-#include "Socket.hpp"
 #if ENABLE_SSL && !MOBILEAPP
-#include "SslSocket.hpp"
+#include <net/SslSocket.hpp>
 #endif
 
 #include <Poco/Exception.h>

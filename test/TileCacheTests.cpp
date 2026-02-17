@@ -9,12 +9,25 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Unit test for tile caching functionality.
+ */
+
 #include <config.h>
 
-#include "WebSocketSession.hpp"
+#include <common/Common.hpp>
+#include <common/HexUtil.hpp>
+#include <common/Png.hpp>
+#include <common/Protocol.hpp>
+#include <common/Unit.hpp>
+#include <common/Util.hpp>
+#include <kit/Delta.hpp>
+#include <wsd/TileCache.hpp>
 
-#include <sstream>
-#include <random>
+#include <test/KitPidHelpers.hpp>
+#include <test/WebSocketSession.hpp>
+#include <test/helpers.hpp>
+#include <test/test.hpp>
 
 #include <Poco/Net/AcceptCertificateHandler.h>
 #include <Poco/Net/InvalidCertificateHandler.h>
@@ -22,18 +35,8 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
-#include <Common.hpp>
-#include <Protocol.hpp>
-#include <Png.hpp>
-#include <TileCache.hpp>
-#include <kit/Delta.hpp>
-#include <Unit.hpp>
-#include <common/HexUtil.hpp>
-#include <common/Util.hpp>
-
-#include <helpers.hpp>
-#include <test.hpp>
-#include <KitPidHelpers.hpp>
+#include <sstream>
+#include <random>
 
 using namespace std::literals;
 using namespace helpers;

@@ -9,15 +9,20 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Common helper functions and utilities for testing. Independent implementations to avoid
+ * reusing code under test.
+ */
+
 #pragma once
 
-#include <Common.hpp>
-#include <JsonUtil.hpp>
-#include <Socket.hpp>
-#include <WebSocketSession.hpp>
+#include <common/Common.hpp>
 #include <common/ConfigUtil.hpp>
+#include <common/JsonUtil.hpp>
 #include <common/Unit.hpp>
 #include <common/Util.hpp>
+#include <net/Socket.hpp>
+#include <test/WebSocketSession.hpp>
 #include <test/lokassert.hpp>
 #include <test/testlog.hpp>
 #include <tools/COOLWebSocket.hpp>

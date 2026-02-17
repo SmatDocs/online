@@ -9,9 +9,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/*
+ * Administrative interface for monitoring and managing server.
+ * Classes: AdminSocketHandler, MonitorSocketHandler, Admin
+ */
+
 #pragma once
 
-#include "AdminModel.hpp"
+#include <AdminModel.hpp>
 
 #include <net/WebSocketHandler.hpp>
 #include <common/ConfigUtil.hpp>

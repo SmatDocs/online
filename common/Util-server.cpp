@@ -8,11 +8,17 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
+
+/*
+ * Server-side utility implementations.
+ * Functions: spawnProcess(), getMemoryUsage(), DirectoryCounter
+ */
+
 #include <config.h>
 
-#include "Log.hpp"
-#include "StringVector.hpp"
-#include "Util.hpp"
+#include <common/Log.hpp>
+#include <common/StringVector.hpp>
+#include <common/Util.hpp>
 
 #include <Poco/Exception.h>
 
@@ -487,7 +493,7 @@ std::size_t getStatFromPid(const pid_t pid, int ind)
                     if (index == ind)
                     {
                         fclose(fp);
-                        return strtol(&s[pos], nullptr, 10);
+                        return Util::u64FromString(&s[pos], 0).first;
                     }
                     ++index;
                     pos = s.find(' ', pos + 1);
