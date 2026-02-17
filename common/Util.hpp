@@ -11,33 +11,34 @@
 
 #pragma once
 
-#include <cassert>
-#include <cerrno>
-#include <chrono>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <algorithm>
-#include <iomanip>
-#include <limits>
-#include <mutex>
-#include <sstream>
-#include <string>
-#include <map>
-#include <string_view>
-#include <utility>
-#include <cctype>
-#include <memory.h>
-#include <thread>
+#include <Poco/Net/HTTPRequest.h>
+#define LOK_USE_UNSTABLE_API
+#include <LibreOfficeKit/LibreOfficeKitEnums.h>
+
+#include <common/StringVector.hpp>
 
 #include <Poco/File.h>
 #include <Poco/Path.h>
 #include <regex>
 
-#define LOK_USE_UNSTABLE_API
-#include <LibreOfficeKit/LibreOfficeKitEnums.h>
-
-#include <common/StringVector.hpp>
+#include <algorithm>
+#include <cassert>
+#include <cctype>
+#include <cerrno>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <iomanip>
+#include <limits>
+#include <map>
+#include <memory.h>
+#include <mutex>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <utility>
 
 #define STRINGIFY(X) #X
 
@@ -1235,6 +1236,7 @@ int main(int argc, char**argv)
 
     /// Convert a string to 32-bit signed int.
     /// Returns the parsed value and a boolean indicating success or failure.
+    /// const auto [number, success] = Util::i32FromString(portString);
     inline std::pair<std::int32_t, bool> i32FromString(const std::string_view input)
     {
         const char* str = input.data();
@@ -1458,6 +1460,15 @@ inline std::ostream& operator<<(std::ostream& os, const std::chrono::system_cloc
 }
 
 inline std::ostream& operator<<(std::ostream& os, const Util::Backtrace& bt) { return bt.send(os); }
+
+inline std::ostream& operator<<(std::ostream& os, const Poco::Net::HTTPRequest& request)
+{
+    os << request.getMethod() << ' ' << request.getVersion() << ' ' << request.getURI()
+       << ", content-length: " << request.getContentLength64()
+       << ", chunked: " << request.getChunkedTransferEncoding() << ", ";
+    Util::joinPair(os, request, " / ");
+    return os;
+}
 
 // std::to_underlying will be available in C++23
 template <typename Enum> constexpr std::underlying_type_t<Enum> to_underlying(Enum e)
