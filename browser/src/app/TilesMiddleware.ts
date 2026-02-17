@@ -1275,11 +1275,7 @@ class TileManager {
 			);
 
 			// When Writer requests mode=2, also request mode=1.
-			if (
-				app.map._docLayer.isWriter() &&
-				mode === 2 &&
-				!interactionSensitive
-			) {
+			if (app.map._docLayer.isWriter() && mode === 2 && !interactionSensitive) {
 				this.sendTileCombineMessage(
 					part,
 					/*mode=*/ 1,
