@@ -225,7 +225,7 @@ class TileManager {
 	private static _docLayer: any;
 	private static _zoom: number;
 	private static _preFetchPart: number;
-	private static _preFetchMode: number;
+	private static _preFetchMode: number[] = [];
 	private static _hasEditPerm: boolean;
 	private static _pixelBounds: any;
 	private static _splitPos: any;
@@ -689,9 +689,13 @@ class TileManager {
 			updated = true;
 		}
 
-		const mode = this._docLayer._selectedMode;
-		if (this._preFetchMode !== mode) {
-			this._preFetchMode = mode;
+		if (
+			app.activeDocument &&
+			!app.activeDocument.activeModes.every((item) => {
+				return this._preFetchMode.includes(item);
+			})
+		) {
+			this._preFetchMode = app.activeDocument.activeModes;
 			updated = true;
 		}
 
@@ -763,32 +767,34 @@ class TileManager {
 		}
 	}
 
-	private static preFetchPartTiles(part: number, mode: number): void {
+	private static preFetchPartTiles(part: number, modes: number[]): void {
 		this.updateProperties();
-
 		const tileRange = this.pxBoundsToTileRange(this._pixelBounds);
-		const tileCombineQueue = [];
 
-		for (let j = tileRange.min.y; j <= tileRange.max.y; j++) {
-			for (let i = tileRange.min.x; i <= tileRange.max.x; i++) {
-				const coords = new TileCoordData(
-					i * this.tileSize,
-					j * this.tileSize,
-					this._zoom,
-					part,
-					mode,
-				);
+		for (let k = 0; k < modes.length; k++) {
+			const tileCombineQueue = [];
 
-				if (!this.isValidTile(coords)) continue;
+			for (let j = tileRange.min.y; j <= tileRange.max.y; j++) {
+				for (let i = tileRange.min.x; i <= tileRange.max.x; i++) {
+					const coords = new TileCoordData(
+						i * this.tileSize,
+						j * this.tileSize,
+						this._zoom,
+						part,
+						modes[k],
+					);
 
-				const key = coords.key();
-				if (!this.tileNeedsFetch(key)) continue;
+					if (!this.isValidTile(coords)) continue;
 
-				tileCombineQueue.push(coords);
+					const key = coords.key();
+					if (!this.tileNeedsFetch(key)) continue;
+
+					tileCombineQueue.push(coords);
+				}
 			}
-		}
 
-		this.sendTileCombineRequest(tileCombineQueue);
+			this.sendTileCombineRequest(tileCombineQueue);
+		}
 	}
 
 	private static queueAcknowledgement(tileMsgObj: any) {
@@ -1100,7 +1106,7 @@ class TileManager {
 		if (this._partTilePreFetcher) clearTimeout(this._partTilePreFetcher);
 
 		this._partTilePreFetcher = setTimeout(() => {
-			this.preFetchPartTiles(targetPart, this._docLayer._selectedMode);
+			this.preFetchPartTiles(targetPart, app.activeDocument.activeModes);
 		}, 100);
 	}
 
@@ -1293,24 +1299,11 @@ class TileManager {
 		return boundList.map((x: any) => this.pxBoundsToTileRange(x));
 	}
 
-	private static getModeArray() {
-		let modes = [app.map._docLayer._selectedMode];
-		if (
-			app.activeDocument &&
-			app.activeDocument.activeLayout.type === 'ViewLayoutCompareChanges'
-		) {
-			// 2 modes are active at the same time in compare changes view mode.
-			modes = [TileMode.LeftSide, TileMode.RightSide];
-		}
-		return modes;
-	}
-
 	private static updateTileDistance(tile: Tile, zoom: number) {
-		const modes = this.getModeArray();
 		if (
 			tile.coords.z !== zoom ||
 			tile.coords.part !== app.map._docLayer._selectedPart ||
-			!modes.includes(tile.coords.mode)
+			!app.activeDocument.isModeActive(tile.coords.mode)
 		)
 			tile.distanceFromView = Number.MAX_SAFE_INTEGER;
 		else {
@@ -1402,7 +1395,7 @@ class TileManager {
 						j * this.tileSize,
 						zoom,
 						app.map._docLayer._selectedPart,
-						app.map._docLayer._selectedMode,
+						app.activeDocument.activeModes[0],
 					);
 
 					if (!this.isValidTile(coords)) continue;
@@ -1424,12 +1417,11 @@ class TileManager {
 		coordsQueue: Array<TileCoordData>,
 	) {
 		const part: number = app.map._docLayer._selectedPart;
-		const modes = this.getModeArray();
 
 		for (let i = coordsQueue.length - 1; i > 0; i--) {
 			if (
 				coordsQueue[i].part !== part ||
-				!modes.includes(coordsQueue[i].mode) ||
+				!app.activeDocument.isModeActive(coordsQueue[i].mode) ||
 				!this.tileNeedsFetch(coordsQueue[i].key())
 			) {
 				coordsQueue.splice(i, 1);
@@ -1603,7 +1595,7 @@ class TileManager {
 				textMsg,
 			);
 
-			if (needsNewTiles && mode === app.map._docLayer._selectedMode)
+			if (needsNewTiles && app.activeDocument.isModeActive(mode))
 				app.map._docLayer._debug.addTileInvalidationMessage(textMsg);
 		}
 	}
@@ -1618,7 +1610,7 @@ class TileManager {
 		var interval = 250;
 		var idleTime = 750;
 		this._preFetchPart = this._docLayer._selectedPart;
-		this._preFetchMode = this._docLayer._selectedMode;
+		this._preFetchMode = app.activeDocument.activeModes;
 		this._preFetchIdle = setTimeout(
 			window.L.bind(function () {
 				this._tilesPreFetcher = setInterval(
@@ -1717,60 +1709,68 @@ class TileManager {
 				if (fetchBottomBorder) {
 					for (var i = clampedBorder.min.x; i <= clampedBorder.max.x; i++) {
 						// tiles below the visible area
-						queue.push(
-							new TileCoordData(
-								i * tileSize,
-								borderBounds.max.y * tileSize,
-								this._zoom,
-								this._preFetchPart,
-								this._preFetchMode,
-							),
-						);
+						for (let j = 0; j < this._preFetchMode.length; j++) {
+							queue.push(
+								new TileCoordData(
+									i * tileSize,
+									borderBounds.max.y * tileSize,
+									this._zoom,
+									this._preFetchPart,
+									this._preFetchMode[j],
+								),
+							);
+						}
 					}
 				}
 
 				if (fetchTopBorder) {
 					for (i = clampedBorder.min.x; i <= clampedBorder.max.x; i++) {
 						// tiles above the visible area
-						queue.push(
-							new TileCoordData(
-								i * tileSize,
-								borderBounds.min.y * tileSize,
-								this._zoom,
-								this._preFetchPart,
-								this._preFetchMode,
-							),
-						);
+						for (let j = 0; j < this._preFetchMode.length; j++) {
+							queue.push(
+								new TileCoordData(
+									i * tileSize,
+									borderBounds.min.y * tileSize,
+									this._zoom,
+									this._preFetchPart,
+									this._preFetchMode[j],
+								),
+							);
+						}
 					}
 				}
 
 				if (fetchRightBorder) {
 					for (i = clampedBorder.min.y; i <= clampedBorder.max.y; i++) {
 						// tiles to the right of the visible area
-						queue.push(
-							new TileCoordData(
-								borderBounds.max.x * tileSize,
-								i * tileSize,
-								this._zoom,
-								this._preFetchPart,
-								this._preFetchMode,
-							),
-						);
+						for (let j = 0; j < this._preFetchMode.length; j++) {
+							queue.push(
+								new TileCoordData(
+									borderBounds.max.x * tileSize,
+									i * tileSize,
+									this._zoom,
+									this._preFetchPart,
+									this._preFetchMode[j],
+								),
+							);
+						}
 					}
 				}
 
 				if (fetchLeftBorder) {
 					for (i = clampedBorder.min.y; i <= clampedBorder.max.y; i++) {
 						// tiles to the left of the visible area
-						queue.push(
-							new TileCoordData(
-								borderBounds.min.x * tileSize,
-								i * tileSize,
-								this._zoom,
-								this._preFetchPart,
-								this._preFetchMode,
-							),
-						);
+						for (let j = 0; j < this._preFetchMode.length; j++) {
+							queue.push(
+								new TileCoordData(
+									borderBounds.min.x * tileSize,
+									i * tileSize,
+									this._zoom,
+									this._preFetchPart,
+									this._preFetchMode[j],
+								),
+							);
+						}
 					}
 				}
 

@@ -23,6 +23,12 @@ if ENABLE_SSL
 include_paths += ${OPENSSL_CFLAGS}
 endif
 
+if ENABLE_MACOS
+util_platform_cpp = ../common/Util-macos.cpp
+else
+util_platform_cpp = ../common/Util-linux.cpp
+endif
+
 AM_CXXFLAGS = $(CPPUNIT_CFLAGS) -DTDOC=\"$(abs_top_srcdir)/test/data\" -DTDIST=\"$(DIST_FOLDER)\" \
 	-I${top_srcdir}/common -I${top_srcdir}/net -I${top_srcdir}/wsd -I${top_srcdir}/kit \
 	-I${top_srcdir} -I${top_srcdir}/test \
@@ -146,28 +152,30 @@ wsd_sources = \
 	../wsd/TileCache.cpp
 
 test_base_sources = \
-	KitQueueTests.cpp \
-	RequestDetailsTests.cpp \
-	StringVectorTests.cpp \
+	DeltaTests.cpp \
 	FileServeWhiteBoxTests.cpp \
+	HostUtilTests.cpp \
+	HttpWhiteBoxTests.cpp \
+	KitQueueTests.cpp \
 	LoggingWhiteBoxTests.cpp \
 	NetUtilWhiteBoxTests.cpp \
-	WhiteBoxTests.cpp \
-	HttpWhiteBoxTests.cpp \
-	DeltaTests.cpp \
-	UtilTests.cpp \
-	WopiProofTests.cpp \
-	UriTests.cpp \
+	RequestDetailsTests.cpp \
+	StringVectorTests.cpp \
 	TestGlobals.cpp \
-	HostUtilTests.cpp \
+	UriTests.cpp \
+	UtilTests.cpp \
+	WhiteBoxTests.cpp \
+	WopiProofTests.cpp \
 	$(wsd_sources)
 
 common_sources = \
+	$(util_platform_cpp) \
 	../common/Authorization.cpp \
+	../common/CommandControl.cpp \
 	../common/ConfigUtil.cpp \
 	../common/DummyTraceEventEmitter.cpp \
-	../common/FileUtil.cpp \
 	../common/FileUtil-unix.cpp \
+	../common/FileUtil.cpp \
 	../common/Log.cpp \
 	../common/Protocol.cpp \
 	../common/RegexUtil.cpp \
@@ -176,21 +184,21 @@ common_sources = \
 	../common/Simd.cpp \
 	../common/SpookyV2.cpp \
 	../common/StringVector.cpp \
+	../common/Syscall.cpp \
 	../common/TraceEvent.cpp \
-	../common/Unit.cpp \
 	../common/Unit-server.cpp \
+	../common/Unit.cpp \
 	../common/Uri.cpp \
 	../common/Util-server.cpp \
 	../common/Util-unix.cpp \
 	../common/Util.cpp \
 	../kit/KitQueue.cpp \
 	../kit/LogUI.cpp \
-	../wsd/Exceptions.cpp \
 	../net/HttpRequest.cpp \
-	../net/Socket.cpp \
 	../net/NetUtil.cpp \
+	../net/Socket.cpp \
 	../wsd/Auth.cpp \
-	../common/CommandControl.cpp \
+	../wsd/Exceptions.cpp \
 	../wsd/HostUtil.cpp
 
 globals_sources = ../common/Globals.cpp
@@ -201,8 +209,8 @@ unithttplib_LDADD = $(CPPUNIT_LIBS)
 
 unittest_CPPFLAGS = -I$(top_srcdir) -DBUILDING_TESTS -DSTANDALONE_CPPUNIT -g
 unittest_SOURCES = \
-	$(test_base_sources) \
 	$(common_sources) \
+	$(test_base_sources) \
 	../common/Globals.cpp \
 	../wsd/TestStubs.cpp \
 	test.cpp
@@ -217,7 +225,7 @@ unithttplib_LDADD += -lssl -lcrypto
 endif
 
 fakesockettest_CPPFLAGS = -g
-fakesockettest_SOURCES = fakesockettest.cpp  ../net/FakeSocket.cpp ../common/DummyTraceEventEmitter.cpp ../common/Log.cpp ../common/Util.cpp ../common/Util-server.cpp ../common/Util-unix.cpp ../common/Globals.cpp
+fakesockettest_SOURCES = fakesockettest.cpp  ../net/FakeSocket.cpp ../common/DummyTraceEventEmitter.cpp ../common/Log.cpp ../common/Util.cpp ../common/Util-server.cpp $(util_platform_cpp) ../common/Util-unix.cpp ../common/Globals.cpp
 fakesockettest_LDADD = $(CPPUNIT_LIBS)
 
 # old-style unit tests - bootstrapped via UnitClient

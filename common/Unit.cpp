@@ -30,7 +30,9 @@
 #include <csignal>
 #include <iostream>
 #include <mutex>
+#ifndef _WIN32
 #include <sysexits.h>
+#endif
 #include <thread>
 
 UnitBase** UnitBase::GlobalArray = nullptr;

@@ -1803,9 +1803,9 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 				button.tabIndex = -1; // prevent button from taking focus since container div itself is focusable element
 			button.id = buttonId;
 
-			itemsToSyncWithContainer.push(button);
+			JSDialog.SetupA11yLabelForNonLabelableElement(button, data, builder);
 
-			JSDialog.AddAriaLabel(button, data, builder);
+			itemsToSyncWithContainer.push(button);
 
 			if (!data.accessKey)
 				builder._setAccessKey(button, builder._getAccessKeyFromText(data.text));
@@ -1860,7 +1860,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			}
 
 			// for Accessibility : graphic elements are located within buttons, the img should receive an empty alt
-			if(button.getAttribute('aria-label')){ // if we already set the aria-label then do not go for image alt attr
+			if (button.getAttribute('aria-label') || button.getAttribute('aria-labelledby')){ // if we already set the aria-label or aria-labelledby then do not go for image alt attr
 				buttonImage.alt = '';
 			}
 			else if (buttonImage !== false) {
@@ -2029,7 +2029,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		$(controls.label).on('click', clickFunction);
 		// We need a way to also handle the custom tooltip for any tool button like save in shortcut bar
 		if (data.isCustomTooltip) {
-			this._handleCutomTooltip(div, builder);
+			this._handleCustomTooltip(div, builder);
 		}
 		else if (!hasLabel || hasShortcut) {
 			$(div).on('mouseenter', mouseEnterFunction);
@@ -2055,8 +2055,10 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		return controls;
 	},
 
-	_handleCutomTooltip: function(elem, builder) {
-		switch (elem.id) {
+	_handleCustomTooltip: function(elem, builder) {
+		// Prefer modelid, fallback to id if modelid is missing
+		const lookupId = elem.getAttribute('modelid') || elem.id;
+		switch (lookupId) {
 			case 'save':
 				$(elem).on('mouseenter', window.touch.mouseOnly(function() {
 					if (builder.map.tooltip)

@@ -23,7 +23,12 @@ function enableUICoverage(win) {
  * @param {boolean} hasLinguisticData - Whether linguistic data (thesaurus, etc.) is available
  */
 function reportUICoverage(win, hasLinguisticData = true) {
-	cy.spy(win.app.socket, '_onMessage').as('onMessage').log(false);
+	if (win.app.socket._onMessage.restore) {
+		// if _onMessage is already wrapped by Sinon, do not create a new spy
+		cy.wrap(win.app.socket._onMessage).as('onMessage');
+	} else {
+		cy.spy(win.app.socket, '_onMessage').as('onMessage').log(false);
+	}
 
 	cy.then(() => {
 		const endUICoverage = {
@@ -449,10 +454,6 @@ const needLinguisticDataDialogs = [
 	'.uno:ThesaurusDialog',
 ];
 
-const buggyCommonDialogs = [
-	'.uno:ThesaurusDialog',
-];
-
 /**
  * Generate test cases for all common dialogs.
  * @param {Object} options - Configuration options
@@ -467,15 +468,6 @@ const buggyCommonDialogs = [
  */
 function needsLinguisticData(command) {
 	return needLinguisticDataDialogs.includes(command);
-}
-
-/**
- * Check if a dialog command is known to be buggy.
- * @param {string} command - The uno command
- * @returns {boolean} - Whether the dialog is buggy
- */
-function isBuggyCommonDialog(command) {
-	return buggyCommonDialogs.includes(command);
 }
 
 /**
@@ -521,5 +513,4 @@ module.exports.handleDialog = handleDialog;
 module.exports.testDialog = testDialog;
 module.exports.allCommonDialogs = allCommonDialogs;
 module.exports.needsLinguisticData = needsLinguisticData;
-module.exports.isBuggyCommonDialog = isBuggyCommonDialog;
 module.exports.testPDFExportWarningDialog = testPDFExportWarningDialog;

@@ -75,10 +75,6 @@ ALLOWED_PORTS = $(if $(findstring php-proxy, $(CYPRESS_INTEGRATION)),$(PHP_PROXY
 KILL_COMMAND=$(if $(coolwsd),true,pkill -F $(PID_FILE) || pkill --signal SIGKILL -F $(PID_FILE))
 LOAD_PID_FILE=$(abs_builddir)/workdir/load.pids
 PARALLEL_BUILD = $(findstring -j,$(MAKEFLAGS))
-DISPLAY_NUMBER = 100
-HEADLESS_BUILD := $(findstring Command failed,$(shell xhost > /dev/null 2>&1 || echo "Command failed, so we are in a headless environment."))
-export HEADLESS_DISPLAY=$(shell who | grep `whoami` | grep -v ": " | xargs | cut -d " " -f2)
-export DISPLAY=$(if $(HEADLESS_BUILD),:$(DISPLAY_NUMBER),$(shell echo $$DISPLAY))
 
 COMMA :=,
 EMPTY :=
@@ -125,13 +121,11 @@ check-local: do-check
 # TODO: enable multiuser tests $(MULTIUSER_TESTS_DONE)
 do-check: $(DESKTOP_TEST_FILES_DONE) $(MOBILE_TEST_FILES_DONE) $(IDLE_TEST_FILES_DONE)
 	$(V)$(KILL_COMMAND) || true
-	$(if $(HEADLESS_BUILD),$(V)pkill Xvfb,)
 	$(if $(wildcard $(ERROR_LOG)),$(V)cat $(ERROR_LOG))
 
 $(PID_FILE): @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
 	$(call cleanup_before_run)
 	$(call run_JS_error_check)
-	$(if $(HEADLESS_BUILD),$(call start_Xvfb),)
 	$(call start_coolwsd)
 
 setup_short_idle:
@@ -142,10 +136,8 @@ setup_regular_idle:
 
 start_short_idle_coolwsd: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS) setup_short_idle
 	$(V)$(KILL_COMMAND) || true
-	$(if $(HEADLESS_BUILD),$(V)pkill Xvfb,)
 	$(call cleanup_before_run)
 	$(call run_JS_error_check)
-	$(if $(HEADLESS_BUILD),$(call start_Xvfb),)
 	$(call start_coolwsd)
 
 $(MOBILE_TEST_FILES_DONE): $(PID_FILE) $(DESKTOP_TEST_FILES_DONE)
@@ -240,14 +232,6 @@ define start_coolwsd_instance
 	$(V)echo
 endef
 
-#https://docs.cypress.io/guides/guides/continuous-integration.html#Xvfb
-define start_Xvfb
-	$(V)echo "Launching Xvfb..."
-	Xvfb :$(DISPLAY_NUMBER) -screen 0 1280x800x24 &
-	while [ ! -f /tmp/.X$(DISPLAY_NUMBER)-lock ] ; do sleep 1; done
-	$(V)echo
-endef
-
 define cleanup_before_run
 	$(V)rm -f $(ERROR_LOG)
 	$(V)rm -f $(PID_FILE)
@@ -265,7 +249,11 @@ NODE_BINS = \
 
 $(NODE_BINS): $(NPM_INSTALLED);
 
-$(NPM_INSTALLED): package.json eslint_plugin/index.js eslint_plugin/package.json
+$(NPM_INSTALLED): package.json eslint_plugin/index.js eslint_plugin/package.json $(wildcard patches/*.patch)
+#	patch-package cannot apply updated patches over already-patched files
+#	remove patched packages so npm install restores clean originals first.
+#	https://github.com/ds300/patch-package/issues/227
+	$(V)rm -rf node_modules/cypress node_modules/cypress-log-to-output
 	$(V)UV_USE_IO_URING=0 npm install --no-audit
 	$(V)echo node_modules:
 	$(V)ls node_modules
@@ -288,10 +276,8 @@ clean-local:
 check-mobile: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
 	$(call cleanup_before_run)
 	$(call run_JS_error_check)
-	$(if $(HEADLESS_BUILD),$(call start_Xvfb),)
 	$(call start_coolwsd)
 	$(call run_mobile_tests,$(spec))
-	$(if $(HEADLESS_BUILD),$(V)pkill Xvfb,)
 	$(V)$(KILL_COMMAND) || true
 
 run-mobile: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
@@ -349,10 +335,8 @@ endef
 check-lighthouse: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
 	$(call cleanup_before_run)
 	$(call run_JS_error_check)
-	$(if $(HEADLESS_BUILD),$(call start_Xvfb),)
 	$(call start_coolwsd)
 	$(call run_lighthouse_tests,$(spec))
-	$(if $(HEADLESS_BUILD),$(V)pkill Xvfb,)
 	$(V)$(KILL_COMMAND) || true
 
 LIGHTHOUSE_CONFIG = \
@@ -394,10 +378,8 @@ endef
 check-desktop: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
 	$(call cleanup_before_run)
 	$(call run_JS_error_check)
-	$(if $(HEADLESS_BUILD),$(call start_Xvfb),)
 	$(call start_coolwsd)
 	$(call run_desktop_tests,$(spec))
-	$(if $(HEADLESS_BUILD),$(V)pkill Xvfb,)
 	$(V)$(KILL_COMMAND) || true
 
 run-desktop: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
@@ -465,7 +447,6 @@ endef
 
 check-idle: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS) start_short_idle_coolwsd $(PID_FILE)
 	$(call run_idle_tests,$(spec))
-	$(if $(HEADLESS_BUILD),$(V)pkill Xvfb,)
 	$(V)$(KILL_COMMAND) || true
 
 run-idle: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS) start_short_idle_coolwsd $(PID_FILE)
@@ -530,12 +511,10 @@ endef
 check-multi: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
 	$(call cleanup_before_run)
 	$(call run_JS_error_check)
-	$(if $(HEADLESS_BUILD),$(call start_Xvfb),)
 	$(call start_coolwsd)
 	$(if $(spec), \
 		$(call run_multiuser_test,$(spec)), \
 		$(call run_all_multiuser_tests))
-	$(if $(HEADLESS_BUILD),$(V)pkill Xvfb,)
 	$(V)$(KILL_COMMAND) || true
 
 run-multi: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
@@ -800,7 +779,6 @@ do-run-cov: @JAILS_PATH@ @CACHE_PATH@ $(NODE_BINS)
 # 3 - env:    list of environment variables (e.g. cypress' --env argument).
 define run_interactive_all
 	DEBUG='cypress:*' \
-	DISPLAY=$(if $(HEADLESS_BUILD),$(HEADLESS_DISPLAY),$(DISPLAY)) \
 		$(CYPRESS_BINARY) open \
 		--config-file $(CYPRESS_CONFIG) \
 		--config $(1) \
@@ -816,7 +794,6 @@ endef
 # 4 - spec:   test file path (e.g. cypress' --spec argument)
 define run_interactive_single
 	DEBUG='cypress:*' \
-	DISPLAY=$(if $(HEADLESS_BUILD),$(HEADLESS_DISPLAY),$(DISPLAY)) \
 		$(CYPRESS_BINARY) run \
 		--browser $(BROWSER) \
 		--headed --no-exit \

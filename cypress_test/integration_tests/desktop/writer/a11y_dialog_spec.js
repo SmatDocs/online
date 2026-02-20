@@ -42,11 +42,6 @@ const excludedCommonDialogs = [
     '.uno:SpellDialog'
 ];
 
-// don't pass yet
-const buggyWriterDialogs = [
-    '.uno:InsertSection',
-];
-
 describe(['tagdesktop'], 'Accessibility Writer Dialog Tests', { testIsolation: false }, function () {
     let win;
     let hasLinguisticData = false;
@@ -197,8 +192,6 @@ describe(['tagdesktop'], 'Accessibility Writer Dialog Tests', { testIsolation: f
         if (excludedCommonDialogs.includes(command)) {
             // silently skip the common dialogs that writer doesn't have
             return;
-        } else if (a11yHelper.isBuggyCommonDialog(command)) {
-            it.skip(`Common Dialog ${command} (buggy)`, function () {});
         } else {
             it(`Common Dialog ${command}`, function () {
                 if (!hasLinguisticData && a11yHelper.needsLinguisticData(command)) {
@@ -261,13 +254,9 @@ describe(['tagdesktop'], 'Accessibility Writer Dialog Tests', { testIsolation: f
 
     allWriterDialogs.forEach(function (commandSpec) {
         const command = typeof commandSpec === 'string' ? commandSpec : commandSpec.command;
-        if (buggyWriterDialogs.includes(command)) {
-            it.skip(`Dialog ${command} (buggy)`, function () {});
-        } else {
-            it(`Writer Dialog ${command}`, function () {
-                a11yHelper.testDialog(win, commandSpec);
-            });
-        }
+        it(`Writer Dialog ${command}`, function () {
+            a11yHelper.testDialog(win, commandSpec);
+        });
     });
 
     it('DropdownField dialog', function () {
