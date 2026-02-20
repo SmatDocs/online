@@ -18,7 +18,9 @@
 #include <config.h>
 
 #include <fcntl.h>
+#ifndef _WIN32
 #include <poll.h>
+#endif
 
 #include <cassert>
 #include <cerrno>
@@ -111,6 +113,7 @@ static std::string flush()
 #define FAKESOCKET_LOG(arg) do { if (fakeSocketLogLevel > 0) { loggingBuffer << arg; } } while (false)
 #endif
 
+EXPORT
 void fakeSocketSetLoggingCallback(void (*callback)(const std::string&))
 {
     loggingCallback = callback;
@@ -144,6 +147,7 @@ static FakeSocketPair& fakeSocketAllocate()
     return *(fds[i]);
 }
 
+EXPORT
 int fakeSocketSocket()
 {
     const int result = fakeSocketAllocate().fd[0];
@@ -153,6 +157,7 @@ int fakeSocketSocket()
     return result;
 }
 
+EXPORT
 int fakeSocketPipe2(int pipefd[2])
 {
     FakeSocketPair& pair = fakeSocketAllocate();
@@ -342,6 +347,7 @@ static bool fakeSocketHasAnyPendingActivityGlobal()
 /**
  * Wait for any event on any of the fake sockets (theCV is notified on write/close/connect/etc.)
  */
+EXPORT
 void fakeSocketWaitAny(int timeoutUs)
 {
     if (timeoutUs == 0)
@@ -367,6 +373,7 @@ void fakeSocketWaitAny(int timeoutUs)
     theCV.wait_until(lock, deadline, [](){ return fakeSocketHasAnyPendingActivityGlobal(); });
 }
 
+EXPORT
 int fakeSocketPoll(struct pollfd *pollfds, int nfds, int timeout)
 {
     FAKESOCKET_LOG("FakeSocket Poll ");
@@ -421,6 +428,7 @@ int fakeSocketPoll(struct pollfd *pollfds, int nfds, int timeout)
     return result;
 }
 
+EXPORT
 int fakeSocketListen(int fd)
 {
     std::unique_lock<std::mutex> lock(theMutex);
@@ -455,6 +463,7 @@ int fakeSocketListen(int fd)
     return 0;
 }
 
+EXPORT
 int fakeSocketConnect(int fd1, int fd2)
 {
     std::unique_lock<std::mutex> lock(theMutex);
@@ -501,6 +510,7 @@ int fakeSocketConnect(int fd1, int fd2)
     return 0;
 }
 
+EXPORT
 int fakeSocketAccept4(int fd)
 {
     std::unique_lock<std::mutex> lock(theMutex);
@@ -553,6 +563,7 @@ int fakeSocketAccept4(int fd)
     return pair2.fd[1];
 }
 
+EXPORT
 int fakeSocketPeer(int fd)
 {
     std::unique_lock<std::mutex> lock(theMutex);
@@ -573,6 +584,7 @@ int fakeSocketPeer(int fd)
     return pair.fd[N];
 }
 
+EXPORT
 ssize_t fakeSocketAvailableDataLength(int fd)
 {
     std::unique_lock<std::mutex> lock(theMutex);
@@ -603,6 +615,7 @@ ssize_t fakeSocketAvailableDataLength(int fd)
     return result;
 }
 
+EXPORT
 ssize_t fakeSocketRead(int fd, void *buf, size_t nbytes)
 {
     std::unique_lock<std::mutex> lock(theMutex);
@@ -668,6 +681,7 @@ ssize_t fakeSocketRead(int fd, void *buf, size_t nbytes)
     return result;
 }
 
+EXPORT
 ssize_t fakeSocketWrite(int fd, const void *buf, size_t nbytes)
 {
     std::unique_lock<std::mutex> lock(theMutex);
@@ -710,6 +724,7 @@ ssize_t fakeSocketWrite(int fd, const void *buf, size_t nbytes)
     return nbytes;
 }
 
+EXPORT
 int fakeSocketShutdown(int fd)
 {
     std::unique_lock<std::mutex> lock(theMutex);
@@ -749,6 +764,7 @@ int fakeSocketShutdown(int fd)
     return 0;
 }
 
+EXPORT
 int fakeSocketClose(int fd)
 {
     std::unique_lock<std::mutex> lock(theMutex);
@@ -816,6 +832,7 @@ static void fakeSocketDumpStateImpl()
     }
 }
 
+EXPORT
 void fakeSocketDumpState()
 {
     std::unique_lock<std::mutex> lock(theMutex);

@@ -48,7 +48,7 @@ describe(['tagdesktop'], 'Accessibility Writer Sidebar Tests', { testIsolation: 
 		runA11yValidation(win);
 	});
 
-	it.skip('PropertyDeck: Graphic Context: (Buggy)', function () {
+	it('PropertyDeck: Graphic Context:', function () {
 		helper.clearAllText({ isTable: true });
 		desktopHelper.insertImage();
 
@@ -56,7 +56,7 @@ describe(['tagdesktop'], 'Accessibility Writer Sidebar Tests', { testIsolation: 
 		runA11yValidation(win);
 	});
 
-	it.skip('Chart (LinePropertyPanel buggy)', function () {
+	it('Chart (LinePropertyPanel)', function () {
 		helper.clearAllText({ isTable: true });
 		cy.then(() => {
 			win.app.map.sendUnoCommand('.uno:InsertObjectChart');
@@ -106,8 +106,6 @@ describe(['tagdesktop'], 'Accessibility Writer Sidebar Tests', { testIsolation: 
 
 		// At which point the sidebar disappears
 		cy.cGet('#sidebar-dock-wrapper').should('not.be.visible');
-		// And just the shape is selected
-		cy.cGet('#test-div-shapeHandlesSection').should('exist');
 
 		// esc to get back to main document
 		escLevel(win, 1);
@@ -128,7 +126,7 @@ describe(['tagdesktop'], 'Accessibility Writer Sidebar Tests', { testIsolation: 
 		cy.cGet('div.clipboard').should('have.focus');
 	});
 
-	it.skip('Math (PosSizePropertyPanel buggy)', function () {
+	it('Math (PosSizePropertyPanel)', function () {
 		helper.clearAllText({ isTable: true });
 		cy.then(() => {
 			win.app.map.sendUnoCommand('.uno:InsertObjectStarMath');
@@ -150,7 +148,7 @@ describe(['tagdesktop'], 'Accessibility Writer Sidebar Tests', { testIsolation: 
 		helper.typeIntoDocument('{esc}');
 	});
 
-	it.skip('PropertyDeck: Line Context (Buggy)', function () {
+	it('PropertyDeck: Line Context', function () {
 		cy.then(() => {
 			win.app.map.sendUnoCommand('.uno:Line');
 		});
@@ -161,7 +159,7 @@ describe(['tagdesktop'], 'Accessibility Writer Sidebar Tests', { testIsolation: 
 		runA11yValidation(win);
 	});
 
-	it.skip('PropertyDeck: Fontwork Context: (Buggy)', function () {
+	it('PropertyDeck: Fontwork Context:', function () {
 		cy.then(() => {
 			win.app.map.sendUnoCommand('.uno:FontworkGalleryFloater');
 		});

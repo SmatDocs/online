@@ -866,37 +866,40 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
 #else // !MOBILEAPP
     Poco::Net::HTTPRequest request;
 
-#ifdef IOS
     // The URL of the document is sent over the FakeSocket by the code in
     // -[DocumentViewController userContentController:didReceiveScriptMessage:] when it gets the
     // HULLO message from the JavaScript in global.js.
 
-    // The "app document id", the numeric id of the document, from the appDocIdCounter in CODocument.mm.
+    // The "app document id", the numeric id of the document, from the appDocIdCounter
+    // It's currently relevant only for iOS, macOS, and Windows, so fallback if it is not found
     char* space = strchr(socket->getInBuffer().data(), ' ');
-    assert(space != nullptr);
-
-    // The socket buffer is not nul-terminated so we can't just call strtoull() on the number at
-    // its end, it might be followed in memory by more digits. Is there really no better way to
-    // parse the number at the end of the buffer than to copy the bytes into a nul-terminated
-    // buffer?
-    const size_t appDocIdLen =
+    if (space != nullptr)
+    {
+        // The socket buffer is not nul-terminated so we can't just call strtoull() on the number at
+        // its end, it might be followed in memory by more digits. Is there really no better way to
+        // parse the number at the end of the buffer than to copy the bytes into a nul-terminated
+        // buffer?
+        const size_t appDocIdLen =
         (socket->getInBuffer().data() + socket->getInBuffer().size()) - (space + 1);
-    char* appDocIdBuffer = (char*)malloc(appDocIdLen + 1);
-    memcpy(appDocIdBuffer, space + 1, appDocIdLen);
-    appDocIdBuffer[appDocIdLen] = '\0';
-    const unsigned mobileAppDocId = Util::u64FromString(appDocIdBuffer, 0).first;
-    free(appDocIdBuffer);
+        char* appDocIdBuffer = (char*)malloc(appDocIdLen + 1);
+        memcpy(appDocIdBuffer, space + 1, appDocIdLen);
+        appDocIdBuffer[appDocIdLen] = '\0';
+        const unsigned mobileAppDocId = Util::u64FromString(appDocIdBuffer, 0).first;
+        free(appDocIdBuffer);
 
-    handleClientWsUpgrade(request,
-                          RequestDetails(std::string(socket->getInBuffer().data(),
-                                                     space - socket->getInBuffer().data())),
-                          disposition, socket, mobileAppDocId);
-#else // IOS
-    handleClientWsUpgrade(
-        request,
-        RequestDetails(std::string(socket->getInBuffer().data(), socket->getInBuffer().size())),
-        disposition, socket);
-#endif // !IOS
+        handleClientWsUpgrade(request,
+                              RequestDetails(std::string(socket->getInBuffer().data(),
+                                                         space - socket->getInBuffer().data())),
+                              disposition, socket, mobileAppDocId);
+    }
+    else
+    {
+        // no appDocId provided
+        handleClientWsUpgrade(
+            request,
+            RequestDetails(std::string(socket->getInBuffer().data(), socket->getInBuffer().size())),
+            disposition, socket);
+    }
     socket->getInBuffer().clear();
 #endif // MOBILEAPP
 }
@@ -2787,21 +2790,17 @@ std::string getCapabilitiesJson(bool convertToAvailable)
     // Set the Server ID
     capabilities->set("serverId", Util::getProcessIdentifier());
 
-    CONFIG_STATIC const bool sig = ConfigUtil::getBool("security.server_signature", false);
-    if (sig)
-    {
-        // Set the product version
-        capabilities->set("productVersion", Util::getCoolVersion());
+    // Set the product version
+    capabilities->set("productVersion", Util::getCoolVersion());
 
-        // Set the product version hash
-        capabilities->set("productVersionHash", Util::getCoolVersionHash());
+    // Set the product version hash
+    capabilities->set("productVersionHash", Util::getCoolVersionHash());
 
-        // Set the kit version
-        capabilities->set("productKitVersion", COOLWSD::LOKitVersionNumber);
+    // Set the kit version
+    capabilities->set("productKitVersion", COOLWSD::LOKitVersionNumber);
 
-        // Set the kit version hash
-        capabilities->set("productKitVersionHash", COOLWSD::LOKitVersionHash);
-    }
+    // Set the kit version hash
+    capabilities->set("productKitVersionHash", COOLWSD::LOKitVersionHash);
 
     // Set that this is a proxy.php-enabled instance
     capabilities->set("hasProxyPrefix", COOLWSD::IsProxyPrefixEnabled);

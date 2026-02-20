@@ -31,8 +31,11 @@
 #include <Poco/URI.h>
 
 #include <sys/types.h>
+
+#ifndef _WIN32
 #include <sys/wait.h>
 #include <sysexits.h>
+#endif
 
 using Poco::Exception;
 
@@ -370,6 +373,8 @@ void BgSaveParentWebSocketHandler::onDisconnect()
 
     if (!_saveCompleted)
         reportFailedSave("terminated without saving");
+
+    WebSocketHandler::onDisconnect(); // Invoke the default handler.
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

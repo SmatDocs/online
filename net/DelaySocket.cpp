@@ -16,6 +16,7 @@
 
 #include <config.h>
 
+#include <common/Syscall.hpp>
 #include <net/DelaySocket.hpp>
 
 #include <memory>
@@ -257,7 +258,7 @@ int Delay::create(int delayMs, int physicalFd)
     if (delayPoll && delayPoll->isAlive())
     {
         int pair[2];
-        int rc = socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, pair);
+        int rc = Syscall::socketpair_cloexec_nonblock(AF_UNIX, SOCK_STREAM /*| SOCK_NONBLOCK | SOCK_CLOEXEC*/, 0, pair);
         assert(rc == 0);
         (void)rc;
         int internalFd = pair[0];

@@ -47,11 +47,11 @@
 #include <thread>
 #include <unistd.h>
 
-#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+#if defined(__GLIBC__)
 #  include <execinfo.h>
 #endif
 
-#if !defined(ANDROID) && !defined(IOS) && !defined(__FreeBSD__)
+#if !defined(ANDROID) && !defined(IOS) && !defined(MACOS) && !defined(__FreeBSD__)
 #  include <sys/prctl.h>
 #endif
 #if defined(__FreeBSD__)
@@ -473,7 +473,7 @@ void resetTerminationFlags()
 
     void dumpBacktrace()
     {
-#if !defined(__ANDROID__)
+#if defined(__GLIBC__)
         signalLog("\nBacktrace ");
         signalLogNumber(static_cast<std::size_t>(getpid()));
         if (VersionInfo)
@@ -594,7 +594,7 @@ void resetTerminationFlags()
 
     void dieOnParentDeath()
     {
-#if !defined(ANDROID) && !defined(__FreeBSD__)
+#if defined(__linux__) && !defined(ANDROID)
         prctl(PR_SET_PDEATHSIG, SIGKILL);
 #endif
 #if defined(__FreeBSD__)
@@ -617,11 +617,13 @@ void resetTerminationFlags()
         }
         else if (signal == SIGUSR2)
         {
+#if defined(__GLIBC__)
             constexpr int maxSlots = 250;
             void* backtraceBuffer[maxSlots];
             const int numSlots = backtrace(backtraceBuffer, maxSlots);
             if (numSlots > 0)
                 backtrace_symbols_fd(backtraceBuffer, numSlots, SignalLogFD);
+#endif
 
             ForwardSigUsr2Flag = true;
         }
@@ -645,7 +647,7 @@ void resetTerminationFlags()
         sigaction(SIGUSR1, &action, nullptr);
         sigaction(SIGUSR2, &action, nullptr);
 
-#if !defined(__ANDROID__)
+#if defined(__GLIBC__)
         // Prime backtrace to make sure libgcc is loaded.
         constexpr int maxSlots = 1;
         void* backtraceBuffer[maxSlots + 1];

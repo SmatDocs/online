@@ -73,10 +73,7 @@ const buggyCalcDialogs = [
     '.uno:FormatCellDialog',
     '.uno:FunctionDialog',
     '.uno:InsertObjectChart',
-    '.uno:JumpToTable',
     '.uno:PageFormatDialog',
-    '.uno:Protect',
-    '.uno:StyleNewByExample',
     '.uno:Validation',
 ];
 
@@ -144,8 +141,6 @@ describe(['tagdesktop'], 'Accessibility Calc Dialog Tests', { testIsolation: fal
         if (excludedCommonDialogs.includes(command)) {
             // silently skip the common dialogs that calc doesn't have
             return;
-        } else if (a11yHelper.isBuggyCommonDialog(command)) {
-            it.skip(`Common Dialog ${command} (buggy)`, function () {});
         } else if (buggyCalcDialogs.includes(command)) {
             it.skip(`Dialog ${command} (buggy)`, function () {});
         } else {

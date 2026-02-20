@@ -183,6 +183,7 @@ COOL_CSS_LST =\
 	$(srcdir)/css/btns.css \
 	$(srcdir)/css/notebookbar.css \
 	$(srcdir)/css/jssidebar.css \
+	$(srcdir)/css/forced-colors.css \
 	$(srcdir)/css/override-smartmenus.css \
 	$(srcdir)/css/jquery-ui-lightness.css \
 	$(srcdir)/css/infobar.css \
@@ -690,7 +691,9 @@ define bundle_cool
 	$(if $(IS_SEPARATE),\
 		@touch $@,
 		$(QUIET_M4) m4 -PE -DIOSAPP=$(ENABLE_IOSAPP) \
+			-DMACOSAPP=$(ENABLE_MACOSAPP) \
 			-DGTKAPP=$(ENABLE_GTKAPP) \
+			-DWINDOWSAPP=$(ENABLE_WINDOWSAPP) \
 			-DANDROIDAPP=$(ENABLE_ANDROIDAPP) \
 			-DMOBILEAPPNAME="$(APP_NAME)" \
 			-DVERSION=$(COOL_VERSION) \
@@ -923,8 +926,10 @@ $(DIST_FOLDER)/cool.html: $(srcdir)/html/cool.html.m4 \
 	$(QUIET_M4) m4 -PE -I $(INTERMEDIATE_DIR) \
 	    -DBUNDLE=$(IS_BUNDLE) \
 		-DIOSAPP=$(ENABLE_IOSAPP) \
+		-DMACOSAPP=$(ENABLE_MACOSAPP) \
 		-DGTKAPP=$(ENABLE_GTKAPP) \
 		-DDEBUG=$(ENABLE_DEBUG) \
+		-DWINDOWSAPP=$(ENABLE_WINDOWSAPP) \
 		-DANDROIDAPP=$(ENABLE_ANDROIDAPP) \
 		-DEMSCRIPTENAPP=$(ENABLE_EMSCRIPTENAPP) \
 		-DMOBILEAPPNAME="$(APP_NAME)" \
