@@ -23,8 +23,8 @@ services:
       - apparmor:unconfined
     environment:
       - TZ=UTC
-      - LO_ROOT=${LO_ROOT:-/srv/apps/libreoffice-mini/instdir}
-      - PYUNO_SCRIPTS_DIR=${PYUNO_SCRIPTS_DIR:-/srv/apps/libreoffice-mini/instdir/share/Scripts/python}
+      - LO_ROOT=${LO_ROOT:-/srv/apps/libreoffice-mini-25/instdir}
+      - PYUNO_SCRIPTS_DIR=${PYUNO_SCRIPTS_DIR:-/srv/apps/libreoffice-mini-25/instdir/share/Scripts/python}
     working_dir: /srv/apps/online
     # Build normally, then run coolwsd with --disable-cool-user-checking for Docker
     command:

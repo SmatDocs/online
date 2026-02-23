@@ -1980,6 +1980,7 @@ class Socket {
 				return true; // caller should exit immediately.
 			}
 
+			const suppressStorageWarn = command.errorKind === 'saveunauthorized';
 			// Skip empty errors (and allow for suppressing errors by making them blank).
 			if (storageError && storageError != '') {
 				// Parse the storage url as link
@@ -1988,8 +1989,12 @@ class Socket {
 				// Insert the storage server address to be more friendly
 				storageError = storageError.replace('%storageserver', tmpLink.host);
 
-				// show message to the user in Control.AlertDialog
-				this._map.fire('warn', { msg: storageError });
+				// Suppress saveunauthorized warning modal permanently while preserving
+				// save failure callbacks for host integrations.
+				if (!suppressStorageWarn) {
+					// show message to the user in Control.AlertDialog
+					this._map.fire('warn', { msg: storageError });
+				}
 
 				// send to wopi handler so we can respond
 				const postMessageObj = {
