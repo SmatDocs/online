@@ -1980,7 +1980,9 @@ class Socket {
 				return true; // caller should exit immediately.
 			}
 
-			const suppressStorageWarn = command.errorKind === 'saveunauthorized';
+			const suppressStorageWarn =
+				command.errorKind === 'saveunauthorized' ||
+				command.errorKind === 'savefailed';
 			// Skip empty errors (and allow for suppressing errors by making them blank).
 			if (storageError && storageError != '') {
 				// Parse the storage url as link
@@ -1989,7 +1991,7 @@ class Socket {
 				// Insert the storage server address to be more friendly
 				storageError = storageError.replace('%storageserver', tmpLink.host);
 
-				// Suppress saveunauthorized warning modal permanently while preserving
+				// Suppress save permission/session warning modals while preserving
 				// save failure callbacks for host integrations.
 				if (!suppressStorageWarn) {
 					// show message to the user in Control.AlertDialog
