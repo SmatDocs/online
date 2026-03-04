@@ -756,6 +756,11 @@ window.L.Map.WOPI = window.L.Handler.extend({
 				}
 			}
 		}
+		else if (msg.MessageId === 'Action_RenameFile') {
+			if (msg.Values && msg.Values.Filename !== null && msg.Values.Filename !== undefined) {
+				this._map.renameFile(msg.Values.Filename);
+			}
+		}
 		else if (msg.MessageId === 'Action_FollowUser') {
 			if (msg.Values) {
 				this._map._setFollowing(msg.Values.Follow, msg.Values.ViewId);
