@@ -13,8 +13,11 @@
 <!-- Disable two capitals at start autocorrect -->
 <item oor:path="/org.openoffice.Office.Common/AutoCorrect"><prop oor:name="TwoCapitalsAtStart" oor:op="fuse"><value>false</value></prop></item>
 
-<!-- Enable spell-checking by default -->
-<item oor:path="/org.openoffice.Office.Linguistic/SpellChecking"><prop oor:name="IsSpellAuto" oor:op="fuse"><value>true</value></prop></item>
+<!-- Disable spell-checking by default (users can re-enable via Tools > Automatic Spell Checking) -->
+<item oor:path="/org.openoffice.Office.Linguistic/SpellChecking"><prop oor:name="IsSpellAuto" oor:op="fuse"><value>false</value></prop></item>
+
+<!-- Disable grammar checking by default -->
+<item oor:path="/org.openoffice.Office.Linguistic/SpellChecking"><prop oor:name="IsGrammarAuto" oor:op="fuse"><value>false</value></prop></item>
 
 <!-- Save memory by avoiding collecting autocompletion words  -->
 <item oor:path="/org.openoffice.Office.Writer/AutoFunction/Completion"><prop oor:name="Enable" oor:op="fuse"><value>false</value></prop></item>
@@ -24,8 +27,8 @@
 <!-- Set a work path which is valid in chroot -->
 <item oor:path="/org.openoffice.Office.Paths/Variables"><prop oor:name="Work" oor:op="fuse"><value>file:///tmp</value></prop></item>
 
-<!-- Enable thumbnail generation by default (disabling saves CPU time) -->
-<item oor:path="/org.openoffice.Office.Common/Save/Document"><prop oor:name="GenerateThumbnail" oor:op="fuse"><value>true</value></prop></item>
+<!-- Disable thumbnail generation (saves CPU on every save; app uses its own thumbnails via Firebase) -->
+<item oor:path="/org.openoffice.Office.Common/Save/Document"><prop oor:name="GenerateThumbnail" oor:op="fuse"><value>false</value></prop></item>
 
 <!-- To show Hidden Characters and Hidden Text/Paragraph fields -->
 <item oor:path="/org.openoffice.Office.Writer/Content/NonprintingCharacter"><prop oor:name="HiddenCharacter" oor:op="fuse"><value>false</value></prop></item>
