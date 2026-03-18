@@ -320,6 +320,14 @@ class A11yValidator {
 		}
 	}
 
+	validateIframeDialog(container: HTMLElement): void {
+		const iframe = container.querySelector('iframe');
+		if (!iframe || !iframe.contentDocument || !iframe.contentDocument.body)
+			return;
+
+		this.validateDialog(iframe.contentDocument.body);
+	}
+
 	validateAllOpenDialogs(): void {
 		const jsdialog = app.map?.jsdialog;
 		if (!jsdialog || !jsdialog.dialogs) {
@@ -348,7 +356,9 @@ class A11yValidator {
 			return;
 		}
 
-		const errorCount = this.validateContainer(currentSidebar.container);
+		const container = currentSidebar.getContainer();
+		Util.ensureValue(container);
+		const errorCount = this.validateContainer(container);
 
 		if (errorCount === 0) {
 			console.error('A11yValidator: sidebar passed all checks');

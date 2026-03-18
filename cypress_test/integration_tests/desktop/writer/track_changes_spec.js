@@ -145,8 +145,8 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 		// And when closing the dialog and entering doc compare mode:
 		cy.cGet('#AcceptRejectChangesDialog').parents('.jsdialog-window').find('.ui-dialog-titlebar-close').click();
 		cy.cGet('#AcceptRejectChangesDialog').should('not.exist');
-		desktopHelper.getNbIcon('TrackChanges', 'Review').click();
-		cy.cGet('#compare-tracked-change').filter(':visible').click();
+		desktopHelper.getNbIconArrow('TrackChanges', 'Review').click();
+		cy.cGet('#compare-tracked-change-button').filter(':visible').click();
 
 		// Then the left label should show the old document name:
 		cy.cGet('#compare-changes-left-title').should(function($el) {
@@ -177,7 +177,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 		cy.cGet('#review-tracking').click();
 		// If this is visible or not is not interesting, we want to assert the resulting
 		// title.
-		cy.cGet('#compare-tracked-change').click({force: true});
+		cy.cGet('#compare-tracked-change-button').click({force: true});
 		cy.cGet('#compare-changes-left-title').should(function($el) {
 			expect($el.text()).to.match(/^remote_old\.odt/);
 		});
@@ -192,8 +192,8 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 		cy.cGet('#Review-tab-label').click();
 
 		// When entering doc compare mode via View Changes:
-		desktopHelper.getNbIcon('TrackChanges', 'Review').click();
-		cy.cGet('#compare-tracked-change').filter(':visible').click();
+		desktopHelper.getNbIconArrow('TrackChanges', 'Review').click();
+		cy.cGet('#compare-tracked-change-button').filter(':visible').click();
 
 		// Then tiles should exist for both mode=1 (LeftSide) and mode=2 (RightSide)
 		// with content:
@@ -225,8 +225,8 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 		// Given a document in compare changes mode:
 		desktopHelper.switchUIToNotebookbar();
 		cy.cGet('#Review-tab-label').click();
-		desktopHelper.getNbIcon('TrackChanges', 'Review').click();
-		cy.cGet('#compare-tracked-change').filter(':visible').click();
+		desktopHelper.getNbIconArrow('TrackChanges', 'Review').click();
+		cy.cGet('#compare-tracked-change-button').filter(':visible').click();
 		cy.cGet('.compare-changes-labels').should('not.have.css', 'display', 'none');
 
 		// When faking a tooltip message for a tracked change on the right side:
@@ -247,6 +247,94 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 			const left = parseFloat($el.css('left'));
 			const viewportMidpoint = Cypress.config('viewportWidth') / 2;
 			expect(left, 'tooltip left position').to.be.greaterThan(viewportMidpoint);
+		});
+	});
+
+	it('Tooltip anchor rectangles in compare changes mode', function () {
+		// Given a document in compare changes mode:
+		desktopHelper.switchUIToNotebookbar();
+		cy.cGet('#Review-tab-label').click();
+		desktopHelper.getNbIconArrow('TrackChanges', 'Review').click();
+		cy.cGet('#compare-tracked-change-button').filter(':visible').click();
+		cy.cGet('.compare-changes-labels').should('not.have.css', 'display', 'none');
+
+		// When faking a tooltip message with anchor rectangles for a deletion:
+		cy.getFrameWindow().then(function(win) {
+			win.app.map.uiManager.showDocumentTooltip({
+				type: 'generaltooltip',
+				text: 'Deleted: LocalUser#0 - 02/19/2026 14:54:27',
+				rectangle: '1418, 1701, 9971, 529',
+				redlineType: 'Delete',
+				anchorRectangles: ['1418, 1966, 2390, 264', '2159, 1701, 9231, 264'],
+			});
+		});
+
+		// Then we should have two tooltip anchor sections, one on each side:
+		const viewportMidpoint = Cypress.config('viewportWidth') / 2;
+		cy.cGet('[id="test-div-tooltip anchor left"]').should(function(elements) {
+			const left = parseFloat(elements[0].style.left);
+			// left section position: expected 153 to be below 500
+			expect(left, 'left section position').to.be.lessThan(viewportMidpoint);
+		});
+		cy.cGet('[id="test-div-tooltip anchor right"]').should(function(elements) {
+			const left = parseFloat(elements[0].style.left);
+			// right section position: expected 786 to be above 500
+			expect(left, 'right section position').to.be.greaterThan(viewportMidpoint);
+		});
+	});
+
+	it('Context toolbar position in compare changes mode', function () {
+		// Given a document in compare changes mode with some text:
+		desktopHelper.switchUIToNotebookbar();
+		helper.typeIntoDocument('x');
+		cy.cGet('#Review-tab-label').click();
+		desktopHelper.getNbIconArrow('TrackChanges', 'Review').click();
+		cy.cGet('#compare-tracked-change-button').filter(':visible').click();
+		cy.cGet('.compare-changes-labels').should('not.have.css', 'display', 'none');
+
+		// When double-clicking at the cursor position on the right side to create a selection:
+		helper.getBlinkingCursorPosition('cursorPos');
+		helper.clickAt('cursorPos', true);
+
+		// Then the context toolbar should appear on the right half of the viewport:
+		// Without the accompanying fix in place, this test would have failed, the
+		// context toolbar x position was too small (on the left side, outside the right page).
+		cy.cGet('#context-toolbar').should('not.have.class', 'hidden').should(function(elements) {
+			const left = parseFloat(elements[0].style.left);
+			const viewportMidpoint = Cypress.config('viewportWidth') / 2;
+			// Context toolbar x position: 716 to be above 500; was 66.
+			expect(left, 'context toolbar left position').to.be.greaterThan(viewportMidpoint);
+		});
+	});
+
+	it('Zoom out updates visible area in compare changes mode', function () {
+		// Given a document in compare changes mode:
+		desktopHelper.switchUIToNotebookbar();
+		cy.cGet('#Review-tab-label').click();
+		desktopHelper.getNbIconArrow('TrackChanges', 'Review').click();
+		cy.cGet('#compare-tracked-change-button').filter(':visible').click();
+		cy.cGet('.compare-changes-labels').should('not.have.css', 'display', 'none');
+
+		// When zooming out:
+		let initialWidth = 0;
+		cy.getFrameWindow().then(function(win) {
+			cy.wrap(null).should(function() {
+				initialWidth = win.app.activeDocument.activeLayout.viewedRectangle.width;
+				expect(initialWidth, 'initial viewedRectangle.width').to.be.greaterThan(0);
+			});
+		});
+		desktopHelper.zoomOut();
+
+		// Then the visible area width (in twips) should increase, since each pixel now covers
+		// more twips at a smaller zoom level:
+		cy.getFrameWindow().then(function(win) {
+			cy.wrap(null).should(function() {
+				let newWidth = win.app.activeDocument.activeLayout.viewedRectangle.width;
+				// Without the accompanying fix in place, this test would have failed, the
+				// visible area was not updated on zoom change: 14689 didn't
+				// increase to 17627
+				expect(newWidth, 'viewedRectangle.width after zoom out').to.be.greaterThan(initialWidth);
+			});
 		});
 	});
 

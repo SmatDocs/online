@@ -270,7 +270,14 @@ class LOUtil {
 	public static onlydarkModeItems: string[] = ['invertbackground'];
 
 	// Common images used in all modes, so the default one will be used.
-	public static commonItems: string[] = ['serverauditok', 'serverauditerror'];
+	public static commonItems: string[] = [
+		'serverauditok',
+		'serverauditerror',
+		'compact_customanimation',
+		'slideshow-exit',
+		'slideshow-slideNext',
+		'slideshow-slidePrevious',
+	];
 
 	// Helper function to strip '.svg' suffix and 'lc_' prefix.
 	public static stripName(name: string): string {
@@ -303,8 +310,12 @@ class LOUtil {
 	public static getURL(path: string): string {
 		if (path === '') return '';
 		const customWindow = window as any;
-		if (customWindow.host === '' && customWindow.serviceRoot === '')
-			return path; // mobile app
+		if (customWindow.host === '' && customWindow.serviceRoot === '') {
+			// Mobile / desktop app: return a relative path so it resolves
+			// against the page's file:// origin rather than the filesystem root.
+			if (path.startsWith('/')) return path.substring(1);
+			return path;
+		}
 
 		let url = customWindow.makeHttpUrl('/browser/' + customWindow.versionPath);
 		if (path.substr(0, 1) !== '/') url += '/';
@@ -393,6 +404,13 @@ class LOUtil {
 			cleanName = encodeURIComponent(cleanName).replace(/%/g, '');
 			cleanName = cleanName.toLowerCase();
 		}
+
+		// Skip icon lookup for numeric-only IDs (JSDialog artifacts like 1, 5, 65535)
+		if (/^\d+$/.test(cleanName)) return '';
+
+		// Skip icon lookup for overflow button pseudo-commands
+		if (cleanName.startsWith('overflow-button-')) return '';
+
 		var iconURLAliases: IconNameMap = {
 			// lc_closemobile.svg is generated when loading in NB mode then
 			// switch to compact mode: 1st hidden element in the top toolbar
@@ -477,7 +495,6 @@ class LOUtil {
 			insertdatefieldvar: 'datefield',
 			setparagraphlanguagemenu: 'spelldialog',
 			spellingandgrammardialog: 'spelldialog',
-			spellonline: 'spelldialog',
 			styleapply3fstyle3astring3ddefault26familyname3astring3dcellstyles:
 				'fontcolor',
 			fontworkgalleryfloater: 'fontworkpropertypanel',
@@ -612,6 +629,13 @@ class LOUtil {
 			graphicfiltersobel: 'graphicfiltersobel',
 			effects: 'pictureeffectsmenu',
 			fitwidthzoom: 'pagewidth',
+			open: 'formularesfapopen',
+			'exportas-pdf': 'exportpdf',
+			'exportas-epub': 'exportepub',
+			'fullscreen-drawing': 'presentation',
+			endnotedialog: 'footnotedialog',
+			updateallindexes: 'insertmultiindex',
+			formatframemenu: 'framedialog',
 		};
 		if (iconURLAliases[cleanName]) {
 			cleanName = iconURLAliases[cleanName];
@@ -890,6 +914,26 @@ class LOUtil {
 			return DOMPurify.sanitize(html, { USE_PROFILES: { [profile]: true } });
 		}
 		return '';
+	}
+
+	public static getDocumentLogoClass(docType: string) {
+		let iconClass: string;
+		let iconTooltip: string;
+		if (docType === 'text') {
+			iconClass = 'writer-icon-img';
+			iconTooltip = 'Writer';
+		} else if (docType === 'spreadsheet') {
+			iconClass = 'calc-icon-img';
+			iconTooltip = 'Calc';
+		} else if (docType === 'presentation') {
+			iconClass = 'impress-icon-img';
+			iconTooltip = 'Impress';
+		} else if (docType === 'drawing') {
+			iconClass = 'draw-icon-img';
+			iconTooltip = 'Draw';
+		}
+
+		return [iconClass, iconTooltip];
 	}
 }
 

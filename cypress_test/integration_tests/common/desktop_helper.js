@@ -333,7 +333,7 @@ function toggleComments(resolved = false) {
 	if (mode === 'notebookbar') {
 		cy.cGet('#Review-tab-label').click();
 		if (resolved) getNbIcon('ShowResolvedAnnotations', 'Review').click();
-		else cy.cGet('.showannotations').click();
+		else cy.cGet('#showannotations').click();
 		// to avoid notebookbar collapse in subsequent calls to toggleComments.
 		cy.cGet('#Home-tab-label').click();
 	} else {
@@ -368,6 +368,8 @@ function switchUIToCompact() {
 		if (userInterfaceMode === 'notebookbar') {
 			cy.cGet('#View-tab-label').click();
 			getNbIcon('toggleuimode', 'View').click();
+			// Wait for the compact toolbar to load
+			cy.cGet('#toolbar-up').should('be.visible');
 		}
 	});
 
@@ -550,7 +552,7 @@ function getCompactIcon(unoCommand) {
 
 /// get icon for given uno command from notebookbar
 function getNbIcon(unoCommand, tabName) {
-	return cy.cGet((tabName ? '#' + tabName + '-container' : '') + '.notebookbar  .uno' + unoCommand + ' > button:visible');
+	return cy.cGet((tabName ? '#' + tabName + '-container' : '') + '.notebookbar  .uno' + unoCommand + ' > button.unobutton:visible');
 }
 
 /// get icon arrow for given uno command from classic toolbar to open the dropdown

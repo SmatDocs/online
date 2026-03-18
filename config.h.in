@@ -18,10 +18,14 @@
 #undef COOLWSD_BUILDCONFIG
 
 /* Directory that contains configuration of coolwsd */
+#ifndef COOLWSD_CONFIGDIR
 #undef COOLWSD_CONFIGDIR
+#endif
 
 /* Default coolwsd loglevel */
+#ifndef COOLWSD_LOGLEVEL
 #undef COOLWSD_LOGLEVEL
+#endif
 
 /* Default location of coolwsd log file */
 #undef COOLWSD_LOGFILE
@@ -36,7 +40,9 @@
 #undef COOL_USER_ID
 
 /* Default number of pre-spawn children */
+#ifndef NUM_PRESPAWN_CHILDREN
 #undef NUM_PRESPAWN_CHILDREN
+#endif
 
 /* Absolute path to the top-level source directory */
 #undef DEBUG_ABSSRCDIR
@@ -116,9 +122,6 @@
 
 /* Define to 1 when we should use systemplate and jails (eg. normal coolwsd server), otherwise 0 (eg. CODA). */
 #undef ENABLE_CHILDROOTS
-
-/* Define to 1 when the compiled code is supposed to be part of CODA (the entry point is from the app, not from main() etc.), otherwise 0 (ie. normal server). */
-#undef ENABLE_CODA
 
 /* Default value of feature_lock.unlock_description */
 #undef UNLOCK_DESCRIPTION

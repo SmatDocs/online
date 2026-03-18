@@ -16,6 +16,10 @@ enum TileMode {
 
 class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 	public readonly type: string = 'ViewLayoutCompareChanges';
+
+	/// Last tile mode seen when converting from canvas to document coordinates.
+	public lastTileMode: TileMode = TileMode.RightSide;
+
 	private halfWidth = 0; // Half width of the view.
 	private viewGap = Math.round(20 / app.dpiScale); // The gap between the 2 views.
 	private yStart = Math.round(20 / app.dpiScale); // The space above the first page.
@@ -23,12 +27,24 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 	constructor() {
 		super();
 
+		app.map.on('zoomend', this.onZoomEnd.bind(this));
+
 		this.adjustViewZoomLevel();
 
 		app.layoutingService.appendLayoutingTask(() => this.updateViewData());
 	}
 
-	public adjustViewZoomLevel() {
+	/// Refresh the view after scroll or zoom change.
+	private refreshView(): void {
+		this.updateViewData();
+		app.sectionContainer.requestReDraw();
+	}
+
+	private onZoomEnd(): void {
+		this.refreshView();
+	}
+
+	public override adjustViewZoomLevel() {
 		Util.ensureValue(app.activeDocument);
 
 		const min = 0.1;
@@ -46,7 +62,7 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 		app.map.setZoom(zoom, { animate: false });
 	}
 
-	protected refreshCurrentCoordList() {
+	protected override refreshCurrentCoordList() {
 		super.refreshCurrentCoordList();
 
 		const additionalCoords: Array<TileCoordData> = [];
@@ -104,10 +120,13 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 		if (app.map._docLayer?._cursorMarker)
 			app.map._docLayer._cursorMarker.update();
 
+		app.map._docLayer._sendClientZoom();
 		this.sendClientVisibleArea();
 
 		this.refreshCurrentCoordList();
+		TileManager.beginTransaction();
 		TileManager.checkRequestTiles(this.currentCoordList);
+		TileManager.endTransaction(null);
 	}
 
 	private getDeflectionX(mode: TileMode): number {
@@ -123,7 +142,7 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 		else return this.halfWidth + this.viewGap - this.scrollProperties.viewX;
 	}
 
-	public documentToViewX(point: cool.SimplePoint): number {
+	public override documentToViewX(point: cool.SimplePoint): number {
 		Util.ensureValue(app.activeDocument);
 
 		// Default to right side.
@@ -132,15 +151,20 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 		return point.pX + this.getDeflectionX(point.mode);
 	}
 
-	public documentToViewY(point: cool.SimplePoint): number {
+	public override documentToViewY(point: cool.SimplePoint): number {
 		return point.pY + this.yStart - this.scrollProperties.viewY;
 	}
 
-	public canvasToDocumentPoint(point: cool.SimplePoint): cool.SimplePoint {
+	public override canvasToDocumentPoint(
+		point: cool.SimplePoint,
+	): cool.SimplePoint {
 		const result = point.clone();
 
 		point.mode =
 			point.pX < this.halfWidth ? TileMode.LeftSide : TileMode.RightSide;
+
+		// Remember which tile mode was used last.
+		this.lastTileMode = point.mode;
 
 		result.pX -= this.getDeflectionX(point.mode);
 		result.pY += this.scrollProperties.viewY - this.yStart;
@@ -148,16 +172,17 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 		return result;
 	}
 
-	public canScrollHorizontal(documentAnchor: CanvasSectionObject): boolean {
+	public override canScrollHorizontal(
+		documentAnchor: CanvasSectionObject,
+	): boolean {
 		return this.viewSize.pX > Math.round(documentAnchor.size[0] * 0.5);
 	}
 
-	public scroll(pX: number, pY: number): boolean {
+	public override scroll(pX: number, pY: number): boolean {
 		const scrolled = super.scroll(pX, pY);
 
 		if (scrolled) {
-			this.updateViewData();
-			app.sectionContainer.requestReDraw();
+			this.refreshView();
 		}
 
 		return scrolled;

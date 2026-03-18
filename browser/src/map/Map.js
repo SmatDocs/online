@@ -683,6 +683,11 @@ window.L.Map = window.L.Evented.extend({
 			return this;
 		}
 
+		// Do not animate zoom in multi-page or compare changes view.
+		if (animate && app.activeDocument &&
+			['ViewLayoutMultiPage', 'ViewLayoutCompareChanges'].includes(app.activeDocument.activeLayout.type))
+			animate = false;
+
 		var curCenter = this.getCenter();
 		if (this._docLayer && this._docLayer._docType === 'spreadsheet') {
 			// for spreadsheets, when the document is smaller than the viewing area
@@ -1061,7 +1066,7 @@ window.L.Map = window.L.Evented.extend({
 	// Returns true iff the document has input focus,
 	// as opposed to a dialog, sidebar, formula bar, etc.
 	editorHasFocus: function () {
-		return this.getWinId() === 0 && !this.calcInputBarHasFocus();
+		return this.getWinId() === 0 && !this.calcInputBarHasFocus() && !this._iframeDialog;
 	},
 
 	// Returns true iff the formula-bar has the focus.

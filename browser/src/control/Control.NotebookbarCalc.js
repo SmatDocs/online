@@ -13,8 +13,14 @@
  * window.L.Control.NotebookbarCalc - definition of notebookbar content in Calc
  */
 
-/* global _ _UNO app */
+/* global _ _UNO app JSDialog */
 window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
+
+	onCallback: function(objectType, eventType, object, data, builder) {
+		const consumed
+			= JSDialog.CalcTableTab.onCallback(objectType, eventType, object, data, builder);
+		return consumed;
+	},
 
 	getTabs: function() {
 		return [
@@ -94,13 +100,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'context': 'Sparkline',
 				'accessibility': { focusBack: true,	combination: 'K', de: null }
 			},
-			{
-				'id': 'Table-tab-label',
-				'text': _('Table Design'),
-				'name': 'Table',
-				'context': 'Table',
-				'accessibility': { focusBack: true,	combination: 'T', de: null }
-			},
+			JSDialog.CalcTableTab.getEntry(),
 			{
 				'id': 'Help-tab-label',
 				'text': _('Help'),
@@ -301,7 +301,9 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'command': 'downloadas',
 				'class': 'unodownloadas',
 				'type': 'exportmenubutton',
-				'text': _('Download'),
+				'text': !window.ThisIsAMobileApp ? _('Download') :
+					(window.ThisIsTheWindowsApp ? _('Export as') :
+					 _('Save As')),
 				'accessibility': { focusBack: true,	combination: 'DA', de: null }
 			});
 		}
@@ -390,7 +392,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 	getHomeTab: function() {
 		var content = [
 			{
-				'id': 'home-undo-redo',
+				'id': 'home-do',
 				'type': 'container',
 				'children': [
 					{
@@ -1651,140 +1653,8 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 	},
 
 	getCalcTableTab: function() {
-		var content = [
-			{
-				'id': 'insert-remove-calc-table',
-				'type': 'bigtoolitem',
-				'text': _UNO('.uno:RemoveCalcTable', 'spreadsheet'),
-				'command': '.uno:RemoveCalcTable',
-				'accessibility': { focusBack: true,	combination: 'DT', de: null }
-			},
-			{ type: 'separator', id: 'table-deletecalctable-break', orientation: 'vertical' },
-			{
-				'type': 'overflowgroup',
-				'id': 'table-style-options',
-				'name':_('Table Style Options'),
-				'accessibility': { focusBack: true,	combination: 'TO', de: null },
-				'children' : [
-					{
-						'type': 'container',
-						'children': [
-							{
-								'type': 'toolbox',
-								'children': [
-									{
-										'id': 'chk_header_row2',
-										'type': 'checkbox',
-										'command': '.uno:DatabaseSettings',
-										'text': _('Header Row'),
-										'accessibility': { focusBack: true,	combination: 'SH', de: null }
-									}
-								]
-							},
-							{
-								'type': 'toolbox',
-								'children': [
-									{
-										'id': 'chk_total_row2',
-										'type': 'checkbox',
-										'command': '.uno:DatabaseSettings',
-										'text': _('Total Row'),
-										'accessibility': { focusBack: true,	combination: 'ST', de: null }
-									}
-								]
-							}
-						],
-						'vertical': 'true'
-					},
-					{
-						'type': 'container',
-						'children': [
-							{
-								'type': 'toolbox',
-								'children': [
-									{
-										'id': 'chk_banded_rows2',
-										'type': 'checkbox',
-										'command': '.uno:DatabaseSettings',
-										'text': _('Banded Rows'),
-										'accessibility': { focusBack: true,	combination: 'BR', de: null }
-									}
-								]
-							},
-							{
-								'type': 'toolbox',
-								'children': [
-									{
-										'id': 'chk_banded_cols2',
-										'type': 'checkbox',
-										'command': '.uno:DatabaseSettings',
-										'text': _('Banded Columns'),
-										'accessibility': { focusBack: true,	combination: 'BC', de: null }
-									}
-								]
-							}
-						],
-						'vertical': 'true'
-					},
-					{
-						'type': 'container',
-						'children': [
-							{
-								'type': 'toolbox',
-								'children': [
-									{
-										'id': 'chk_first_column2',
-										'type': 'checkbox',
-										'command': '.uno:DatabaseSettings',
-										'text': _('First Column'),
-										'accessibility': { focusBack: true,	combination: 'FC', de: null }
-									}
-								]
-							},
-							{
-								'type': 'toolbox',
-								'children': [
-									{
-										'id': 'chk_last_column2',
-										'type': 'checkbox',
-										'command': '.uno:DatabaseSettings',
-										'text': _('Last Column'),
-										'accessibility': { focusBack: true,	combination: 'LC', de: null }
-									}
-								]
-							}
-						],
-						'vertical': 'true'
-					},
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'chk_filter_buttons2',
-								'type': 'checkbox',
-								'command': '.uno:DatabaseSettings',
-								'text': _('Filter Buttons'),
-								'accessibility': { focusBack: true,	combination: 'SF', de: null }
-							},
-						]
-					},
-				]
-			},
-			{ type: 'separator', id: 'table-style-options-break', orientation: 'vertical' },
-			{
-				'id': 'tablestyles_cb2',
-				'type': 'listbox',
-				'selectedCount': '1',
-				'selectedEntries': [
-					'0'
-				],
-				'command': '.uno:DatabaseSettings',
-				'aria': { 'label': _('Table Styles') },
-				'accessibility': { focusBack: true,	combination: 'TS', de: null }
-			}
-		];
-
-		return this.getTabPage('Table', content);
+		const tab = JSDialog.CalcTableTab;
+		return this.getTabPage(tab.getName(), tab.getContent());
 	},
 
 	getSparklineTab: function() {
@@ -2884,12 +2754,31 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			},
 			{ type: 'separator', id: 'format-sparkline-break', orientation: 'vertical' },
 			{
-				'id': 'format-theme-dialog',
+				'id': 'themes-group',
+				'type': 'overflowgroup',
+				'name': _('Themes'),
+				'nofold': true,
+				'icon': 'lc_themesthames.svg',
+				'children': [
+					{
+						'id': 'iconview_theme_colors-iconview-list',
+						'type': 'iconviewlist',
+						'children': [
+							{
+								'id': 'iconview_theme_colors', // has to match core id
+								'type': 'iconview'
+							}
+						]
+					}
+				]
+			},
+			{
+				'id': 'add-theme-dialog',
 				'type': 'bigtoolitem',
-				'text': _UNO('.uno:ThemeDialog'),
-				'command': '.uno:ThemeDialog',
-				'accessibility': { focusBack: false, combination: 'J', de: null }
-			}
+				'text': _UNO('.uno:AddTheme'),
+				'command': '.uno:AddTheme',
+				'accessibility': { focusBack: false, combination: 'AT', de: null }
+			},
 		];
 
 		return this.getTabPage('Format', content);

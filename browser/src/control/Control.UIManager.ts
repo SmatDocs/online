@@ -117,9 +117,28 @@ class UIManager extends window.L.Control {
 		this.map['stateChangeHandler'].setItemValue('toggledarktheme', 'false');
 		this.map['stateChangeHandler'].setItemValue('invertbackground', 'false');
 		this.map['stateChangeHandler'].setItemValue('showannotations', 'true');
+		window.addEventListener('browsersettingchanged', () => {
+			this.initDarkModeFromSettings();
+		});
 	}
 
 	// UI initialization
+
+	/**
+	 * Shows a tooltip attached to an element and auto-hides it after a timeout.
+	 */
+	showTimedTooltip(element: HTMLElement, text: string, timeMs: number): void {
+		if (!element || !this.map.tooltip)
+			return;
+
+		this.map.tooltip.show(element, text);
+		clearTimeout(this.map._timedTooltipTimeout);
+		this.map._timedTooltipTimeout = setTimeout(() => {
+			if (this.map.tooltip && this.map.tooltip._current === element) {
+				this.map.tooltip.hide();
+			}
+		}, timeMs);
+	}
 
 	/**
 	 * Returns the current UI mode ("notebookbar" or "classic").
@@ -398,8 +417,10 @@ class UIManager extends window.L.Control {
 
 		window.setupToolbar(this.map);
 
-		this.documentNameInput = window.L.control.documentNameInput();
-		this.map.addControl(this.documentNameInput);
+		if (!((window as any).mode.isCODesktop())) {
+			this.documentNameInput = window.L.control.documentNameInput();
+			this.map.addControl(this.documentNameInput);
+		}
 		this.map.addControl(window.L.control.alertDialog());
 		if (window.mode.isMobile()) {
 			this.mobileWizard = window.L.control.mobileWizard();
@@ -466,12 +487,59 @@ class UIManager extends window.L.Control {
 		app.serverConnectionService.onBasicUI();
 	}
 
+
+	initializeNonInteractiveUI() {
+		app.console.debug('UIManager: initialize non-interactive basic UI');
+
+		this.map.jsdialog = window.L.control.jsDialog();
+		this.map.addControl(this.map.jsdialog);
+		this.map.dialog = window.L.control.lokDialog();
+		this.map.addControl(this.map.dialog);
+
+		app.serverConnectionService.onBasicUI();
+	}
+
+	initializeBackstageView(): void {
+		if (!(window as any).mode.isCODesktop())
+			return;
+
+		if (!this.map.backstageView) {
+			this.map.backstageView = new window.L.Control.BackstageView(this.map);
+			console.log('UIManager: BackstageView created for starter mode');
+		}
+
+		console.log('UIManager: Showing BackstageView for starter mode');
+
+		this.initDarkModeFromSettings();
+
+		// Use requestAnimationFrame to ensure DOM is ready
+		window.requestAnimationFrame(() => {
+			if (this.map.backstageView) {
+				this.map.backstageView.show();
+			}
+		});
+	}
+
 	/**
 	 * Initializes specialized UI components based on the document type.
 	 * @param docType - Document type (e.g. 'spreadsheet', 'presentation', 'text').
 	 */
 	initializeSpecializedUI(docType: string): void {
 		app.console.debug('UIManager: initialize specialized UI for: ' + docType);
+
+		const startWelcomePresentation = window.coolParams.get('welcome');
+
+		// Return early when we are loading welcome slideshow
+		if (startWelcomePresentation) {
+			this.map.on('docloaded', () => {
+				app.dispatcher.dispatch('presentinwindow');
+			});
+			this.map.slideShowPresenter = new SlideShow.SlideShowPresenter(
+				this.map,
+				window.enableAccessibility,
+			);
+			return;
+		}
 
 		var isDesktop = window.mode.isDesktop();
 		var currentMode = this.getCurrentMode();
@@ -492,6 +560,17 @@ class UIManager extends window.L.Control {
 		} else {
 			this.createNotebookbarControl(docType, enableNotebookbar);
 			// makeSpaceForNotebookbar call in onUpdatePermission
+		}
+
+		if ((window as any).mode.isCODesktop()) {
+			if (!this.map.backstageView) {
+				this.map.backstageView = new window.L.Control.BackstageView(this.map);
+				console.log('UIManager: BackstageView created and attached to map');
+			} else {
+				console.log('UIManager: BackstageView already exists');
+			}
+		} else {
+			console.log('UIManager: Not a CODA app, skipping backstage view initialization');
 		}
 
 		if (!window.prefs.getBoolean(`${docType}.ShowToolbar`, true)) {
@@ -582,6 +661,19 @@ class UIManager extends window.L.Control {
 		}
 
 		this.map.on('changeuimode', this.onChangeUIMode, this);
+		window.addEventListener('browsersettingchanged', () => {
+			this.onChangeUIMode({ mode: this.getCurrentMode(), force: true });
+		});
+		this.map.on('backstagehide', () => {
+			setTimeout(() => {
+				this.map.invalidateSize(); // triggers Leaflet layout recalculation
+				const docLayer = this.map._docLayer;
+				if (docLayer && docLayer._docType === 'spreadsheet') {
+					docLayer._resetClientVisArea();
+					docLayer._requestNewTiles();
+				}
+			}, 0);
+		});
 
 		this.refreshTheme();
 
@@ -595,7 +687,10 @@ class UIManager extends window.L.Control {
 		// check for "presentation" dispatch event only after document gets fully loaded
 		// in case if the leader is defined we have to wait a little longer to get the viewer info
 		const startPresentation = () => {
-			if (startFolloMePresntationGet) {
+			if (startPresentationGet === 'true' || startPresentationGet === '1') {
+				app.dispatcher.dispatch('presentation');
+			}
+			else if (startFolloMePresntationGet) {
 				const dispatchFollowPresentation = () => {
 					app.dispatcher.dispatch('followpresentation');
 					this.map.off('slideshowfollowon', dispatchFollowPresentation);
@@ -621,9 +716,6 @@ class UIManager extends window.L.Control {
 					// This also help with if the follow me presentation is not running
 					this.map.on('slideshowfollowon', dispatchFollowPresentation);
 				}
-			}
-			else if (startPresentationGet === 'true' || startPresentationGet === '1') {
-				app.dispatcher.dispatch('presentation');
 			}
 
 			// docloaded event is fired multiple times, unfortunately
@@ -653,42 +745,12 @@ class UIManager extends window.L.Control {
 	}
 
 	/**
-	 * Initializes the sidebar based on saved state and preferences.
+	 * SmartDocs default: start each document with the sidebar hidden.
+	 * Users can still reopen it explicitly after load.
 	 */
 	initializeSidebar(): void {
-		// Hide the sidebar on start if saved state or UIDefault is set.
 		if (window.mode.isDesktop() && !window.ThisIsAMobileApp) {
-			var showSidebar = this.getBooleanDocTypePref('ShowSidebar', true);
-
-			if (showSidebar && this.getBooleanDocTypePref('PropertyDeck', true)) {
-				app.socket.sendMessage('uno .uno:SidebarShow');
-				this.map.sidebar.setAsInitialized();
-			}
-
-			if (showSidebar && this.map.getDocType() === 'presentation') {
-				if (this.getBooleanDocTypePref('SdSlideTransitionDeck', false)) {
-					app.socket.sendMessage('uno .uno:SidebarShow');
-					app.socket.sendMessage('uno .uno:SlideChangeWindow');
-					this.map.sidebar.setupTargetDeck('.uno:SlideChangeWindow');
-				} else if (this.getBooleanDocTypePref('SdCustomAnimationDeck', false)) {
-					app.socket.sendMessage('uno .uno:SidebarShow');
-					app.socket.sendMessage('uno .uno:CustomAnimation');
-					this.map.sidebar.setupTargetDeck('.uno:CustomAnimation');
-				} else if (this.getBooleanDocTypePref('SdMasterPagesDeck', false)) {
-					app.socket.sendMessage('uno .uno:SidebarShow');
-					app.socket.sendMessage('uno .uno:MasterSlidesPanel');
-					this.map.sidebar.setupTargetDeck('.uno:MasterSlidesPanel');
-				}
-			} else if (showSidebar && this.getBooleanDocTypePref('StyleListDeck', false)) {
-				app.socket.sendMessage('uno .uno:SidebarShow');
-				app.socket.sendMessage('uno .uno:SidebarDeck.StyleListDeck');
-				this.map.sidebar.setupTargetDeck('.uno:SidebarDeck.StyleListDeck');
-			}
-
-			if (showSidebar)
-				this.map.sidebar.setAsInitialized();
-			else
-				app.socket.sendMessage('uno .uno:SidebarHide');
+			app.socket.sendMessage('uno .uno:SidebarHide');
 		}
 		else if (window.mode.isChromebook()) {
 			// HACK - currently the sidebar shows when loaded,
@@ -707,7 +769,8 @@ class UIManager extends window.L.Control {
 	 */
 	initializeRuler(): void {
 		if ((window.mode.isTablet() || window.mode.isDesktop()) && !app.isReadOnly()) {
-			var showRuler = this.getBooleanDocTypePref('ShowRuler');
+			var defaultShowRuler = (window as any).mode.isCODesktop();
+			var showRuler = this.getBooleanDocTypePref('ShowRuler', defaultShowRuler);
 			var interactiveRuler = this.map.isEditMode();
 			// Call the static method from the Ruler class
 			app.definitions.ruler.initializeRuler(this.map, {
@@ -888,24 +951,16 @@ class UIManager extends window.L.Control {
 
 		this.map.fire('postMessage', {msgId: 'Action_ChangeUIMode_Resp', args: {Mode: uiMode.mode}});
 
-		switch (currentMode) {
-		case 'classic':
-			this.removeClassicUI();
-			break;
-
-		case 'notebookbar':
-			this.removeNotebookbarUI();
-			break;
-		}
-
 		window.userInterfaceMode = uiMode.mode;
 
 		switch (uiMode.mode) {
 		case 'classic':
+			this.removeNotebookbarUI();
 			this.addClassicUI();
 			break;
 
 		case 'notebookbar':
+			this.removeClassicUI();
 			this.addNotebookbarUI();
 			break;
 		}
@@ -1652,6 +1707,14 @@ class UIManager extends window.L.Control {
 
 		// Go via SimplePoint(), which is aware of the active layout.
 		const point = new cool.SimplePoint(+split[0], +split[1]);
+
+		const layout = app.activeDocument?.activeLayout;
+		if (layout && layout.type === 'ViewLayoutCompareChanges') {
+			// Map from document to canvas coordinates using the last used tile mode.
+			const compareLayout = layout as ViewLayoutCompareChanges;
+			point.mode = compareLayout.lastTileMode;
+		}
+
 		const pt = { x: Math.round(point.vX / app.dpiScale), y: Math.round(point.vY / app.dpiScale) };
 
 		var elem = $('.leaflet-layer');
@@ -1662,9 +1725,38 @@ class UIManager extends window.L.Control {
 		elem.tooltip('option', 'items', elem[0]);
 		elem.tooltip('option', 'position', { my: 'left bottom',  at: 'left+' + pt.x + ' top+' + pt.y, collision: 'fit fit' });
 		elem.tooltip('open');
+
+		if (
+			tooltipInfo.anchorRectangles &&
+			tooltipInfo.redlineType &&
+			app.activeDocument?.activeLayout?.type === 'ViewLayoutCompareChanges'
+		) {
+			// Tooltip for a redline when comparing side by side: create the sections.
+			const sides = [
+				{ name: app.CSections.TooltipAnchorLeft.name, mode: TileMode.LeftSide },
+				{ name: app.CSections.TooltipAnchorRight.name, mode: TileMode.RightSide },
+			];
+			for (const side of sides) {
+				if (!app.sectionContainer.doesSectionExist(side.name)) {
+					app.sectionContainer.addSection(new cool.TooltipAnchorSection(side.name, side.mode));
+				}
+				const section = app.sectionContainer.getSectionWithName(side.name) as cool.TooltipAnchorSection;
+				section.drawAnchorRectangles(tooltipInfo.anchorRectangles, tooltipInfo.redlineType);
+			}
+		}
+
 		document.addEventListener('mousemove', function() {
 			elem.tooltip('close');
 			elem.tooltip('disable');
+
+			// Tooltip for a redline when comparing side by side: delete the sections.
+			const sideNames = [app.CSections.TooltipAnchorLeft.name, app.CSections.TooltipAnchorRight.name];
+			for (const name of sideNames) {
+				if (app.sectionContainer.doesSectionExist(name)) {
+					const section = app.sectionContainer.getSectionWithName(name) as cool.TooltipAnchorSection;
+					section.hideAnchorRectangles();
+				}
+			}
 		}, {once: true});
 	}
 
@@ -1773,8 +1865,10 @@ class UIManager extends window.L.Control {
 	isAnyDialogOpen(): boolean {
 		if (this.map.jsdialog)
 			return this.map.jsdialog.hasDialogOpened();
-		else
+		else if (this.mobileWizard)
 			return this.mobileWizard.isOpen();
+		else
+			return false;
 	}
 
 	/**

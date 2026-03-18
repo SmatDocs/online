@@ -24,6 +24,7 @@
 #include <thread>
 #include <string>
 #include <common/Clipboard.hpp>
+#include <common/LangUtil.hpp>
 #include <common/Log.hpp>
 #include <common/MobileApp.hpp>
 #include <common/Util.hpp>
@@ -34,6 +35,7 @@
 COOLWSD *coolwsd = nullptr;
 
 static int closeNotificationPipeForForwardingThread[2];
+static std::thread coolwsdThread;
 
 /**
  * Wrapper to be able to call the C++ code from Swift.
@@ -59,7 +61,7 @@ static int closeNotificationPipeForForwardingThread[2];
 
     // Start the COOLWSD server in a detached thread
     NSLog(@"CollaboraOffice: Starting the thread");
-    std::thread([]{
+    coolwsdThread = std::thread([]{
         assert(coolwsd == nullptr);
 
         // Prepare arguments for COOLWSD
@@ -74,14 +76,19 @@ static int closeNotificationPipeForForwardingThread[2];
         delete coolwsd;
         coolwsd = nullptr; // Reset the pointer after deletion
         NSLog(@"CollaboraOffice: The COOLWSD thread completed");
-    }).detach();
+    });
+
+    // Create a socket pair to notify the thread created in handleHULLOWithDocument:document when the document has been closed
+    fakeSocketPipe2(closeNotificationPipeForForwardingThread);
 }
 
 + (void)stopServer {
-    if (coolwsd) {
-        delete coolwsd;
-        coolwsd = nullptr;
-    }
+    NSLog(@"CollaboraOffice: Requesting shutdown");
+    SigUtil::requestShutdown();
+    fakeSocketClose(closeNotificationPipeForForwardingThread[0]);
+
+    // wait until coolwsdThread is torn down, so that we don't start cleaning up too early
+    coolwsdThread.join();
 }
 
 + (void)handleHULLOWithDocument:(Document *)document {
@@ -90,9 +97,6 @@ static int closeNotificationPipeForForwardingThread[2];
     assert(coolwsd_server_socket_fd != -1);
     int rc = fakeSocketConnect(document.fakeClientFd, coolwsd_server_socket_fd);
     assert(rc != -1);
-
-    // Create a socket pair to notify the below thread when the document has been closed
-    fakeSocketPipe2(closeNotificationPipeForForwardingThread);
 
     // Start another thread to read responses and forward them to the JavaScript
     dispatch_async(dispatch_get_global_queue( DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),
@@ -144,23 +148,19 @@ static int closeNotificationPipeForForwardingThread[2];
     // First we simply send the Online C++ parts the URL and the appDocId. This corresponds
     // to the GET request with Upgrade to WebSocket.
     std::string url([[document.tempFileURL absoluteString] UTF8String]);
-    struct pollfd p;
-    p.fd = document.fakeClientFd;
-    p.events = POLLOUT;
-    fakeSocketPoll(&p, 1, -1);
-
     // appDocId is read in ClientRequestDispatcher::handleIncomingMessage() in COOLWSD.cpp
     std::string message(url + " " + std::to_string(document.appDocId));
-    fakeSocketWrite(document.fakeClientFd, message.c_str(), message.size());
+    fakeSocketWriteQueue(document.fakeClientFd, message.c_str(), message.size());
+}
+
++ (void)handleByeWith:(Document *_Nonnull)document {
+    // Close one end of the socket pair, that will wake up the forwarding thread
+    fakeSocketClose(closeNotificationPipeForForwardingThread[0]);
 }
 
 + (void)handleMessageWith:(Document *)document message:(NSString *)message {
     const char *buf = [message UTF8String];
-    struct pollfd p;
-    p.fd = document.fakeClientFd;
-    p.events = POLLOUT;
-    fakeSocketPoll(&p, 1, -1);
-    fakeSocketWrite(document.fakeClientFd, buf, strlen(buf));
+    fakeSocketWriteQueue(document.fakeClientFd, buf, strlen(buf));
 }
 
 + (void)saveAsWith:(Document *)document url:(NSString *)url format:(NSString *)format filterOptions:(NSString *)filterOptions {
@@ -329,6 +329,13 @@ static int closeNotificationPipeForForwardingThread[2];
 }
 
 /**
+ * Reuse the common implementation of the check if the message is binary.
+ */
++ (bool)isBinaryMessage:(const char *_Nonnull)buffer length:(NSInteger)length {
+    return COOLProtocol::isBinaryMessage(buffer, static_cast<size_t>(length));
+}
+
+/**
  * We keep a running count of opening documents here. This is not necessarily in sync with the
  * DocBrokerId in DocumentBroker due to potential parallelism when opening multiple documents in
  * quick succession.
@@ -360,6 +367,10 @@ static std::atomic<int> appDocIdCounter(1);
 + (void)LOG_TRC:(NSString *)message {
     std::string stdMessage = [message UTF8String];
     LOG_TRC(stdMessage);
+}
+
++ (bool)isRtlLanguage:(NSString *)language {
+    return LangUtil::isRtlLanguage(std::string([language UTF8String]));
 }
 
 @end

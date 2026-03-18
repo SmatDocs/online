@@ -6,5 +6,6 @@
 **/src/app/TaskWorker.js
 # Prettier breaks the assumption made by unocommands.py.
 **/src/control/jsdialog/Definitions.MenuCommands.ts
+**/._*
 node_modules
 dist/src

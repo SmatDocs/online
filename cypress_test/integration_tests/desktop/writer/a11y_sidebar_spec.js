@@ -71,7 +71,11 @@ describe(['tagdesktop'], 'Accessibility Writer Sidebar Tests', { testIsolation: 
 		// Default chart deck panels
 		runA11yValidation(win);
 
-		// Now use tab to select the inner 'Chart' element
+		// Enter the chart's inner object hierarchy
+		cy.realPress('Enter');
+		helper.processToIdle(win);
+
+		// Select the first sub-object
 		cy.realPress('Tab');
 		helper.processToIdle(win);
 		runA11yValidation(win);
@@ -86,22 +90,24 @@ describe(['tagdesktop'], 'Accessibility Writer Sidebar Tests', { testIsolation: 
 		helper.processToIdle(win);
 		runA11yValidation(win);
 
-		cy.realPress('Escape'); // back up a level
-		cy.realPress('Tab'); // Data Series: Column 2
-		cy.realPress('Tab'); // Data Series: Column 3
-		cy.realPress('Tab'); // X Axis
+		// Back up to Data Series: Column 1
+		cy.realPress('Escape');
 		helper.processToIdle(win);
 		runA11yValidation(win);
 
-		cy.realPress('Escape'); // Go a level up the hierarchy
+		// Data Series: Column 2
+		cy.realPress('Tab');
 		helper.processToIdle(win);
-
-		helper.processToIdle(win);
-		// Data series selected, expect data series panel to be tested.
 		runA11yValidation(win);
 
-		// Two esc get us out of the chart navigation and then chart edit mode
-		escLevel(win, 2);
+		// X Axis
+		cy.realPress('Tab');
+		cy.realPress('Tab');
+		helper.processToIdle(win);
+		runA11yValidation(win);
+
+		// Esc out of chart navigation, chart edit mode, and chart selection
+		escLevel(win, 3);
 		helper.processToIdle(win);
 
 		// At which point the sidebar disappears
@@ -181,6 +187,11 @@ describe(['tagdesktop'], 'Accessibility Writer Sidebar Tests', { testIsolation: 
 
 		helper.processToIdle(win);
 		runA11yValidation(win);
+
+		// Verify expander heading hierarchy: depth 0 -> h2, depth 1 -> h3, depth 2 -> h4
+		cy.cGet('#A11yCheckDeck [data-expander-depth="0"] > .ui-expander > h2.ui-expander-heading').should('exist');
+		cy.cGet('#A11yCheckDeck [data-expander-depth="1"] > .ui-expander > h3.ui-expander-heading').should('exist');
+		cy.cGet('#A11yCheckDeck [data-expander-depth="2"] > .ui-expander > h4.ui-expander-heading').should('exist');
 
 		cy.then(() => {
 			win.app.map.sendUnoCommand('.uno:SidebarDeck.PropertyDeck');

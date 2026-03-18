@@ -829,10 +829,11 @@ class LayerDrawing {
 
 		this.map.fire('handleslideshowprogressbar', { isVisible: false });
 
+		const slideHash = this.requestedSlideHash || this.prefetchedSlideHash;
+		const slideInfo = this.getSlideInfo(slideHash);
+		const index = slideInfo ? slideInfo.index : undefined;
+
 		if (!e.success) {
-			const slideHash = this.requestedSlideHash || this.prefetchedSlideHash;
-			const slideInfo = this.getSlideInfo(slideHash);
-			const index = slideInfo ? slideInfo.index : undefined;
 			this.requestedSlideHash = null;
 			this.prefetchedSlideHash = null;
 			app.console.debug(
@@ -862,7 +863,7 @@ class LayerDrawing {
 		this.cacheAndNotify();
 
 		// fetch next slide and draw it on offscreen canvas
-		if (reqSlideInfo.next && !this.slideCache.has(reqSlideInfo.next)) {
+		if (reqSlideInfo?.next && !this.slideCache.has(reqSlideInfo.next)) {
 			this.requestSlideImpl(reqSlideInfo.next, true);
 		}
 	}

@@ -100,6 +100,12 @@ window.L.Map.include({
 
 		this.off('commandstatechanged', onCommandStateChanged);
 		this.on('commandstatechanged', onCommandStateChanged);
+
+		// Initialize with current state value if available
+		var currentState = this['stateChangeHandler'].getItemValue('.uno:FontHeight');
+		if (currentState) {
+			onCommandStateChanged.call(this, {commandName: '.uno:FontHeight', state: currentState});
+		}
 	},
 
 	applyFont: function (fontName) {
@@ -171,7 +177,7 @@ window.L.Map.include({
 	},
 
 	print: function (options) {
-		if (window.ThisIsTheiOSApp || window.ThisIsTheAndroidApp || window.ThisIsTheMacOSApp || window.ThisIsTheWindowsApp) {
+		if (window.ThisIsTheiOSApp || window.ThisIsTheAndroidApp || window.ThisIsTheMacOSApp || window.ThisIsTheWindowsApp || window.ThisIsTheQtApp) {
 			window.postMobileMessage('PRINT');
 		} else {
 			this.showBusy(_('Downloading...'), false);
@@ -291,7 +297,7 @@ window.L.Map.include({
 		var isAllowedInReadOnly = false;
 		var allowedCommands = ['.uno:Save', '.uno:WordCountDialog',
 			'.uno:Signature', '.uno:PrepareSignature', '.uno:DownloadSignature', '.uno:InsertSignatureLine',
-			'.uno:ShowResolvedAnnotations',
+			'.uno:ShowResolvedAnnotations', '.uno:Open', '.uno:CloseWin',
 			'.uno:ToolbarMode?Mode:string=notebookbar_online.ui', '.uno:ToolbarMode?Mode:string=Default',
 			'.uno:ExportToEPUB', '.uno:ExportToPDF', '.uno:ExportDirectToPDF', '.uno:MoveKeepInsertMode', '.uno:ShowRuler',
 			'.uno:Navigator', '.uno:GotoPage'];
@@ -434,28 +440,28 @@ window.L.Map.include({
 		var max;
 		var translatableContent = contentElement.querySelectorAll('h1');
 		for (i = 0, max = translatableContent.length; i < max; i++) {
-			translatableContent[i].innerHTML = translatableContent[i].innerHTML.toLocaleString();
+			translatableContent[i].innerHTML = translatableContent[i].innerHTML.toLocaleHelpString();
 		}
 		translatableContent = contentElement.querySelectorAll('h2');
 		for (i = 0, max = translatableContent.length; i < max; i++) {
-			translatableContent[i].innerHTML = translatableContent[i].innerHTML.toLocaleString();
+			translatableContent[i].innerHTML = translatableContent[i].innerHTML.toLocaleHelpString();
 		}
 		translatableContent = contentElement.querySelectorAll('h3');
 		for (i = 0, max = translatableContent.length; i < max; i++) {
-			translatableContent[i].innerHTML = translatableContent[i].innerHTML.toLocaleString();
+			translatableContent[i].innerHTML = translatableContent[i].innerHTML.toLocaleHelpString();
 		}
 		translatableContent = contentElement.querySelectorAll('h4');
 		for (i = 0, max = translatableContent.length; i < max; i++) {
-			translatableContent[i].innerHTML = translatableContent[i].innerHTML.toLocaleString();
+			translatableContent[i].innerHTML = translatableContent[i].innerHTML.toLocaleHelpString();
 		}
 		translatableContent = contentElement.querySelectorAll('td');
 		for (i = 0, max = translatableContent.length; i < max; i++) {
 			var orig = translatableContent[i].innerHTML;
-			var trans = translatableContent[i].innerHTML.toLocaleString();
+			var trans = translatableContent[i].innerHTML.toLocaleHelpString();
 			// Try harder to get translation of keyboard shortcuts (html2po trims starting <kbd> and ending </kbd>)
 			if (orig === trans && orig.indexOf('kbd') != -1) {
 				var trimmedOrig = orig.replace(/^(<kbd>)/,'').replace(/(<\/kbd>$)/,'');
-				var trimmedTrans = trimmedOrig.toLocaleString();
+				var trimmedTrans = trimmedOrig.toLocaleHelpString();
 				if (trimmedOrig !== trimmedTrans) {
 					trans = '<kbd>' + trimmedTrans + '</kbd>';
 				}
@@ -464,11 +470,11 @@ window.L.Map.include({
 		}
 		translatableContent = contentElement.querySelectorAll('p');
 		for (i = 0, max = translatableContent.length; i < max; i++) {
-			translatableContent[i].innerHTML = translatableContent[i].innerHTML.toLocaleString();
+			translatableContent[i].innerHTML = translatableContent[i].innerHTML.toLocaleHelpString();
 		}
 		translatableContent = contentElement.querySelectorAll('button'); // TOC
 		for (i = 0, max = translatableContent.length; i < max; i++) {
-			translatableContent[i].innerHTML = translatableContent[i].innerHTML.toLocaleString();
+			translatableContent[i].innerHTML = translatableContent[i].innerHTML.toLocaleHelpString();
 		}
 
 		//translatable screenshots
@@ -540,6 +546,16 @@ window.L.Map.include({
 				}
 			});
 		});
+
+		if (id === 'keyboard-shortcuts-content') {
+			app.layoutingService.appendLayoutingTask(() => {
+				var contentContainer = document.getElementById('keyboard-shortcuts-content');
+				if (contentContainer) {
+					contentContainer.setAttribute('tabindex', '-1');
+					contentContainer.focus();
+				}
+			});
+		}
 	},
 
 
@@ -686,7 +702,8 @@ window.L.Map.include({
 	},
 
 	showLOAboutDialog: function() {
-		this.aboutDialog.show();
+		if (this.aboutDialog)
+			this.aboutDialog.show();
 	},
 
 	extractContent: function(html) {

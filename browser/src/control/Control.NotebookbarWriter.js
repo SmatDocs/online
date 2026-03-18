@@ -149,7 +149,6 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 		var hasRepair = !this.map['wopi'].HideRepairOption;
 		var hasSaveAs = !this.map['wopi'].UserCanNotWriteRelative;
 		var hasShare = this.map['wopi'].EnableShare;
-		var hideDownload = this.map['wopi'].HideExportOption;
 		var hasGroupedSaveAs = window.prefs.get('saveAsMode') === 'group';
 		var hasRunMacro = window.enableMacrosExecution;
 		var hasSave = !this.map['wopi'].HideSaveOption;
@@ -305,19 +304,23 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 						'id': 'runmacro',
 						'type': 'bigtoolitem',
 						'text': _UNO('.uno:RunMacro', 'text'),
-						'command': '.uno:RunMacro'
+						'command': '.uno:RunMacro',
+						'accessibility': { focusBack: true,	combination: 'Z' }
 					}
 				]
 			});
 		}
 
-		if (!hideDownload) {
+		if (!this.map['wopi'].HideExportOption) {
 			content.push({
 				'id': 'downloadas:DownloadAsMenu',
 				'command': 'downloadas',
 				'class': 'unodownloadas',
 				'type': 'exportmenubutton',
-				'text': !window.ThisIsAMobileApp ? _('Download') : _('Save As'),
+				// In CODA-W, the functionality that we actually have at the moment is "Export as".
+				'text': !window.ThisIsAMobileApp ? _('Download') :
+					(window.ThisIsTheWindowsApp? _('Export as') :
+					 _('Save As')),
 				'accessibility': { focusBack: true,	combination: 'A', de: 'M' }
 			});
 		}
@@ -419,7 +422,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 	},
 
 	getHelpTab: function() {
-		var hasLatestUpdates = window.enableWelcomeMessage;
+		let hasLatestUpdates = window.enableWelcomeMessage || window.mode.isCODesktop();
 		var hasFeedback = this.map.feedback;
 		var hasAccessibilitySupport = window.enableAccessibility;
 		var hasAccessibilityCheck = this.map.getDocType() === 'text';
@@ -482,22 +485,20 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 						'command': '.uno:SidebarDeck.A11yCheckDeck',
 						'accessibility': { focusBack: false, combination: 'A', de: null }
 					} : {},
-				hasAccessibilityCheck ?
 					{
 						'id': 'validatesidebara11y',
 						'type': 'bigcustomtoolitem',
 						'text': _('Validate Sidebar'),
 						'visible': isDebugOn ? 'true' : 'false',
 						'accessibility': { focusBack: true,	combination: 'VS', de: null }
-					} : {},
-				hasAccessibilityCheck ?
+					},
 					{
 						'id': 'validatedialogsa11y',
 						'type': 'bigcustomtoolitem',
 						'text': _('Validate Dialog'),
 						'visible': isDebugOn ? 'true' : 'false',
 						'accessibility': { focusBack: true,	combination: 'VD', de: null }
-					} : {},
+					},
 				hasAccessibilitySupport || hasAccessibilityCheck ?
 					{
 						'id': 'help-accessibility-break',
@@ -579,7 +580,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 	getHomeTab: function() {
 		var content = [
 			{
-				'id': 'home-undo-redo',
+				'id': 'home-do',
 				'type': 'container',
 				'children': [
 					{
@@ -940,12 +941,18 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 			   'name':_('Styles'),
 			   'children' : [
 					{
-						   'id': 'stylesview',
-						   'type': 'iconview',
-						   'entries': [],
-						   'vertical': 'false'
+						'id': 'stylesview-iconview-list',
+						'type': 'iconviewlist',
+						'children': [
+							{
+								'id': 'stylesview',
+								'type': 'iconview',
+								'entries': [],
+								'vertical': 'false'
+							}
+						]
 					},
-			   ]
+			  ]
 			},
 			{
 				'type': 'overflowgroup',
@@ -1000,7 +1007,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 			{ type: 'separator', id: 'home-charmapcontrol-break', orientation: 'vertical' },
 			{
 				'type': 'overflowgroup',
-				'id': 'home-search',
+				'id': 'home-find-n-filter',
 				'name': _('Search'),
 				'accessibility': { focusBack: false,	combination: 'SS',	de: 'SS' },
 				'children': [
@@ -2162,11 +2169,11 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 		var hideChangeTrackingControls = this._map['wopi'].HideChangeTrackingControls;
 		var content = [
 			{
-				'id': 'review-spelling-and-grammar-dialog',
+				'id': 'review-word-count-dialog',
 				'type': 'bigtoolitem',
-				'text': _UNO('.uno:SpellingAndGrammarDialog'),
-				'command': '.uno:SpellingAndGrammarDialog',
-				'accessibility': { focusBack: false, combination: 'SP', de: 'C' }
+				'text': _UNO('.uno:WordCountDialog', 'text'),
+				'command': '.uno:WordCountDialog',
+				'accessibility': { focusBack: false, combination: 'W', de: 'W' }
 			},
 			{
 				'id': 'review-thesaurus-dialog',
@@ -2187,53 +2194,73 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 					'id': 'review-translate',
 					'type': 'bigtoolitem',
 					'text': _UNO('.uno:Translate', 'text'),
-					'command': '.uno:Translate'
+					'command': '.uno:Translate',
+					'accessibility': { focusBack: false, combination: 'ZT', de: null }
 				}: {},
-			{
-				'type': 'container',
-				'children': [
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'review-spell-online',
-								'type': 'toolitem',
-								'text': _UNO('.uno:SpellOnline'),
-								'command': '.uno:SpellOnline',
-								'accessibility': { focusBack: true, combination: 'SO', de: null }
-							}
-						]
-					},
-					{
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'review-word-count-dialog',
-								'type': 'toolitem',
-								'text': _UNO('.uno:WordCountDialog', 'text'),
-								'command': '.uno:WordCountDialog',
-								'accessibility': { focusBack: false, combination: 'W', de: 'W' }
-							}
-						]
-					}
-				],
-				'vertical': 'true'
-			},
 			{ type: 'separator', id: 'review-wordcountdialog-break', orientation: 'vertical' },
-						{
+			{
 				'type': 'overflowgroup',
-				'id': 'review-comments',
-				'name':_('Comments'),
-				'accessibility': { focusBack: false, combination: 'C', de: 'N' },
+				'id': 'review-Spellcheck',
+				'name': _('Spellcheck'),
+				'icon': 'lc_spellcheck.svg',
+				'accessibility': { focusBack: false,combination: 'SP',	de:	'SP' },
 				'children' : [
 					{
-						'id': 'review-insert-annotation:AnnotationMenu',
-						'type': 'menubutton',
-						'text': _UNO('.uno:InsertAnnotation'),
-						'applyCallback': 'insertcomment',
-						'command': '.uno:InsertAnnotation',
-						'accessibility': { focusBack: false, combination: 'C', de: 'N' }
+						'type': 'container',
+						'children': [
+							{
+								'type': 'toolbox',
+								'children': [
+									{
+										'id': 'review-spelling-and-grammar-dialog',
+										'type': 'toolitem',
+										'text': _('Spelling Options'),
+										'command': '.uno:SpellingAndGrammarDialog',
+										'accessibility': { focusBack: false, combination: 'SP', de: 'C' }
+									}
+								]
+							},
+							{
+								'type': 'toolbox',
+								'children': [
+									{
+										'id': 'review-spell-online',
+										'type': 'toolitem',
+										'text': _('Auto Spell Check'),
+										'command': '.uno:SpellOnline',
+										'accessibility': { focusBack: true, combination: 'SO', de: null},
+										'stateIcons': {
+											on: 'autospellcheck-on',
+											off: 'autospellcheck-off',
+										},
+									}
+								]
+							},
+						],
+						'vertical': 'true'
 					},
+				]
+			},
+			{ type: 'separator', id: 'review-spell-break', orientation: 'vertical' },
+			{
+				'id': 'review-insert-annotation',
+				'class': 'unoAccessibilityCheck',
+				'type': 'bigtoolitem',
+				'text': _UNO('.uno:InsertAnnotation'),
+				'command': '.uno:InsertAnnotation',
+				'accessibility': { focusBack: false, combination: 'C', de: 'N' }
+			},
+			{ type: 'separator', id: 'review-comment-break', orientation: 'vertical' },
+			{
+				'type': 'overflowgroup',
+				'id': 'review-comments',
+				'name':_('Show Comments'),
+				'accessibility': { focusBack: false, combination: 'SC', de: 'N' },
+				'more': {
+					'command':'showcommentsnavigator',
+					'accessibility': { focusBack: true,	combination: 'MC', de: null },
+				},
+				'children' : [
 					{
 						'type': 'container',
 						'children': [
@@ -2243,7 +2270,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 									{
 										'id': 'showannotations',
 										'type': 'customtoolitem',
-										'text': _UNO('.uno:ShowAnnotations', 'text'),
+										'text': _('Show Comments'),
 										'command': 'showannotations',
 										'accessibility': { focusBack: true, combination: 'SA', de: null }
 									}
@@ -2310,16 +2337,10 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 						'accessibility': { focusBack: true, combination: 'TC', de: null }
 					},
 					{
-						'id': 'review-show-tracked-changes',
-						'type': 'bigtoolitem',
-						'text': _UNO('.uno:ShowTrackedChanges', 'text'),
-						'command': '.uno:ShowTrackedChanges',
-						'accessibility': { focusBack: true, combination: 'SC', de: null }
-					},
-					{
-						'id': 'compare-tracked-change',
-						'type': 'bigcustomtoolitem',
+						'id': 'compare-tracked-change:ViewChangesMenu',
+						'type': 'menubutton',
 						'text': _('View Changes'),
+						'applyCallback': 'comparechanges',
 						'command': 'comparechanges',
 						'accessibility': { focusBack: true, combination: 'CC' }
 					},
@@ -2742,31 +2763,39 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 	getFormulaTab: function() {
 		var content = [
 			{
+				'id': 'change-font',
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:ChangeFont', 'text'),
 				'command': '.uno:ChangeFont',
-				'icon': 'lc_fontdialog.svg'
+				'icon': 'lc_fontdialog.svg',
+				'accessibility': { focusBack: true, combination: 'CF', de: null },
 			},
 			{ type: 'separator', id: 'formula-changefont-break', orientation: 'vertical' },
 			{
+				'id': 'change-font-size',
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:ChangeFontSize', 'text'),
 				'command': '.uno:ChangeFontSize',
-				'icon': 'lc_fontheight.svg'
+				'icon': 'lc_fontheight.svg',
+				'accessibility': { focusBack: true, combination: 'FZ', de: null },
 			},
 			{ type: 'separator', id: 'formula-changefontsize-break', orientation: 'vertical' },
 			{
+				'id': 'change-distance',
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:ChangeDistance', 'text'),
 				'command': '.uno:ChangeDistance',
 				'icon': 'lc_spacing.svg',
+				'accessibility': { focusBack: true, combination: 'CD', de: null },
 			},
 			{ type: 'separator', id: 'formula-changedistance-break', orientation: 'vertical' },
 			{
+				'id': 'change-alignment',
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:ChangeAlignment', 'text'),
 				'command': '.uno:ChangeAlignment',
-				'icon': 'lc_fontworkalignmentfloater.svg'
+				'icon': 'lc_fontworkalignmentfloater.svg',
+				'accessibility': { focusBack: true, combination: 'CA', de: null },
 			}
         ];
 		return this.getTabPage(formulaTabName, content);

@@ -75,18 +75,26 @@ class Socket {
 		this.socket = undefined;
 		this.traceEvents = new TraceEvents(this);
 
-		if (window.Worker && !(window as any).ThisIsAMobileApp) {
+		if (
+			window.Worker &&
+			(!(window as any).ThisIsAMobileApp || (window as any).mode.isCODesktop())
+		) {
 			window.app.console.info('Creating TaskWorkers');
 			for (let i = 0; i < 4; ++i) {
-				this.workers.push(
-					new Worker(app.LOUtil.getURL('/src/app/TaskWorker.js')),
-				);
-				this.workers[i].addEventListener('message', (e: any) =>
-					this.onWorkerMessage(e),
-				);
-				this.workers[i].addEventListener('error', (e: any) =>
-					this.onWorkerError(e),
-				);
+				try {
+					this.workers.push(
+						new Worker(app.LOUtil.getURL('/src/app/TaskWorker.js')),
+					);
+					this.workers[i].addEventListener('message', (e: any) =>
+						this.onWorkerMessage(e),
+					);
+					this.workers[i].addEventListener('error', (e: any) =>
+						this.onWorkerError(e),
+					);
+				} catch (e) {
+					this.onWorkerError(e);
+					break;
+				}
 			}
 		}
 	}
@@ -226,10 +234,18 @@ class Socket {
 	}
 
 	private getWebSocketBaseURI(map: MapInterface): string {
-		return window.makeWsUrlWopiSrc(
-			'/cool/',
-			map.options.doc + '?' + $.param(map.options.docParams),
-		);
+		if (window.enableExperimentalFeatures) {
+			// Use the new Cool WS URL.
+			return window.makeWopiCoolWsUrl(
+				window.makeWsUrl('/cool'),
+				$.param(map.options.docParams),
+			);
+		} else {
+			return window.makeWsUrlWopiSrc(
+				'/cool/',
+				map.options.doc + '?' + $.param(map.options.docParams),
+			);
+		}
 	}
 
 	public connect(socket: SockInterface): void {
@@ -602,7 +618,7 @@ class Socket {
 			this._map._debug.logIncomingMessages;
 		if (!logMessage) return;
 
-		if (window.ThisIsTheGtkApp) window.postMobileDebug(type + ' ' + msg);
+		if (window.ThisIsTheQtApp) window.postMobileDebug(type + ' ' + msg);
 
 		const debugOn = this._map._debug.debugOn;
 
@@ -610,7 +626,7 @@ class Socket {
 			this._map._debug.setOverlayMessage('postMessage', type + ': ' + msg);
 		}
 
-		if (!debugOn && msg.length > 256)
+		if (!debugOn && !window.L.Browser.cypressTest && msg.length > 256)
 			// for reasonable performance.
 			msg =
 				msg.substring(0, 256) + '<truncated ' + (msg.length - 256) + 'chars>';
@@ -1219,7 +1235,8 @@ class Socket {
 			(window.ThisIsTheiOSApp ||
 				window.ThisIsTheWindowsApp ||
 				window.ThisIsTheMacOSApp ||
-				window.ThisIsTheEmscriptenApp) &&
+				window.ThisIsTheEmscriptenApp ||
+				window.ThisIsTheQtApp) &&
 			typeof e.data === 'string'
 		) {
 			// Another fix for issue #5843 limit splitting on the first newline
@@ -1312,7 +1329,6 @@ class Socket {
 		// imageElement.onerror expects a different type of handler according to tsc.
 		// (event: Event | string, source?: string, lineno?: number, colno?: number, error?: Error): any;
 		// So use addEventListener() for 'error' event.
-		imageElement.onerror;
 		imageElement.addEventListener(
 			'error',
 			function (this: Socket, err: ErrorEvent) {
@@ -1561,6 +1577,10 @@ class Socket {
 				// edit.
 				app.setPermission('edit');
 				this.close();
+				if (window.ThisIsTheQtApp || window.ThisIsTheWindowsApp) {
+					window.postMobileMessage('loaddocument url=' + this._map.options.doc);
+					this.socket?.onopen(new Event('open'));
+				}
 				this._map.loadDocument();
 				this._map.sendInitUNOCommands();
 				Util.ensureValue(command.filename);
@@ -1733,6 +1753,11 @@ class Socket {
 
 		if (this._map._docLayer) {
 			this._map.setPermission(app.file.permission);
+		}
+
+		// Store the view mode extensions list from server configuration
+		if (json.viewModeExtensions) {
+			app.file.viewModeExtensions = json.viewModeExtensions;
 		}
 
 		app.setCommentEditingPermission(json.editComment); // May be allowed even in readonly mode.

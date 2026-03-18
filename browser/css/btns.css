@@ -70,6 +70,17 @@
 	background-color: var(--color-background-tabs-group);
 }
 
+@keyframes viewmode-attention {
+	0%, 100% { translate: 0; }
+	30% { translate: -2px; }
+	60% { translate: 1px; }
+	80% { translate: -0.5px; }
+}
+
+#viewModeDropdown.attention .unotoolbutton {
+	animation: viewmode-attention 200ms cubic-bezier(0.2, 0, 0, 1) 2;
+}
+
 /* toolbuttons non selected hover */
 .hasnotebookbar .ui-content.unotoolbutton.has-label:hover,
 .hasnotebookbar .ui-content.unotoolbutton.inline:hover,
@@ -128,6 +139,11 @@
 /*limit icon to button height*/
 button.jsdialog img {
 	max-height: 100%;
+}
+
+button.jsdialog[disabled] img {
+	filter: grayscale(100%);
+	opacity: 0.5;
 }
 
 .annotation-btns-container {

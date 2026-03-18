@@ -1130,7 +1130,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			this._map.fire('versionbar', obj);
 		}
 		else if (textMsg.startsWith('lockaccessibilityon')) {
-			// a11y forced on by DocumentBroker, from view settings overrides.
+			// a11y forced on by DocumentBroker, from interface settings overrides.
 			this._map.lockAccessibilityOn();
 		}
 		else if (textMsg.startsWith('a11y')) {
@@ -1792,6 +1792,13 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 
 		// Only for reference equality comparison.
 		this._lastVisibleCursorRef = app.file.textCursor.rectangle.clone();
+
+		// Normally we don't need to refresh the ruler offset.
+		// But in multi page view, user may have clicked at the page next to the current one.
+		// In that case, we need to fix offset again (if required - it checks values before changing offset).
+		const layout = app.activeDocument ? (app.activeDocument.activeLayout ?  app.activeDocument.activeLayout.type : "") : "";
+		if (layout === 'ViewLayoutMultiPage' && app.UI.horizontalRuler)
+			app.UI.horizontalRuler.fixOffset();
 	},
 
 	_isHyperlinkChanged: function(hyperlink)
@@ -2116,7 +2123,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			// when json.commandName is '.uno:RowColSelCount'.
 			if (json.commandName && json.state !== undefined) {
 				this._map.fire('commandstatechanged', json);
-				if (window.ThisIsTheMacOSApp) {
+				if (window.ThisIsTheMacOSApp || window.ThisIsTheQtApp) {
 					window.postMobileMessage('COMMANDSTATECHANGED ' + JSON.stringify(json));
 				}
 			}
@@ -2130,7 +2137,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			var state = index !== -1 ? textMsg.substr(index + 1) : '';
 			const json = {commandName : commandName, state : state};
 			this._map.fire('commandstatechanged', json);
-			if (window.ThisIsTheMacOSApp) {
+			if (window.ThisIsTheMacOSApp || window.ThisIsTheQtApp) {
 				window.postMobileMessage('COMMANDSTATECHANGED ' + JSON.stringify(json));
 			}
 		}
@@ -2150,6 +2157,9 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 
 		this._map.hideBusy();
 		this._map.fire('commandresult', {commandName: commandName, success: success, result: obj.result});
+		if (window.ThisIsTheMacOSApp || window.ThisIsTheQtApp) {
+			window.postMobileMessage('COMMANDRESULT ' + textMsg);
+		}
 
 		if (this._map.CallPythonScriptSource != null) {
 			this._map.CallPythonScriptSource.postMessage(JSON.stringify({'MessageId': 'CallPythonScript-Result',
@@ -3165,8 +3175,10 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			return;
 		}
 
-		if (this.isImpress() && !maxZoom)
-			maxZoom = 10;
+		if (!maxZoom) {
+			if (this.isImpress()) maxZoom = 10;
+			else if (this.isWriter()) maxZoom = 13;
+		}
 
 		if (this._invalidateZoomFirstFit) {
 			recalcFirstFit = true;
@@ -3182,6 +3194,13 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		oldSize.x *= app.dpiScale;
 		oldSize.y *= app.dpiScale;
 
+		let bringCommentsIntoView = false;
+		if (this.isWriter() && app.activeDocument.partHasComments && (recalcFirstFit || !this._includedCommentsInFirstFit)) {
+			bringCommentsIntoView = true;
+			this._includedCommentsInFirstFit = true;
+			this._firstFitDone = false;
+		}
+
 		// `recalcFirstFit` is used to recalculate/reset the zoom levels to the
 		// maximum possible zoom level based on the window (canvas) size.
 		if (recalcFirstFit)
@@ -3193,7 +3212,11 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		if (this._firstFitDone && newSize.x - oldSize.x === 0)
 			return;
 
-		var ratio = newSize.x / app.activeDocument.fileSize.pX;
+		const commentWidth = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).sectionProperties.commentWidth;
+		let documentWidth = app.activeDocument.fileSize.pX;
+		if (bringCommentsIntoView) documentWidth += commentWidth;
+
+		var ratio = newSize.x / documentWidth;
 		var zoom = this._map.getScaleZoom(ratio);
 
 		if (maxZoom)
@@ -3713,6 +3736,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		 * UI code which triggers them.
 		 */
 		this._invalidateZoomFirstFit = false;
+		this._includedCommentsInFirstFit = false;
 
 		this._referencesAll = [];
 

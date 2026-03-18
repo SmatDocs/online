@@ -1024,7 +1024,7 @@ bool SocketPoll::insertNewUnixSocket(
 
 #else
 
-void SocketPoll::insertNewFakeSocket(
+bool SocketPoll::insertNewFakeSocket(
     int peerSocket,
     const std::shared_ptr<ProtocolHandlerInterface>& websocketHandler)
 {
@@ -1046,6 +1046,7 @@ void SocketPoll::insertNewFakeSocket(
             LOG_TRC("Sending 'hello' instead of HTTP GET for now");
             socket->send("hello");
             insertNewSocket(socket);
+            return true;
         }
         else
         {
@@ -1053,6 +1054,7 @@ void SocketPoll::insertNewFakeSocket(
             fakeSocketClose(fd);
         }
     }
+    return false;
 }
 #endif
 
@@ -1151,6 +1153,10 @@ bool StreamSocket::send(const http::Response& response)
     return false;
 }
 
+#if !(defined QTAPP || defined _WIN32 || defined(MACOS))
+// CODA-Q/-W/-M build fine without HttpRequest.cpp, which is where the below writeData() is, and also
+// without this function.
+
 bool StreamSocket::send(http::Request& request)
 {
     if (request.writeData(_outBuffer, getSendBufferCapacity()))
@@ -1162,6 +1168,7 @@ bool StreamSocket::send(http::Request& request)
     asyncShutdown();
     return false;
 }
+#endif
 
 bool StreamSocket::sendAndShutdown(http::Response& response)
 {

@@ -24,6 +24,7 @@
 #include <common/ConfigUtil.hpp>
 #include <common/HexUtil.hpp>
 #include <common/JsonUtil.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Log.hpp>
 #include <common/Protocol.hpp>
 #include <common/Session.hpp>
@@ -1170,7 +1171,7 @@ bool ClientSession::_handleInput(const char *buffer, int length)
         // call onTileProcessed on each tileID of tileid1, tileid2, ...
         auto lambda = [this](size_t /*nIndex*/, const std::string_view token)
         {
-            const auto [wireId, res] = Util::i32FromString(token);
+            const auto [wireId, res] = NumUtil::i32FromString(token);
             if (!res)
                 LOG_WRN("Invalid syntax for tileprocessed wireid '" << token << "'");
             onTileProcessed(wireId);
@@ -1535,18 +1536,19 @@ void ClientSession::uploadBrowserSettingsToWopiHost()
     _browserSettingsJSON->stringify(jsonStream, 2);
     httpRequest.setBody(jsonStream.str(), "application/json; charset=utf-8");
 
+    const std::string logPfx = getLogPrefix();
     http::Session::FinishedCallback finishedCallback =
-        [this, uriAnonym](const std::shared_ptr<http::Session>& wopiSession)
+        [uriAnonym, logPfx](const std::shared_ptr<http::Session>& wopiSession)
     {
         const std::shared_ptr<const http::Response> httpResponse = wopiSession->response();
         const http::StatusLine statusLine = httpResponse->statusLine();
         if (statusLine.statusCode() != http::StatusCode::OK)
         {
-            LOG_ERR("Failed to upload updated browsersetting to wopiHost["
+            LOG_ERR_S(logPfx << "Failed to upload updated browsersetting to wopiHost["
                     << uriAnonym << "] with status[" << statusLine.reasonPhrase() << ']');
             return;
         }
-        LOG_TRC("Successfully uploaded browsersetting to wopiHost");
+        LOG_TRC_S(logPfx << "Successfully uploaded browsersetting to wopiHost");
     };
 
     LOG_DBG("Uploading browsersetting json [" << jsonStream.str() << "] to wopiHost[" << uriAnonym
@@ -1576,8 +1578,9 @@ void ClientSession::uploadViewSettingsToWopiHost()
         _viewSettingsJSON->stringify(jsonStream, 2);
         httpRequest.setBody(jsonStream.str(), "application/json; charset=utf-8");
 
+        const std::string logPfx = getLogPrefix();
         http::Session::FinishedCallback finishedCallback =
-            [this, uriAnonym](const std::shared_ptr<http::Session>& wopiSession)
+            [uriAnonym, logPfx](const std::shared_ptr<http::Session>& wopiSession)
         {
             wopiSession->asyncShutdown();
 
@@ -1585,11 +1588,11 @@ void ClientSession::uploadViewSettingsToWopiHost()
             const http::StatusLine statusLine = httpResponse->statusLine();
             if (statusLine.statusCode() != http::StatusCode::OK)
             {
-                LOG_ERR("Failed to upload updated viewsetting to wopiHost["
+                LOG_ERR_S(logPfx << "Failed to upload updated viewsetting to wopiHost["
                         << uriAnonym << "] with status[" << statusLine.reasonPhrase() << ']');
                 return;
             }
-            LOG_TRC("Successfully uploaded viewsetting to wopiHost");
+            LOG_TRC_S(logPfx << "Successfully uploaded viewsetting to wopiHost");
         };
 
         LOG_DBG("Uploading viewsetting json [" << jsonStream.str() << "] to wopiHost[" << uriAnonym
@@ -2121,6 +2124,12 @@ void ClientSession::sendFileMode(const bool readOnly, const bool editComments, b
     result += editComments ? "true": "false";
     result += ", \"manageRedlines\": ";
     result += manageRedlines ? "true" : "false";
+
+    // Add the view mode extensions list from configuration
+    result += ", \"viewModeExtensions\": \"";
+    result += COOLWSD::ViewModeFileExtensions;
+    result += "\"";
+
     result += "}";
     sendTextFrame(result);
 }
@@ -2403,14 +2412,25 @@ bool ClientSession::handleKitToClientMessage(const std::shared_ptr<Message>& pay
             {
                 Poco::JSON::Parser parser;
                 const Poco::Dynamic::Var parsedJSON = parser.parse(stringJSON);
-                const auto& object = parsedJSON.extract<Poco::JSON::Object::Ptr>();
+                auto object = parsedJSON.extract<Poco::JSON::Object::Ptr>();
                 if (object->get("commandName").toString() == ".uno:Save")
                 {
+                    // Capture isNextSaveAutosave flag before calling handleSaveResponse as it will reset the value!
+                    // Add it to the JSON so clients can differentiate between manual saves and autosaves
+                    const bool isAutosave = docBroker->isNextSaveAutosave();
+                    object->set("isAutosave", isAutosave);
+
                     // Save to Storage and log result.
                     docBroker->handleSaveResponse(client_from_this(), object);
 
                     if (!isCloseFrame())
-                        forwardToClient(payload);
+                    {
+                        // create new payload with the updated JSON
+                        std::ostringstream oss;
+                        object->stringify(oss);
+                        const std::string updatedMessage = "unocommandresult: " + oss.str();
+                        forwardToClient(std::make_shared<Message>(updatedMessage, Message::Dir::Out));
+                    }
 
                     return true;
                 }
@@ -2446,6 +2466,13 @@ bool ClientSession::handleKitToClientMessage(const std::shared_ptr<Message>& pay
                     {
                         forwardToClient(payload);
                     }
+                    return false;
+                }
+
+                // Handle all other load failures in convert-to mode.
+                if (_isConvertTo)
+                {
+                    abortConversion(docBroker, saveAsSocket, std::move(errorKind));
                     return false;
                 }
             }
@@ -2490,6 +2517,14 @@ bool ClientSession::handleKitToClientMessage(const std::shared_ptr<Message>& pay
         return handleSaveAs(payload, docBroker, saveAsSocket);
     }
 
+#elif defined(QTAPP) || defined(_WIN32)
+    else if (tokens.size() == 3 && tokens.equals(0, "saveas:"))
+    {
+        // For mobile/desktop apps, the file has been saved directly by LOKit
+        // Forward the saveas message to the client - Socket.js _renameOrSaveAsCallback()
+        // will handle it and trigger load of the new document with a new FakeSocket.
+        return forwardToClient(payload);
+    }
 #endif
     else if (tokens.size() == 2 && tokens.equals(0, "statechanged:"))
     {
@@ -2680,8 +2715,14 @@ bool ClientSession::handleKitToClientMessage(const std::shared_ptr<Message>& pay
 
                         const std::string mediaUrl =
                             Uri::encode(createPublicURI("media", id, /*encode=*/false), "&");
+                        const std::string mediaVTT =
+                            Uri::encode(createPublicURI("mediavtt", id, /*encode=*/false), "&");
                         object->set("url", mediaUrl); // Replace the url with the public one.
                         object->set("mimeType", "video/mp4"); //FIXME: get this from the source json
+                        if (!mediaVTT.empty())
+                        {
+                            object->set("srt", mediaVTT);
+                        }
 
                         std::ostringstream mediaStr;
                         object->stringify(mediaStr);
@@ -3092,6 +3133,37 @@ ClientSession::handleOpenDocKitToClientMessage(const std::shared_ptr<Message>& p
     return std::nullopt;
 }
 
+/// Map a file extension to a document type for password-protected icons.
+static std::string getDocTypeFromExtension(const std::string& ext)
+{
+    static const std::unordered_map<std::string, std::string> extToType = {
+        // Writer
+        { "odt", "writer" }, { "fodt", "writer" }, { "doc", "writer" }, { "docx", "writer" },
+        { "docm", "writer" }, { "dot", "writer" }, { "dotx", "writer" }, { "dotm", "writer" },
+        { "rtf", "writer" }, { "txt", "writer" }, { "wpd", "writer" }, { "wps", "writer" },
+        { "sxw", "writer" }, { "stw", "writer" }, { "ott", "writer" }, { "otm", "writer" },
+        { "hwp", "writer" }, { "wri", "writer" }, { "abw", "writer" }, { "pages", "writer" },
+        // Calc
+        { "ods", "calc" }, { "fods", "calc" }, { "xls", "calc" }, { "xlsx", "calc" },
+        { "xlsm", "calc" }, { "xlsb", "calc" }, { "xla", "calc" }, { "xltx", "calc" },
+        { "xltm", "calc" }, { "csv", "calc" }, { "tsv", "calc" }, { "sxc", "calc" },
+        { "stc", "calc" }, { "ots", "calc" }, { "dbf", "calc" }, { "numbers", "calc" },
+        // Impress
+        { "odp", "impress" }, { "fodp", "impress" }, { "ppt", "impress" }, { "pptx", "impress" },
+        { "pptm", "impress" }, { "pot", "impress" }, { "potx", "impress" }, { "potm", "impress" },
+        { "ppsx", "impress" }, { "sxi", "impress" }, { "sti", "impress" }, { "otp", "impress" },
+        { "key", "impress" },
+        // Draw
+        { "odg", "draw" }, { "fodg", "draw" }, { "vsd", "draw" }, { "vss", "draw" },
+        { "pub", "draw" }, { "sxd", "draw" }, { "std", "draw" }, { "otg", "draw" },
+        { "cdr", "draw" }, { "wpg", "draw" }, { "cgm", "draw" }, { "emf", "draw" },
+        { "wmf", "draw" },
+    };
+
+    auto it = extToType.find(ext);
+    return (it != extToType.end()) ? it->second : "writer";
+}
+
 void ClientSession::abortConversion(const std::shared_ptr<DocumentBroker>& docBroker,
                                     const std::shared_ptr<StreamSocket>& saveAsSocket,
                                     std::string errorKind)
@@ -3101,9 +3173,40 @@ void ClientSession::abortConversion(const std::shared_ptr<DocumentBroker>& docBr
     LOG_DBG("Conversion request of [" << docBroker->getDocKey() << "] failed: " << errorKind);
     if (!saveAsSocket)
         LOG_ERR("Error saveas socket missing in isConvertTo mode");
+    else if (errorKind == "passwordrequired:to-view" ||
+             errorKind == "passwordrequired:to-modify")
+    {
+        // Return a locked document icon as the thumbnail.
+        const std::string docPath = docBroker->getPublicUri().getPath();
+        const auto dotPos = docPath.find_last_of('.');
+        const std::string ext = (dotPos != std::string::npos)
+                                    ? docPath.substr(dotPos + 1)
+                                    : std::string();
+        const std::string docType = getDocTypeFromExtension(ext);
+
+        const std::string iconPath = COOLWSD::FileServerRoot +
+            "/browser/dist/images/password-protected-" + docType + ".png";
+
+        std::vector<char> iconData;
+        if (FileUtil::readFile(iconPath, iconData) > 0)
+        {
+            http::Response response(http::StatusCode::OK);
+            FileServerRequestHandler::hstsHeaders(response);
+            response.setBody(std::string(iconData.data(), iconData.size()), "image/png");
+            response.set("X-ERROR-KIND", std::move(errorKind));
+            saveAsSocket->sendAndShutdown(response);
+        }
+        else
+        {
+            LOG_ERR("Failed to read locked document icon: " << iconPath);
+            http::Response response(http::StatusCode::Unauthorized);
+            response.set("X-ERROR-KIND", std::move(errorKind));
+            saveAsSocket->sendAndShutdown(response);
+        }
+    }
     else
     {
-        http::Response response(http::StatusCode::Unauthorized);
+        http::Response response(http::StatusCode::InternalServerError);
         response.set("X-ERROR-KIND", std::move(errorKind));
         saveAsSocket->sendAndShutdown(response);
     }
@@ -3156,11 +3259,9 @@ bool ClientSession::handleSaveAs(const std::shared_ptr<Message>& payload,
     // Prepend the jail path in the normal (non-nocaps) case
     if (resultURL.getScheme() == "file" && !COOLWSD::NoCapsForKit)
     {
-        std::string relative;
-        if (_isConvertTo || isExportAs)
-            relative = Uri::decode(resultURL.getPath());
-        else
-            relative = resultURL.getPath();
+        // getPath() already returns the decoded path (Poco::URI decodes
+        // percent-encoded sequences internally), so no extra Uri::decode().
+        std::string relative = resultURL.getPath();
 
         if (relative.size() > 0 && relative[0] == '/')
             relative = relative.substr(1);
@@ -3170,18 +3271,11 @@ bool ClientSession::handleSaveAs(const std::shared_ptr<Message>& payload,
             COOLWSD::EnableMountNamespaces, docBroker->getJailRoot(), std::move(relative)));
         if (Poco::File(path).exists())
         {
-            if (!_isConvertTo)
-            {
-                // Encode path for special characters (i.e '%') since Poco::URI::setPath implicitly decodes the input param
-                std::string encodedPath;
-                Poco::URI::encode(path.toString(), "", encodedPath);
+            // Encode path for special characters (i.e '%') since Poco::URI::setPath implicitly decodes the input param
+            std::string encodedPath;
+            Poco::URI::encode(path.toString(), "", encodedPath);
 
-                resultURL.setPath(encodedPath);
-            }
-            else
-            {
-                resultURL.setPath(path.toString());
-            }
+            resultURL.setPath(encodedPath);
         }
         else
         {

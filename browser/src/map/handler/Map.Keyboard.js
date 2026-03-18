@@ -7,7 +7,7 @@
  * at TextInput.
  */
 
-/* global app UNOKey TileManager */
+/* global _ app UNOKey TileManager */
 
 window.L.Map.mergeOptions({
 	keyboard: true,
@@ -642,6 +642,19 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 			else if (key in this._zoomKeys) {
 				map.setZoom(map.getZoom() + (ev.shiftKey ? 3 : 1) * this._zoomKeys[key], null, true /* animate? */);
 			}
+			else if (ev.key && ev.key.length === 1 && !ev.ctrlKey && !ev.altKey && !map.isEditMode()) {
+				let permissionMode = map.uiManager && map.uiManager.permissionViewMode;
+				let viewModeBtn = permissionMode && (permissionMode.viewModeDropdown || permissionMode.viewModeContainer);
+				if (viewModeBtn && map.uiManager && map.uiManager.showTimedTooltip) {
+					map.uiManager.showTimedTooltip(viewModeBtn, _('You are currently in View mode'), 5000);
+					if (!viewModeBtn.classList.contains('attention')) {
+						viewModeBtn.classList.add('attention');
+						viewModeBtn.addEventListener('animationend', function() {
+							viewModeBtn.classList.remove('attention');
+						}, { once: true });
+					}
+				}
+			}
 		}
 
 		window.L.DomEvent.stopPropagation(ev);
@@ -802,7 +815,11 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 			return false;
 		}
 		/* Without specifying the key type, the messages are sent twice (both keydown/up) */
-		if (e.type === 'keydown' && window.ThisIsAMobileApp) {
+
+		// Don't do this in CODA-W, there it is the sending of
+		// the PASTE message in document,onpaste() in
+		// Clipboard.js that does the paste.
+		if (e.type === 'keydown' && window.ThisIsAMobileApp && !window.ThisIsTheWindowsApp && !window.ThisIsTheQtApp) {
 			if (this.keyCodes.C.includes(e.keyCode)) {
 				app.socket.sendMessage('uno .uno:Copy');
 				return true;

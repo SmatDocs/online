@@ -11,7 +11,10 @@
 
 #pragma once
 
+#include <typeinfo>
+
 #include <Poco/Util/XMLConfiguration.h>
+
 #include <map>
 #include <string>
 
@@ -31,10 +34,22 @@
 
 #if MOBILEAPP
 
+#include <future>
+
 #include <ClientSession.hpp>
 #include <DocumentBroker.hpp>
 
 #endif
+
+#ifdef IOS
+void runKitLoopInAThread();
+#endif
+
+namespace lok
+{
+class Document;
+class Office;
+}
 
 void lokit_main(
 #if !MOBILEAPP
@@ -46,10 +61,6 @@ void lokit_main(
     int docBrokerSocket, const std::string& userInterface,
 #endif
     std::size_t numericIdentifier);
-
-#ifdef IOS
-void runKitLoopInAThread();
-#endif
 
 bool globalPreinit(const std::string& loTemplate);
 /// Wrapper around private Document::ViewCallback().
@@ -169,7 +180,16 @@ public:
         ~ReEntrancyGuard() { _count--; }
     };
 #endif
+
+    /// Handle the poll from the unipoll callback.
     int kitPoll(int timeoutMicroS);
+
+    /// Handle the wake up from the unipoll callback.
+    void kitWakeup();
+
+    /// Handle the 'has any input?' unipoll callback.
+    bool kitHasAnyInput(int mostUrgentPriority);
+
     void setDocument(std::shared_ptr<Document> document) { _document = std::move(document); }
     const std::shared_ptr<Document>& getDocument() const { return _document; }
 
@@ -177,14 +197,18 @@ public:
     static bool pushToMainThread(LibreOfficeKitCallback callback, int type, const char* p,
                                  void* data);
 
-#ifdef IOS
+#if defined(IOS) || defined(QTAPP) || defined(MACOS) || defined(_WIN32)
     static std::mutex KSPollsMutex;
     static std::condition_variable KSPollsCV;
     static std::vector<std::weak_ptr<KitSocketPoll>> KSPolls;
 
-    std::mutex terminationMutex;
-    std::condition_variable terminationCV;
-    bool terminationFlag;
+    struct TerminationData
+    {
+        std::mutex mutex;
+        std::condition_variable cv;
+        bool flag;
+    };
+    std::shared_ptr<TerminationData> termination;
 #endif
 };
 
@@ -208,7 +232,7 @@ public:
     const std::string& getUrl() const { return _url; }
 
     /// Post the message - in the unipoll world we're in the right thread anyway
-    bool postMessage(const char* data, int size, WSOpCode code) const;
+    bool postMessage(const std::string_view data, WSOpCode code) const;
 
     bool createSession(const std::string& sessionId);
 
@@ -221,12 +245,9 @@ public:
 
     void renderTiles(TileCombined& tileCombined);
 
-    bool sendTextFrame(const std::string& message) const
-    {
-        return sendFrame(message.data(), message.size());
-    }
+    bool sendTextFrame(const std::string_view message) const { return sendFrame(message); }
 
-    bool sendFrame(const char* buffer, int length, WSOpCode opCode = WSOpCode::Text) const;
+    bool sendFrame(std::string_view data, WSOpCode opCode = WSOpCode::Text) const;
 
     void alertNotAsync() const
     {
@@ -270,7 +291,7 @@ private:
 
     /// Calculate tile rendering priority from a TileDesc
     Priority getTilePriority(const TileDesc& desc) const override;
-    virtual std::vector<ViewIdInactivity> getViewIdsByInactivity() const override;
+    std::vector<ViewIdInactivity> getViewIdsByInactivity() const override;
 
 public:
     /// Request loading a document, or a new view, if one exists,

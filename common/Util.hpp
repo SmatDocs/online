@@ -11,15 +11,16 @@
 
 #pragma once
 
-#include <Poco/Net/HTTPRequest.h>
+#include <common/StringVector.hpp>
+
 #define LOK_USE_UNSTABLE_API
 #include <LibreOfficeKit/LibreOfficeKitEnums.h>
 
-#include <common/StringVector.hpp>
+#include <typeinfo>
 
 #include <Poco/File.h>
+#include <Poco/Net/HTTPRequest.h>
 #include <Poco/Path.h>
-#include <regex>
 
 #include <algorithm>
 #include <cassert>
@@ -483,7 +484,7 @@ namespace Util
     }
 
     /// Trim spaces from both left and right and copy. Just spaces.
-    inline std::string trimmed(const std::string& s)
+    inline std::string_view trimmed(const std::string_view s)
     {
         const size_t first = s.find_first_not_of(' ');
         const size_t last = s.find_last_not_of(' ');
@@ -502,10 +503,16 @@ namespace Util
             return s.substr(0, last + 1);
         }
 
-        return std::string();
+        return std::string_view();
     }
 
     /// Trim spaces from left and right. Just spaces.
+    inline std::string trimmed(const std::string& s)
+    {
+        return std::string(trimmed(std::string_view(s)));
+    }
+
+    /// Trim spaces from left and right. Just spaces. FIXME: REMOVE!
     inline std::string trimmed(const char* s)
     {
         return trimmed(std::string(s));
@@ -1221,47 +1228,6 @@ int main(int argc, char**argv)
     // If OS is not mobile, it must be Linux.
     std::string getLinuxVersion();
 
-    /// Convert a string to 32-bit signed int.
-    /// Returns the parsed value and a boolean indicating success or failure.
-    /// const auto [number, success] = Util::i32FromString(portString);
-    inline std::pair<std::int32_t, bool> i32FromString(const std::string_view input)
-    {
-        const char* str = input.data();
-        char* endptr = nullptr;
-        errno = 0;
-        const auto value = std::strtol(str, &endptr, 10);
-        return std::make_pair(value, endptr > str && errno != ERANGE);
-    }
-
-    /// Convert a string to 32-bit signed int. On failure, returns the default
-    /// value, and sets the bool to false (to signify that parsing had failed).
-    inline std::pair<std::int32_t, bool> i32FromString(const std::string_view input,
-                                                       const std::int32_t def)
-    {
-        const auto pair = i32FromString(input);
-        return pair.second ? pair : std::make_pair(def, false);
-    }
-
-    /// Convert a string to 64-bit unsigned int.
-    /// Returns the parsed value and a boolean indicating success or failure.
-    inline std::pair<std::uint64_t, bool> u64FromString(const std::string_view input)
-    {
-        const char* str = input.data();
-        char* endptr = nullptr;
-        errno = 0;
-        const auto value = std::strtoul(str, &endptr, 10);
-        return std::make_pair(value, endptr > str && errno != ERANGE);
-    }
-
-    /// Convert a string to 64-bit unsigned int. On failure, returns the default
-    /// value, and sets the bool to false (to signify that parsing had failed).
-    inline std::pair<std::uint64_t, bool> u64FromString(const std::string_view input,
-                                                        const std::uint64_t def)
-    {
-        const auto pair = u64FromString(input);
-        return pair.second ? pair : std::make_pair(def, false);
-    }
-
     /// Converts and returns the argument to lower-case.
     inline std::string toLower(std::string s)
     {
@@ -1393,13 +1359,6 @@ int main(int argc, char**argv)
 #define ASSERT_CORRECT_THREAD_OWNER(OWNER) Util::assertCorrectThread(OWNER, __FILE__, __LINE__)
 #endif
 
-    /**
-     * Similar to std::atoi() but does not require p to be null-terminated.
-     *
-     * Returns std::numeric_limits<int>::min/max() if the result would overflow.
-     */
-    int safe_atoi(const char* p, int len);
-
     /// Sleep based on count of seconds in env. var
     void sleepFromEnvIfSet(const char *domain, const char *envVar);
 
@@ -1421,14 +1380,13 @@ int main(int argc, char**argv)
 
 #define N_ELEMENTS(arr)     (sizeof(Util::n_array_size(arr)))
 
-    // Wrap localtime_r() and gmtime_t() which are not portable
-    std::tm *time_t_to_localtime(std::time_t t, std::tm& tm);
+    // Wrap gmtime_r() which is not portable
     std::tm *time_t_to_gmtime(std::time_t t, std::tm& tm);
 
     /// Base-64 encode the given input.
     std::string base64Encode(std::string_view input);
     /// Base-64 encode the given input, stripping CRLF endings, if any.
-    std::string base64EncodeRemovingNewLines(const std::string_view& input);
+    std::string base64EncodeRemovingNewLines(std::string_view input);
     inline std::string base64EncodeRemovingNewLines(const std::vector<unsigned char>& input)
     {
         return base64EncodeRemovingNewLines(

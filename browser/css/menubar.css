@@ -42,10 +42,20 @@
 .document-title {
 	white-space: nowrap;
 	display: flex;
-	align-items: flex-start;
+	align-items: baseline;
 	justify-content: center;
-	flex-direction: column;
+	flex-direction: row;
 	flex: 1 1 auto;
+	gap: 4px;
+}
+
+.document-title:focus-within > label[for='document-name-input'] {
+	clip: unset;
+	height: auto;
+	overflow: visible;
+	position: static;
+	width: auto;
+	color: var(--color-text-lighter);
 }
 
 .readonly .document-title {
@@ -171,9 +181,7 @@ nav.hasnotebookbar [id^='save'].saved::after {
 	scrollbar-width: none;
 	-ms-scrollbar: none;
 }
-.main-nav.hasnotebookbar::-webkit-scrollbar {
-	height: 0;
-}
+
 .main-nav.hasnotebookbar:not(.readonly) {
 	/* Make the entire tab/title strip use the doc-type color */
 	background: rgb(var(--doc-type));
@@ -183,10 +191,12 @@ nav.hasnotebookbar [id^='save'].saved::after {
 	padding-inline-start: 5px;
 }
 
-/* Ensure the titlebar region blends into the same strip color */
-.main-nav.hasnotebookbar #document-titlebar {
-	background: transparent;
-	color: #fff;
+@media (max-width: 480px) {
+
+	.main-nav.hasnotebookbar {
+		scrollbar-width: unset;
+		-ms-scrollbar: unset;
+	}
 }
 
 /* Customizations to sm-simple theme to make it look like LO menu, lo-menu class */

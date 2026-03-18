@@ -403,7 +403,7 @@ class Menubar extends window.L.Control {
 				{uno: '.uno:WordCountDialog'},
 				window.enableAccessibility ?
 					{name: _('Screen Reading'), id: 'togglea11ystate', type: 'action'} : {},
-				{uno: '.uno:AccessibilityCheck'},
+				{uno: '.uno:SidebarDeck.A11yCheckDeck'},
 				{type: 'separator'},
 				{name: _UNO('.uno:AutoFormatMenu', 'text'), type: 'menu', menu: [
 					{uno: '.uno:OnlineAutoFormat'}]},
@@ -584,7 +584,7 @@ class Menubar extends window.L.Control {
 				{name: _('Fullscreen presentation'), id: 'fullscreen-presentation', type: 'action'},
 				{name: _('Present current slide'), id: 'presentation-currentslide', type: 'action'},
 				{name: _('Present in new window'), id: 'present-in-window', type: 'action'},
-				...(!window.ThisIsAMobileApp ? [
+				...((!window.ThisIsAMobileApp || window.mode.isCODesktop()) ? [
 					{name: _('Presenter Console'), id: 'presentation-in-console', type: 'action'}
 				] : [])
 			]
@@ -1424,8 +1424,8 @@ class Menubar extends window.L.Control {
 		commandStates: {},
 
 		// Only these menu options will be visible in readonly mode
-		allowedReadonlyMenus: ['file', 'downloadas', 'view', 'insert', 'slide', 'help', 'print'],
-		allowedRedlineManagementMenus: ['editmenu', 'changesmenu', ],
+		allowedReadonlyMenus: window.mode.isCODesktop() ? ['file', 'view', 'slide', 'help'] : ['file', 'downloadas', 'view', 'insert', 'slide', 'help', 'print'],
+		allowedRedlineManagementMenus: window.mode.isCODesktop() ? [] : ['editmenu', 'changesmenu', ],
 
 		math: ['.uno:ChangeFont', '.uno:ChangeFontSize', '.uno:ChangeDistance', '.uno:ChangeAlignment'],
 
@@ -1864,6 +1864,9 @@ class Menubar extends window.L.Control {
 		if (!$(menu).hasClass('has-submenu') && ($mainMenuState[0] as HTMLInputElement).checked) {
 			$mainMenuState[0].click();
 		}
+
+		if (menu?.parentElement?.id === 'menu-file' && window.mode.isCODesktop() && app.map.backstageView)
+			app.map.backstageView.toggle();
 	}
 
 	/**
@@ -1948,7 +1951,7 @@ class Menubar extends window.L.Control {
 					} else {
 						$(aItem).removeClass(constChecked);
 					}
-					if (this.options.math.includes(unoCommand) && app.map.context.context !== 'Math') {
+					if (this.options.math.includes(unoCommand) && app.map.context && app.map.context.context !== 'Math') {
 						$(aItem).addClass('disabled');
 					}
 				} else if (type === 'action') { // enable all except fullscreen on windows
@@ -2117,6 +2120,33 @@ class Menubar extends window.L.Control {
 						}
 					}
 				}
+
+				const $menuItems = $(menu).children('li');
+
+				$menuItems.each((index, li) => {
+					const $aItem = $(li).children('a').first();
+					if (!$aItem.hasClass('separator')) return;
+
+					const $prevVisible = $(li).prevAll('li').filter(function() {
+						const $a = $(this).children('a').first();
+						return !$a.hasClass('separator') &&
+							$a.css('display') !== 'none' &&
+							$(this).css('display') !== 'none';
+					}).first();
+
+					const $nextVisible = $(li).nextAll('li').filter(function() {
+						const $a = $(this).children('a').first();
+						return !$a.hasClass('separator') &&
+							$a.css('display') !== 'none' &&
+							$(this).css('display') !== 'none';
+					}).first();
+
+					if ($prevVisible.length === 0 || $nextVisible.length === 0) {
+						$aItem.hide();
+					} else {
+						$aItem.show();
+					}
+				});
 			}
 
 			if (id === 'remotelink') {
@@ -2260,7 +2290,10 @@ class Menubar extends window.L.Control {
 				};
 				app.map.sendUnoCommand('.uno:InsertSignatureLine', args);
 				const finishMessage = _('The signature line can now be moved or resized as needed.');
-				const finishFunc = () => app.map.eSignature.insert();
+				const finishFunc = () => {
+					Util.ensureValue(app.map.eSignature);
+					app.map.eSignature.insert();
+				};
 				app.map.uiManager.showSnackbar(finishMessage, _('Finish electronic signing'), finishFunc, -1);
 			} else {
 				app.map.sendUnoCommand('.uno:InsertSignatureLine');
@@ -2329,7 +2362,8 @@ class Menubar extends window.L.Control {
 		} else if (id === 'about') {
 			this._map.showLOAboutDialog();
 		} else if (id === 'latestupdates' && this._map.welcome) {
-			this._map.welcome.showWelcomeDialog();
+			if (window.mode.isCODesktop()) this._map.welcome.showWelcomeSlideshow();
+			else this._map.welcome.showWelcomeDialog();
 		} else if (id === 'feedback' && this._map.feedback) {
 			this._map.feedback.showFeedbackDialog();
 		} else if (id === 'report-an-issue') {
@@ -2447,12 +2481,17 @@ class Menubar extends window.L.Control {
 
 			if (window.logoURL) {
 				aItem.style.backgroundImage = "url(" + window.logoURL + ")";
+			} else {
+				const docType = this._map.getDocType();
+				const [iconClass, iconTooltip] = app.LOUtil.getDocumentLogoClass(docType);
+				aItem.classList.add(iconClass);
+				aItem.setAttribute('data-cooltip', iconTooltip);
 			}
 
 			if (this._menubarCont != null)
 				this._menubarCont.insertBefore(liItem, this._menubarCont.firstChild);
 
-			var $docLogo = $(aItem);
+			const $docLogo = $(aItem);
 			$docLogo.bind('click', {self: this}, this._createDocument);
 			$docLogo.bind('click', this._createDocument.bind(this));
 		}
@@ -2636,7 +2675,7 @@ class Menubar extends window.L.Control {
 			liItem.setAttribute('role', 'menuitem');
 			if (menu[i].id) {
 				liItem.id = 'menu-' + menu[i].id;
-				if (menu[i].id === 'closedocument' && this._map.isReadOnlyMode()) {
+				if (menu[i].id === 'closedocument' && isReadOnly) {
 					// see corresponding css rule for readonly class usage
 					window.L.DomUtil.addClass(liItem, 'readonly');
 				}

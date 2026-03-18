@@ -1,9 +1,12 @@
-//
-//  codaUITests.swift
-//  codaUITests
-//
-//  Created by Jan Holešovský on 14.10.2024.
-//
+/*
+ * Copyright the Collabora Online contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
 
 import XCTest
 
@@ -29,6 +32,8 @@ final class codaUITests: XCTestCase {
         app.launch()
 
         // Use XCTAssert and related functions to verify your tests produce the correct results.
+        let window = app.windows.element(boundBy: 0)
+        XCTAssertTrue(window.waitForExistence(timeout: 5.0), "Expected main window to exist")
     }
 
     @MainActor

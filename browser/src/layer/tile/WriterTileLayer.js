@@ -87,7 +87,15 @@ window.L.WriterTileLayer = window.L.CanvasTileLayer.extend({
 		}
 	},
 
+	_shouldIgnoreServerPageSync: function () {
+		return !this._map.isEditMode() && !app.file.textCursor.visible;
+	},
+
 	_onSetPartMsg: function (textMsg) {
+		if (this._shouldIgnoreServerPageSync()) {
+			return;
+		}
+
 		var part = parseInt(textMsg.match(/\d+/g)[0]);
 		if (part !== this._currentPage) {
 			this._currentPage = part;
@@ -114,11 +122,19 @@ window.L.WriterTileLayer = window.L.CanvasTileLayer.extend({
 		if (!statusJSON.width || !statusJSON.height || this._documentInfo === textMsg)
 			return;
 
+		if (statusJSON.readonly && !this._documentInfo)
+			this._map.setPermission('readonly');
+
 		var sizeChanged = statusJSON.width !== app.activeDocument.fileSize.x || statusJSON.height !== app.activeDocument.fileSize.y;
 
 		if (statusJSON.viewid !== undefined) {
 			this._viewId = statusJSON.viewid;
 			app.activeDocument.setActiveViewID(this._viewId);
+		}
+
+		if (statusJSON.partHasComments !== undefined &&  statusJSON.partHasComments !== app.activeDocument.partHasComments) {
+			app.activeDocument.partHasComments = statusJSON.partHasComments;
+			this._fitWidthZoom();
 		}
 
 		console.assert(this._viewId >= 0, 'Incorrect viewId received: ' + this._viewId);
@@ -142,9 +158,15 @@ window.L.WriterTileLayer = window.L.CanvasTileLayer.extend({
 			app.activeDocument.activeModes = [mode];
 
 		this._parts = 1;
-		this._currentPage = statusJSON.selectedpart;
+		if (!this._shouldIgnoreServerPageSync()) {
+			this._currentPage = statusJSON.selectedpart;
+		}
 		this._pages = statusJSON.partscount;
 		app.file.writer.pageRectangleList = statusJSON.pagerectangles.slice(); // Copy the array.
+		// Recalculate view layout so view size reflects the new pages.
+		// Needed for ViewLayoutMultiPage where the viewSize setter is a no-op.
+		if (app.activeDocument.activeLayout.type === 'ViewLayoutMultiPage')
+			app.activeDocument.activeLayout.reset();
 		this._map.fire('pagenumberchanged', {
 			currentPage: this._currentPage,
 			pages: this._pages,

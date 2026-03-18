@@ -32,7 +32,8 @@
 		BE74B1CB2D3F963F009786DF /* JsonUtil.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = JsonUtil.hpp; path = ../../../common/JsonUtil.hpp; sourceTree = "<group>"; };
 		BE74B1CC2D3F963F009786DF /* LangUtil.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = LangUtil.hpp; path = ../../../common/LangUtil.hpp; sourceTree = "<group>"; };
 		BE74B1CD2D3F963F009786DF /* Log.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = Log.hpp; path = ../../../common/Log.hpp; sourceTree = "<group>"; };
-		BE74B1CE2D3F963F009786DF /* Log.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = Log.cpp; path = ../../../common/Log.cpp; sourceTree = "<group>"; };
+		BE74B1CE2D3F963F009786DF /* Log-poco.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "Log-poco.cpp"; path = "../../../common/Log-poco.cpp"; sourceTree = "<group>"; };
+		BE74B1CE2D3F963F009786E0 /* Log-common.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "Log-common.cpp"; path = "../../../common/Log-common.cpp"; sourceTree = "<group>"; };
 		BE74B1CF2D3F963F009786DF /* Message.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = Message.hpp; path = ../../../common/Message.hpp; sourceTree = "<group>"; };
 		BE74B1D02D3F963F009786DF /* MobileApp.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = MobileApp.hpp; path = ../../../common/MobileApp.hpp; sourceTree = "<group>"; };
 		BE74B1D12D3F963F009786DF /* MobileApp.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = MobileApp.cpp; path = ../../../common/MobileApp.cpp; sourceTree = "<group>"; };
@@ -210,7 +211,8 @@
 				BE74B1CB2D3F963F009786DF /* JsonUtil.hpp */,
 				BE74B1CC2D3F963F009786DF /* LangUtil.hpp */,
 				BE74B1CD2D3F963F009786DF /* Log.hpp */,
-				BE74B1CE2D3F963F009786DF /* Log.cpp */,
+				BE74B1CE2D3F963F009786DF /* Log-poco.cpp */,
+				BE74B1CE2D3F963F009786E0 /* Log-common.cpp */,
 				BE74B1CF2D3F963F009786DF /* Message.hpp */,
 				BE74B1D02D3F963F009786DF /* MobileApp.hpp */,
 				BE74B1D12D3F963F009786DF /* MobileApp.cpp */,

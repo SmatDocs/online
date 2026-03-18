@@ -20,6 +20,7 @@
 
 #include <common/FileUtil.hpp>
 #include <common/Log.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Util.hpp>
 
 #include <SigUtil.hpp>
@@ -73,9 +74,9 @@ static void mapuser(uid_t origuid, uid_t newuid, gid_t origgid, gid_t newgid)
 
 } // namespace
 
+#ifdef __linux__
 bool enterMountingNS(uid_t uid, gid_t gid)
 {
-#ifdef __linux__
     // Put this process into its own user and mount namespace.
     // Note: Having multiple threads at unshare time is a known source of failure.
     if (unshare(CLONE_NEWUSER) != 0)
@@ -103,16 +104,10 @@ bool enterMountingNS(uid_t uid, gid_t gid)
     }
 
     return true;
-#else
-    (void)uid;
-    (void)gid;
-    return false;
-#endif
 }
 
 bool enterUserNS(uid_t uid, gid_t gid)
 {
-#ifdef __linux__
     if (unshare(CLONE_NEWUSER) != 0)
     {
         // having multiple threads is a source of failure f.e.
@@ -127,12 +122,8 @@ bool enterUserNS(uid_t uid, gid_t gid)
     assert(getegid() == gid);
 
     return true;
-#else
-    (void)uid;
-    (void)gid;
-    return false;
-#endif
 }
+#endif // __linux__
 
 namespace
 {
@@ -399,7 +390,7 @@ void cleanupJails(const std::string& root)
             {
                 bool skip = false;
                 const std::string_view pidStr = std::string_view(jail).substr(0, pidSepPos);
-                const auto [pid, success] = Util::i32FromString(pidStr);
+                const auto [pid, success] = NumUtil::i32FromString(pidStr);
                 if (success && pid > 1)
                 {
                     LOG_TRC("Checking pid for jail " << pid << " " << root);
@@ -578,8 +569,9 @@ namespace SysTemplate
 /// the long lifetime of our process. Also, it's unlikely
 /// that systemplate will get re-generated after installation.
 static const auto DynamicFilePaths
-    = { "/etc/passwd",        "/etc/group",       "/etc/host.conf", "/etc/hosts",
-        "/etc/nsswitch.conf", "/etc/resolv.conf", "/etc/timezone",  "/etc/localtime" };
+    = { "/etc/passwd", "/etc/group",
+        "/etc/host.conf", "/etc/hosts",
+        "/etc/nsswitch.conf", "/etc/resolv.conf" };
 
 namespace
 {

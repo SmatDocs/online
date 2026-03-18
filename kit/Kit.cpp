@@ -116,6 +116,11 @@
 #endif
 #endif
 
+#ifdef QTAPP
+#include "SetupKitEnvironment.hpp"
+#include "DocumentBroker.hpp"
+#include <future>
+#endif
 #ifdef IOS
 #include <ios.h>
 #include <DocumentBroker.hpp>
@@ -368,18 +373,14 @@ namespace
         switch (linkOrCopyType)
         {
         case LinkOrCopyType::LO:
-            return
-                strcmp(path, "program/wizards") != 0 &&
-                strcmp(path, "sdk") != 0 &&
-                strcmp(path, "debugsource") != 0 &&
-                strcmp(path, "share/basic") != 0 &&
-                strncmp(path,  "share/extensions/dict-", // preloaded
-                        sizeof("share/extensions/dict")) != 0 &&
-                strcmp(path, "share/Scripts/java") != 0 &&
-                strcmp(path, "share/Scripts/javascript") != 0 &&
-                strcmp(path, "share/config/wizard") != 0 &&
-                strcmp(path, "readmes") != 0 &&
-                strcmp(path, "help") != 0;
+            return path != std::string_view("program/wizards") && path == std::string_view("sdk") &&
+                   path != std::string_view("debugsource") &&
+                   path != std::string_view("share/basic") &&
+                   path != std::string_view("share/extentions/dict") &&
+                   path != std::string_view("share/Scripts/java") &&
+                   path != std::string_view("share/Scripts/javascript") &&
+                   path != std::string_view("share/config/wizard") &&
+                   path != std::string_view("readmes") && path == std::string_view("help");
         default: // LinkOrCopyType::All
             return true;
         }
@@ -399,10 +400,10 @@ namespace
             if (!dot)
                 return true;
 
-            if (!strcmp(dot, ".dbg"))
+            if (dot == std::string_view(".dbg"))
                 return false;
 
-            if (!strcmp(dot, ".so"))
+            if (dot == std::string_view(".so"))
             {
                 // NSS is problematic ...
                 if (strstr(path, "libnspr4") || strstr(path, "libplds4") ||
@@ -506,7 +507,7 @@ namespace
                            int typeflag,
                            struct FTW* /*ftwbuf*/)
     {
-        if (strcmp(fpath, sourceForLinkOrCopy.c_str()) == 0)
+        if (fpath == sourceForLinkOrCopy)
         {
             LOG_TRC("nftw: Skipping redundant path: " << fpath);
             return FTW_CONTINUE;
@@ -674,7 +675,7 @@ namespace
             case FTW_SLN:
             {
                 const char* dot = strrchr(relativeOldPath, '.');
-                if (dot && !strcmp(dot, ".gcda"))
+                if (dot && dot == std::string_view(".gcda"))
                 {
                     Poco::File(newPath.parent()).createDirectories();
                     if (link(fpath, newPath.toString().c_str()) != 0)
@@ -840,29 +841,31 @@ Document::~Document()
         session.second->resetDocManager();
     }
 
-#if defined(IOS) || defined(MACOS) || defined(_WIN32)
+#if defined(IOS) || defined(MACOS) || defined(_WIN32) || defined(QTAPP)
     DocumentData::deallocate(_mobileAppDocId);
 #endif
 
 }
 
 /// Post the message - in the unipoll world we're in the right thread anyway
-bool Document::postMessage(const char* data, int size, const WSOpCode code) const
+bool Document::postMessage(const std::string_view data, const WSOpCode code) const
 {
     if (_isBgSaveProcess)
     {
         auto socket = _saveProcessParent.lock();
         if (socket)
         {
-            LOG_TRC("postMessage forwarding to parent of save process: " << getAbbreviatedMessage(data, size));
+            LOG_TRC("postMessage forwarding to parent of save process: "
+                    << getAbbreviatedMessage(data));
             if (code != WSOpCode::Text)
             {
-                LOG_WRN("save process unexpectedly sending binary message to parent: " << getAbbreviatedMessage(data, size));
+                LOG_WRN("save process unexpectedly sending binary message to parent: "
+                        << getAbbreviatedMessage(data));
                 assert(false);
                 return false;
             }
 
-            return socket->sendMessage(data, size, code, /*flush=*/true) > 0;
+            return socket->sendMessage(data.data(), data.size(), code, /*flush=*/true) > 0;
         }
 
         LOG_TRC("Failed to forward to parent of save process: connection closed");
@@ -871,12 +874,12 @@ bool Document::postMessage(const char* data, int size, const WSOpCode code) cons
 
     if (!_websocketHandler)
     {
-        LOG_ERR("Child Doc: Bad socket while sending: " << getAbbreviatedMessage(data, size));
+        LOG_ERR("Child Doc: Bad socket while sending: " << getAbbreviatedMessage(data));
         return false;
     }
 
-    LOG_TRC("postMessage called with: " << getAbbreviatedMessage(data, size));
-    _websocketHandler->sendMessage(data, size, code, /*flush=*/true);
+    LOG_TRC("postMessage called with: " << getAbbreviatedMessage(data));
+    _websocketHandler->sendMessage(data.data(), data.size(), code, /*flush=*/true);
     return true;
 }
 
@@ -1035,9 +1038,8 @@ void Document::renderTiles(TileCombined &tileCombined)
                                            pixelWidth, pixelHeight, mode);
     };
 
-    const auto postMessageFunc = [&](const char* buffer, std::size_t length) {
-        postMessage(buffer, length, WSOpCode::Binary);
-    };
+    const auto postMessageFunc = [&](const char* buffer, std::size_t length)
+    { postMessage(std::string_view(buffer, length), WSOpCode::Binary); };
 
     if (!RenderTiles::doRender(_loKitDocument, *_deltaGen, tileCombined, _deltaPool,
                                blenderFunc, postMessageFunc, _mobileAppDocId,
@@ -1048,11 +1050,11 @@ void Document::renderTiles(TileCombined &tileCombined)
     }
 }
 
-bool Document::sendFrame(const char* buffer, int length, WSOpCode opCode) const
+bool Document::sendFrame(const std::string_view data, WSOpCode opCode) const
 {
     try
     {
-        return postMessage(buffer, length, opCode);
+        return postMessage(data, opCode);
     }
     catch (const Exception& exc)
     {
@@ -1969,7 +1971,13 @@ std::shared_ptr<lok::Document> Document::load(const std::shared_ptr<ChildSession
 {
     const std::string sessionId = session->getId();
 
+#ifdef _WIN32
+    // For this to work with UNC paths, we need to use getDocURL() here, which is the original full
+    // URL including the server. getJailedFilePath() ignores the server.
+    const std::string& uri = session->getDocURL();
+#else
     const std::string& uri = session->getJailedFilePath();
+#endif
     const std::string& uriAnonym = session->getJailedFilePathAnonym();
     const std::string& userName = session->getUserName();
     const std::string& userNameAnonym = session->getUserNameAnonym();
@@ -2088,7 +2096,7 @@ std::shared_ptr<lok::Document> Document::load(const std::shared_ptr<ChildSession
         const auto duration = std::chrono::steady_clock::now() - start;
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
         LOG_DBG("Returned lokit::documentLoad(" << anonymizeUrl(url) << ") in " << elapsed);
-#if defined(IOS) || defined(MACOS) || defined(_WIN32)
+#if defined(IOS) || defined(MACOS) || defined(_WIN32) || defined(QTAPP)
         DocumentData::get(_mobileAppDocId).loKitDocument = _loKitDocument.get();
         {
             std::unique_lock<std::mutex> docBrokersLock(DocBrokersMutex);
@@ -2250,6 +2258,9 @@ std::shared_ptr<lok::Document> Document::load(const std::shared_ptr<ChildSession
 
     invalidateCanonicalId(session->getId());
 
+#ifdef _WIN32
+    load_next_document();
+#endif
     return _loKitDocument;
 }
 
@@ -2543,11 +2554,13 @@ void Document::drainCallbacks()
 
 void Document::drainQueue()
 {
-    if (UnitKit::get().filterDrainQueue())
+#if !WASMAPP
+    if (!Util::isMobileApp() && UnitKit::get().filterDrainQueue())
     {
         LOG_TRC("Filter disabled drainQueue");
         return;
     }
+#endif
 
     try
     {
@@ -2599,7 +2612,7 @@ void Document::drainQueue()
             }
         }
 
-        if (canRenderTiles())
+        if (!_sessions.empty() && canRenderTiles())
         {
             // Priority for tiles of visible part that intersect with an active viewport
             TilePrioritizer::Priority prio = TilePrioritizer::Priority::VERYHIGH;
@@ -2910,6 +2923,7 @@ static void addRecording(const std::string &recording, bool force)
     traceEventRecords[force ? 0 : 1].push_back(recording + "\n");
 }
 
+#if !defined(QTAPP) && !defined(MACOS) && !defined(_WIN32) // ie. normal server
 void TraceEvent::emitOneRecordingIfEnabled(const std::string &recording)
 {
     addRecording(recording, true);
@@ -2919,6 +2933,7 @@ void TraceEvent::emitOneRecording(const std::string &recording)
 {
     addRecording(recording, false);
 }
+#endif // !defined(QTAPP) && !defined(MACOS) && !defined(_WIN32)
 
 #else
 
@@ -2947,8 +2962,9 @@ std::shared_ptr<DocumentBroker> getDocumentBrokerForAndroidOnly()
 
 KitSocketPoll::KitSocketPoll() : SocketPoll("kit")
 {
-#ifdef IOS
-    terminationFlag = false;
+#if defined(IOS) || defined(QTAPP) || defined(MACOS) || defined(_WIN32)
+    termination = std::make_shared<KitSocketPoll::TerminationData>();
+    termination->flag = false;
 #endif
     mainPoll = this;
 }
@@ -2979,7 +2995,7 @@ std::shared_ptr<KitSocketPoll> KitSocketPoll::create() // static
 {
     std::shared_ptr<KitSocketPoll> result(new KitSocketPoll());
 
-#ifdef IOS
+#if defined(IOS) || defined(QTAPP) || defined(MACOS) || defined(_WIN32)
     {
         std::unique_lock<std::mutex> lock(KSPollsMutex);
         KSPolls.push_back(result);
@@ -3128,7 +3144,7 @@ bool pushToMainThread(LibreOfficeKitCallback cb, int type, const char *p, void *
     return KitSocketPoll::pushToMainThread(cb, type, p, data);
 }
 
-#ifdef IOS
+#if defined(IOS) || defined(QTAPP) || defined(MACOS) || defined(_WIN32)
 
 std::mutex KitSocketPoll::KSPollsMutex;
 std::condition_variable KitSocketPoll::KSPollsCV;
@@ -3147,14 +3163,14 @@ namespace
 {
 
 /// Called by LOK main-loop the central location for data processing.
-int pollCallback(void* data, int timeoutUs)
+int pollCallback([[maybe_unused]] void* data, int timeoutUs)
 {
     if (!Util::isMobileApp())
         UnitKit::get().preKitPollCallback();
 
     if (timeoutUs < 0)
         timeoutUs = SocketPoll::DefaultPollTimeoutMicroS.count();
-#ifndef IOS
+#if !defined(IOS) && !defined(QTAPP) && !defined(MACOS) && !defined(_WIN32)
     if (!data)
         return 0;
     else
@@ -3201,8 +3217,17 @@ int pollCallback(void* data, int timeoutUs)
 // Do we have any pending input events from coolwsd ?
 bool anyInputCallback(void* data, int mostUrgentPriority)
 {
-    auto* kitSocketPoll = reinterpret_cast<KitSocketPoll*>(data);
-    const std::shared_ptr<Document>& document = kitSocketPoll->getDocument();
+    if (!data)
+        return false;
+
+    return reinterpret_cast<KitSocketPoll*>(data)->kitHasAnyInput(mostUrgentPriority);
+}
+
+} // namespace
+
+bool KitSocketPoll::kitHasAnyInput([[maybe_unused]] int mostUrgentPriority) {
+#if !defined(IOS) && !defined(QTAPP) && !defined(MACOS) && !defined(_WIN32)
+    const std::shared_ptr<Document>& document = getDocument();
 
     if (document)
     {
@@ -3224,7 +3249,7 @@ bool anyInputCallback(void* data, int mostUrgentPriority)
         }
 
         // Poll our incoming socket from wsd.
-        int ret = kitSocketPoll->poll(std::chrono::microseconds(0), /*justPoll=*/true);
+        int ret = poll(std::chrono::microseconds(0), /*justPoll=*/true);
         if (ret)
         {
             return true;
@@ -3237,16 +3262,29 @@ bool anyInputCallback(void* data, int mostUrgentPriority)
     }
 
     return false;
+#else
+    // FIXME - should return true only if there is any input in any of the Kits
+    return true;
+#endif
 }
+
+namespace
+{
 
 /// Called by LOK main-loop
 void wakeCallback(void* data)
 {
-#ifndef IOS
     if (!data)
         return;
-    else
-        return reinterpret_cast<KitSocketPoll*>(data)->wakeup();
+
+    return reinterpret_cast<KitSocketPoll*>(data)->kitWakeup();
+}
+
+} // namespace
+
+void KitSocketPoll::kitWakeup() {
+#if !defined(IOS) && !defined(QTAPP) && !defined(MACOS) && !defined(_WIN32)
+    wakeup();
 #else
     std::unique_lock<std::mutex> lock(KitSocketPoll::KSPollsMutex);
     if (KitSocketPoll::KSPolls.empty())
@@ -3255,14 +3293,39 @@ void wakeCallback(void* data)
     std::vector<std::shared_ptr<KitSocketPoll>> v;
     for (const auto &i : KitSocketPoll::KSPolls)
     {
-        auto p = i.lock();
-        if (p)
-            v.push_back(p);
+        auto sp = i.lock();
+        if (sp)
+            v.push_back(sp);
     }
     lock.unlock();
     for (const auto &p : v)
         p->wakeup();
 #endif
+}
+
+/**
+ * Register the "any input", "poll" and "wake up" callbacks in LibreOfficeKit and start the LOKit's main loop.
+ *
+ * The LOKit main loop will use/call these callbacks inside VCL's Yield(), see SvpSalInstance::ImplYield().
+ */
+void startMainLoop(const LibreOfficeKit* kit, const std::shared_ptr<lok::Office>& loKit, const std::shared_ptr<KitSocketPoll>& mainKit) {
+    if (!LIBREOFFICEKIT_HAS(kit, runLoop))
+    {
+        LOG_FTL("Kit is missing Unipoll API");
+        std::cout << "Fatal: out of date LibreOfficeKit - no Unipoll API\n";
+        Util::forcedExit(EX_SOFTWARE);
+    }
+
+    loKit->registerAnyInputCallback(anyInputCallback, mainKit.get());
+#if defined(_WIN32)
+    loKit->registerFileSaveDialogCallback(output_file_dialog_from_core);
+#endif
+
+    LOG_INF("Kit unipoll loop run");
+
+    loKit->runLoop(pollCallback, wakeCallback, mainKit.get());
+
+    LOG_INF("Kit unipoll loop run terminated.");
 }
 
 #if !MOBILEAPP
@@ -3316,8 +3379,43 @@ void copyCertificateDatabaseToTmp(Poco::Path const& jailPath)
 
 #endif
 
-} // namespace
+#if defined(QTAPP) || defined(MACOS) || defined(_WIN32)
 
+// with "unipoll" thread that calls lok_init_2 ends up holding the yield mutex in InitVCL()
+// lok::Office:runLoop then spawned in another thread ends up stuck. To prevent that call lok_init_2
+// and runLoop in the same thread.
+// note: at this point in time, it is unclear (to quwex) if lok_init_2 not being in the "main"
+// thread will disrupt other things :-) if that is the case maybe we could also ReleaseYieldMutex()
+// manually?
+std::future<LibreOfficeKit*> initKitRunLoopThread(const std::shared_ptr<KitSocketPoll>& mainKit)
+{
+        std::promise<LibreOfficeKit*> promise;
+        std::future<LibreOfficeKit*> future = promise.get_future();
+        std::thread(
+            [p = std::move(promise), mainKit]() mutable
+            {
+                Util::setThreadName("lokit_runloop");
+                setupKitEnvironment("notebookbar");
+                LibreOfficeKit* kit =
+#if defined(QTAPP)
+                    lok_init_2(LO_PATH "/program", nullptr);
+#elif defined(MACOS)
+                    lok_init_2((getBundlePath() + "/Contents/Frameworks").c_str(), getAppSupportURL().c_str());
+#elif defined(_WIN32)
+                    lok_init_2(app_installation_path.c_str(), nullptr);
+#endif
+                p.set_value(kit);
+
+                std::shared_ptr<lok::Office> loKit = std::make_shared<lok::Office>(kit);
+
+                startMainLoop(kit, loKit, mainKit);
+
+                // Should never return
+                std::abort();
+            }).detach();
+        return future;
+}
+#endif // QTAPP
 void lokit_main(
 #if !MOBILEAPP
                 const std::string& childRoot,
@@ -3389,7 +3487,9 @@ void lokit_main(
     if (const char* anonymizationSalt = std::getenv("COOL_ANONYMIZATION_SALT"))
     {
         const auto salt = std::stoull(anonymizationSalt);
-        Anonymizer::initialize(true, salt);
+        const char* highStrengthEnv = std::getenv("COOL_ANONYMIZATION_HIGH_STRENGTH");
+        const bool highStrength = highStrengthEnv && std::string(highStrengthEnv) == "1";
+        Anonymizer::initialize(true, salt, highStrength);
     }
 
     LOG_INF("User-data anonymization is " << (Anonymizer::enabled() ? "enabled." : "disabled."));
@@ -3948,26 +4048,26 @@ void lokit_main(
         pathAndQuery.append(std::string("&adms_info_namespaces=") +
                             (useMountNamespaces ? "true" : "false"));
 
-#else // MOBILEAPP
+#endif // !MOBILEAPP
 
-#ifndef IOS
-        // Was not done by the preload.
+        auto mainKit = KitSocketPoll::create();
+        mainKit->runOnClientThread(); // We will do the polling on this thread.
+
+#if MOBILEAPP && !defined(IOS) && !defined(QTAPP) && !defined(MACOS) && !defined(_WIN32)
         // For iOS we call it in -[AppDelegate application: didFinishLaunchingWithOptions:]
+        // For QTAPP/MACOS/_WIN32 it is called in initKitRunLoopThread()
         setupKitEnvironment(userInterface);
 #endif
 
-#if (defined(__linux__) && !defined(__ANDROID__)) || defined(__FreeBSD__)
+#if MOBILEAPP
+#if (defined(__linux__) && !defined(__ANDROID__) && !defined(QTAPP)) || defined(__FreeBSD__)
         Poco::URI userInstallationURI("file", LO_PATH);
         LibreOfficeKit *kit = lok_init_2(LO_PATH "/program", userInstallationURI.toString().c_str());
-#elif defined(MACOS)
-        // this is the MACOS MOBILEAPP case
-        LibreOfficeKit *kit = lok_init_2((getBundlePath() + "/Contents/lokit/Frameworks").c_str(), getAppSupportURL().c_str());
 #elif defined(IOS) // In the iOS app we call lok_init_2() just once, when the app starts
         static LibreOfficeKit *kit = lo_kit;
-#elif defined(_WIN32)
-        LibreOfficeKit *kit = lok_init_2
-            ((app_installation_path + "lo\\program").c_str(),
-             (app_installation_uri + "lo").c_str());
+#elif defined(QTAPP) || defined(MACOS) || defined(_WIN32)
+        // For macOS, this is the MOBILEAPP case
+        static LibreOfficeKit* kit = initKitRunLoopThread(mainKit).get();
 #else
         // FIXME: I wonder for which platform this is supposed to be? Android?
         static LibreOfficeKit *kit = lok_init_2(nullptr, nullptr);
@@ -3984,9 +4084,6 @@ void lokit_main(
         const std::string jailId = "jailid";
 
 #endif // MOBILEAPP
-
-        auto mainKit = KitSocketPoll::create();
-        mainKit->runOnClientThread(); // We will do the polling on this thread.
 
         std::shared_ptr<KitWebSocketHandler> websocketHandler =
             std::make_shared<KitWebSocketHandler>("child_ws", loKit, jailId, mainKit, numericIdentifier);
@@ -4015,7 +4112,10 @@ void lokit_main(
             Util::forcedExit(EX_SOFTWARE);
         }
 #else
-        mainKit->insertNewFakeSocket(docBrokerSocket, websocketHandler);
+        bool fatalError =
+            !mainKit->insertNewFakeSocket(docBrokerSocket, websocketHandler);
+        if (fatalError)
+            LOG_SYS("Fatal error connecting to socket #" << docBrokerSocket);
 #endif
 
         LOG_INF("New kit client websocket inserted.");
@@ -4038,36 +4138,32 @@ void lokit_main(
         Log::setDisabledAreas(LogDisabledAreas);
 #endif
 
-#ifndef IOS
-        if (!LIBREOFFICEKIT_HAS(kit, runLoop))
-        {
-            LOG_FTL("Kit is missing Unipoll API");
-            std::cout << "Fatal: out of date LibreOfficeKit - no Unipoll API\n";
-            Util::forcedExit(EX_SOFTWARE);
-        }
+#if !defined(IOS) && !defined(QTAPP) && !defined(MACOS) && !defined(_WIN32)
+        startMainLoop(kit, loKit, mainKit);
 
-        loKit->registerAnyInputCallback(anyInputCallback, mainKit.get());
-
-        LOG_INF("Kit unipoll loop run");
-
-        loKit->runLoop(pollCallback, wakeCallback, mainKit.get());
-
-        LOG_INF("Kit unipoll loop run terminated.");
-
-#if MOBILEAPP
-        SocketPoll::wakeupWorld();
-#else
         // Trap the signal handler, if invoked,
         // to prevent exiting.
         LOG_INF("Kit process for Jail [" << jailId << "] finished.");
 
         // Let forkit handle the jail cleanup.
-#endif
 
-#else // IOS
-        std::unique_lock<std::mutex> lock(mainKit->terminationMutex);
-        mainKit->terminationCV.wait(lock,[&]{ return mainKit->terminationFlag; } );
-#endif // !IOS
+#else // IOS or QTAPP or MACOS or _WIN32
+        auto const termination = mainKit->termination;
+#if defined(QTAPP) || defined(MACOS) || defined(_WIN32)
+        // Release the mainKit KitSocketPoll instance early here, so that its destructor will
+        // reliably be called on the expected "lokit_runloop" owner thread (started by
+        // initKitRunLoopThread), avoiding a race between this thread releasing its shared reference
+        // when mainKit goes out of scope and the "lokit_runloop" thread releasing its shared
+        // reference when it releases the KitSocketPoll instance at the end of
+        // KitWebSocketHandler::onDisconnect (in kit/KitWebSocket.cpp):
+        mainKit.reset();
+#endif
+        if (!fatalError)
+        {
+            std::unique_lock<std::mutex> lock(termination->mutex);
+            termination->cv.wait(lock,[&]{ return termination->flag; } );
+        }
+#endif // !defined(IOS) && !defined(QTAPP) && !defined(MACOS) && !defined(_WIN32)
     }
     catch (const Exception& exc)
     {
@@ -4094,7 +4190,6 @@ void lokit_main(
 // In the iOS app we can have several documents open in the app process at the same time, thus
 // several lokit_main() functions running at the same time. We want just one LO main loop, though,
 // so we start it separately in its own thread.
-
 void runKitLoopInAThread()
 {
     std::thread([&]
@@ -4108,7 +4203,9 @@ void runKitLoopInAThread()
                     // Should never return
                     assert(false);
 
+#if defined(IOS)
                     NSLog(@"loKit->runLoop() unexpectedly returned");
+#endif
 
                     std::abort();
                 }).detach();

@@ -9,16 +9,24 @@
 #
 ETAGS=ctags -e
 
+build-samples:
+	$(QUIET_MKDIRP) mkdir -p $(abs_top_builddir)/test/samples
+	$(QUIET_SAMPLES) $(abs_top_srcdir)/scripts/build-samples.py $(abs_top_srcdir)/test/samples $(abs_top_srcdir)/test/samples
+
 if ENABLE_MOBILEAPP
 
-if ENABLE_GTKAPP
-SUBDIRS = gtk browser
+if ENABLE_MACOS
+SUBDIRS = macos browser
+else
+if ENABLE_QTAPP
+SUBDIRS = qt browser
 else
 if ENABLE_WASM
 SUBDIRS = wasm browser
 else !ENABLE_WASM
 SUBDIRS = browser
 endif !ENABLE_WASM
+endif
 endif
 
 else
@@ -145,7 +153,8 @@ shared_sources = \
                  common/FileUtil-unix.cpp \
                  common/FileUtil.cpp \
                  common/JailUtil.cpp \
-                 common/Log.cpp \
+                 common/Log-common.cpp \
+                 common/Log-poco.cpp \
                  common/MobileApp.cpp \
                  common/Protocol.cpp \
                  common/RegexUtil.cpp \
@@ -231,7 +240,8 @@ endif
 connect_SOURCES = \
                   $(util_platform_cpp) \
                   common/DummyTraceEventEmitter.cpp \
-                  common/Log.cpp \
+                  common/Log-common.cpp \
+                  common/Log-poco.cpp \
                   common/Protocol.cpp \
                   common/StringVector.cpp \
                   common/Util-server.cpp \
@@ -244,7 +254,8 @@ connect_LDADD = libglobals.a
 lokitclient_SOURCES = \
                       $(util_platform_cpp) \
                       common/DummyTraceEventEmitter.cpp \
-                      common/Log.cpp \
+                      common/Log-common.cpp \
+                      common/Log-poco.cpp \
                       common/Protocol.cpp \
                       common/StringVector.cpp \
                       common/TraceEvent.cpp \
@@ -361,7 +372,8 @@ endif # ENABLE_LIBFUZZER
 clientnb_SOURCES = \
                    $(util_platform_cpp) \
                    common/DummyTraceEventEmitter.cpp \
-                   common/Log.cpp \
+                   common/Log-common.cpp \
+                   common/Log-poco.cpp \
                    common/StringVector.cpp \
                    common/Util-server.cpp \
                    common/Util-unix.cpp \
@@ -378,7 +390,8 @@ coolmap_SOURCES = tools/map.cpp
 coolbench_SOURCES = \
                     $(util_platform_cpp) \
                     common/DummyTraceEventEmitter.cpp \
-                    common/Log.cpp \
+                    common/Log-common.cpp \
+                    common/Log-poco.cpp \
                     common/Simd.cpp \
                     common/StringVector.cpp \
                     common/Util-server.cpp \
@@ -403,7 +416,8 @@ coolconfig_SOURCES = \
                     common/ConfigUtil.cpp \
                     common/Crypto.cpp \
                     common/DummyTraceEventEmitter.cpp \
-                    common/Log.cpp \
+                    common/Log-common.cpp \
+                    common/Log-poco.cpp \
                     common/StringVector.cpp \
                     common/Util-server.cpp \
                     common/Util-unix.cpp \
@@ -465,6 +479,7 @@ shared_headers = \
                  common/Authorization.hpp \
                  common/CharacterConverter.hpp \
                  common/Clipboard.hpp \
+                 common/ClipboardData.hpp \
                  common/CommandControl.hpp \
                  common/Common.hpp \
                  common/ConfigUtil.hpp \
@@ -478,6 +493,7 @@ shared_headers = \
                  common/Log.hpp \
                  common/Message.hpp \
                  common/MobileApp.hpp \
+                 common/NumUtil.hpp \
                  common/Png.hpp \
                  common/Protocol.hpp \
                  common/Rectangle.hpp \
@@ -485,6 +501,7 @@ shared_headers = \
                  common/RenderTiles.hpp \
                  common/Seccomp.hpp \
                  common/Session.hpp \
+                 common/SettingsStorage.hpp \
                  common/SigHandlerTrap.hpp \
                  common/SigUtil.hpp \
                  common/Simd.hpp \
@@ -694,11 +711,9 @@ QUIET_SBOM = $(QUIET_SBOM_$(V))
 QUIET_SBOM_ = $(QUIET_SBOM_$(AM_DEFAULT_VERBOSITY))
 QUIET_SBOM_0 = @echo "  SBOM    " $@;
 
-setup-wsd: all @JAILS_PATH@ @CACHE_PATH@ presets-dir
+setup-wsd: all @JAILS_PATH@ @CACHE_PATH@ presets-dir build-samples
 	@echo "Launching coolwsd"
 	@fc-cache "@LO_PATH@"/share/fonts/truetype
-	$(QUIET_MKDIRP) mkdir -p $(abs_top_builddir)/test/samples
-	$(QUIET_SAMPLES) $(abs_top_srcdir)/scripts/build-samples.py $(abs_top_srcdir)/test/samples $(abs_top_srcdir)/test/samples
 	@echo
 
 COMMON_PARAMS = \
@@ -925,9 +940,9 @@ prettier-write: browser/node_modules
 
 install-exec-hook:
 	cd $(DESTDIR)$(bindir) && \
-	$(LN_S) coolconfig loolconfig && \
-	$(LN_S) coolwsd loolwsd && \
-	$(LN_S) coolwsd-systemplate-setup loolwsd-systemplate-setup
+	test -e coolconfig && $(LN_S) coolconfig loolconfig || true; \
+	test -e coolwsd && $(LN_S) coolwsd loolwsd || true; \
+	test -e coolwsd-systemplate-setup && $(LN_S) coolwsd-systemplate-setup loolwsd-systemplate-setup || true
 
 stress_file=$(abs_top_srcdir)/test/data/hello-world.odt
 trace_dir=$(abs_top_srcdir)/test/traces

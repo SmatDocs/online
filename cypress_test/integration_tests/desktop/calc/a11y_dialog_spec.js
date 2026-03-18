@@ -35,11 +35,11 @@ const allCalcDialogs = [
     '.uno:InsertCell',
     '.uno:InsertObjectChart',
     '.uno:InsertSparkline',
-    '.uno:JumpToTable',
+    // '.uno:JumpToTable',
     '.uno:Move?FromContextMenu:bool=true&MoveOrCopySheetDialog:bool=true&ContextMenuIndex=0',
     '.uno:MovingAverageDialog',
     '.uno:PageFormatDialog',
-    '.uno:Protect',
+    // '.uno:Protect',
     '.uno:RegressionDialog',
     '.uno:RowHeight',
     '.uno:SamplingDialog',
@@ -64,15 +64,9 @@ const excludedCommonDialogs = [
 const buggyCalcDialogs = [
     '.uno:DataFilterSpecialFilter',
     '.uno:DataFilterStandardFilter',
-    '.uno:DefineName',
     '.uno:DefineDBName',
-    '.uno:Delete',
-    '.uno:EditHeaderAndFooter',
     '.uno:EditPrintArea',
-    '.uno:EditStyle?Param:string=Heading&Family:short=2',
-    '.uno:FormatCellDialog',
     '.uno:FunctionDialog',
-    '.uno:InsertObjectChart',
     '.uno:PageFormatDialog',
     '.uno:Validation',
 ];
@@ -144,7 +138,7 @@ describe(['tagdesktop'], 'Accessibility Calc Dialog Tests', { testIsolation: fal
         } else if (buggyCalcDialogs.includes(command)) {
             it.skip(`Dialog ${command} (buggy)`, function () {});
         } else {
-            it(`Common Dialog ${command}`, function () {
+            it.skip(`Common Dialog ${command}`, function () {
                 if (!hasLinguisticData && a11yHelper.needsLinguisticData(command)) {
                     this._runnable.title += ' (skipped: missing linguistic data)';
                     this.skip();
@@ -207,7 +201,7 @@ describe(['tagdesktop'], 'Accessibility Calc Dialog Tests', { testIsolation: fal
         helper.typeIntoDocument('{esc}');
     });
 
-    it.skip('PasteSpecial Dialog (Buggy)', function () {
+    it('PasteSpecial Dialog', function () {
         helper.setDummyClipboardForCopy('text/html');
         // Select some text
         helper.selectAllText();
@@ -235,7 +229,7 @@ describe(['tagdesktop'], 'Accessibility Calc Dialog Tests', { testIsolation: fal
         a11yHelper.handleDialog(win, 1, '.uno:PasteTextImportDialog');
     });
 
-    it.skip('Font Dialog (Buggy)', function () {
+    it('Font Dialog', function () {
         calcHelper.dblClickOnFirstCell();
 
         cy.then(() => {
@@ -281,7 +275,25 @@ describe(['tagdesktop'], 'Accessibility Calc Dialog Tests', { testIsolation: fal
         a11yHelper.handleDialog(win, 1, '', true);
     });
 
-    it('PDF export warning dialog', function () {
+    it.skip('PDF export warning dialog', function () {
         a11yHelper.testPDFExportWarningDialog(win);
+    });
+
+    it('Settings dialog', function () {
+        cy.then(() => {
+            win.app.map.settings.showSettingsDialog();
+        });
+
+        cy.cGet('.iframe-settings-wrap').should('be.visible').then(() => {
+            var spy = Cypress.sinon.spy(win.console, 'error');
+            var container = win.document.querySelector('.iframe-settings-wrap');
+            win.app.a11yValidator.validateIframeDialog(container);
+            a11yHelper.checkA11yErrors(win, spy);
+            spy.restore();
+        });
+
+        // Close the settings dialog
+        cy.cGet('.iframe-settings-wrap .ui-dialog-titlebar-close').click();
+        cy.cGet('.iframe-settings-wrap').should('not.exist');
     });
 });

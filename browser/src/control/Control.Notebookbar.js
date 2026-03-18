@@ -35,6 +35,10 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 		this.model = model;
 	},
 
+	getWidgetSnapshot(id) {
+		return this.model.getById(id);
+	},
+
 	// happens only once
 	onAdd: function (map) {
 		// log and test window.ThisIsTheiOSApp = true;
@@ -50,6 +54,11 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 			this.model.fullUpdate(this.getFullJSON(this.HOME_TAB_ID));
 
 		this.map.on('notebookbar', this.onNotebookbar, this);
+	},
+
+	// override in subclasses
+	onCallback: function () {
+		return false; // consumed
 	},
 
 	// on show
@@ -85,24 +94,12 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 			const docLogoHeader = window.L.DomUtil.create('div', '');
 			docLogoHeader.id = 'document-header';
 
-			let iconClass = 'document-logo';
+			let iconClass = '';
 			let iconTooltip;
 			if (!window.logoURL) {
-				if (docType === 'text') {
-					iconClass += ' writer-icon-img';
-					iconTooltip = 'Writer';
-				} else if (docType === 'spreadsheet') {
-					iconClass += ' calc-icon-img';
-					iconTooltip = 'Calc';
-				} else if (docType === 'presentation') {
-					iconClass += ' impress-icon-img';
-					iconTooltip = 'Impress';
-				} else if (docType === 'drawing') {
-					iconClass += ' draw-icon-img';
-					iconTooltip = 'Draw';
-				}
+				[iconClass, iconTooltip] = app.LOUtil.getDocumentLogoClass(docType);
 			}
-			const docLogo = window.L.DomUtil.create('a', iconClass, docLogoHeader);
+			const docLogo = window.L.DomUtil.create('a', 'document-logo ' + iconClass, docLogoHeader);
 
 			docLogo.setAttribute('id', 'document-logo');
 			docLogo.setAttribute('type', 'action');
@@ -204,10 +201,10 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 	},
 
 	clearNotebookbar: function() {
-		// viewMode is injected into the optionstoolbox, which belongs to the notebookbar.
+		// viewMode and shareas are injected into the optionstoolbox, which belongs to the notebookbar.
 		// When switching to Viewing mode the notebookbar is removed, so we first detach
-		// viewMode to keep the permission indicator/dropdown from disappearing.
-		this._detachViewModeFromNotebookbar();
+		// viewMode and shareas to keep both from disappearing.
+		this._detachViewModeAndShareAs();
 
 		$('.root-container.notebookbar').remove();
 		$('.notebookbar-tabs-container').remove();
@@ -447,13 +444,8 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 		if (!id) return;
 
 		this.builder.executeAction(this.container, {
-			id: this.builder.windowId,
-			action: 'action',
-			jsontype: 'notebookbar',
-			data: {
-				control_id: id,
-				action_type: show ? 'show' : 'hide',
-			}
+			control_id: id,
+			action_type: show ? 'show' : 'hide',
 		});
 
 		JSDialog.RefreshScrollables();
@@ -653,17 +645,24 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 		return optionsToolItems;
 	},
 
-	_detachViewModeFromNotebookbar: function () {
-		const viewMode = document.getElementById('viewMode');
-		if (!viewMode)
-			return;
-	
+	_detachButtonFromNotebookbar: function (buttonId, targetId) {
+		const button = document.getElementById(buttonId);
+		if (!button) return;
+
 		const optionsSection = document.querySelector('.notebookbar-options-section');
-		if (optionsSection && optionsSection.contains(viewMode)) {
-			const anchor = document.getElementById('closebuttonwrapperseparator');
-			if (anchor)
-				anchor.parentNode.insertBefore(viewMode, anchor);
-		}
+		if (!optionsSection || !optionsSection.contains(button)) return;
+
+		const target = document.getElementById(targetId);
+		if (!target || !target.parentNode) return;
+
+		target.parentNode.insertBefore(button, target);
+	},
+
+	_detachViewModeAndShareAs: function () {
+		this._detachButtonFromNotebookbar('shareas', 'closebuttonwrapperseparator');
+
+		const viewModeTarget = document.getElementById('shareas') ? 'shareas' : 'closebuttonwrapperseparator';
+		this._detachButtonFromNotebookbar('viewMode', viewModeTarget);
 	},
 
 	_moveViewModeIntoOptionsToolbox: function () {
@@ -689,9 +688,11 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 	},
 
 	createOptionsSection: function(childrenArray) {
-		// First detach viewMode to avoid it being removed with the options section
-		this._detachViewModeFromNotebookbar();
+		// First detach viewMode and shareas to avoid them being removed with the options section
+		this._detachViewModeAndShareAs();
 		$('.notebookbar-options-section').remove();
+		// Remove shareas if it still exists, to avoid duplication in creation
+		$('#shareas').remove();
 
 		var optionsSection = window.L.DomUtil.create('div', 'notebookbar-options-section');
 		$(optionsSection).insertBefore('#closebuttonwrapperseparator');

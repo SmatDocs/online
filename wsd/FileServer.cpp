@@ -24,6 +24,7 @@
 #include <common/ConfigUtil.hpp>
 #include <common/Crypto.hpp>
 #include <common/FileUtil.hpp>
+#include <common/JailUtil.hpp>
 #include <common/JsonUtil.hpp>
 #include <common/LangUtil.hpp>
 #include <common/Log.hpp>
@@ -419,27 +420,41 @@ bool FileServerRequestHandler::handleRequest(const HTTPRequest& request,
         }
 
 #endif
-        if (request.getMethod() == HTTPRequest::HTTP_POST && endPoint == "logging.html")
+        if (request.getMethod() == HTTPRequest::HTTP_POST && endPoint == "browser-logging")
         {
             const std::string coolLogging = config.getString("browser_logging", "false");
-            if (coolLogging != "false")
+            if (coolLogging == "false")
             {
-                std::string token;
-                Poco::SHA1Engine engine;
-
-                engine.update(COOLWSD::LogToken);
-                std::getline(message, token, ' ');
-
-                if (Poco::DigestEngine::digestToHex(engine.digest()) == token)
-                {
-                    LOG_ERR(message.rdbuf());
-
-                    http::Response httpResponse(http::StatusCode::OK);
-                    FileServerRequestHandler::hstsHeaders(httpResponse);
-                    socket->send(httpResponse);
-                    return true;
-                }
+                sendError(http::StatusCode::Forbidden, requestUri.toString(), socket,
+                          "browser_logging is disabled.", "");
+                return true;
             }
+
+            std::string token;
+            Poco::SHA1Engine engine;
+
+            engine.update(COOLWSD::LogToken);
+            std::getline(message, token, ' ');
+
+            if (Poco::DigestEngine::digestToHex(engine.digest()) != token)
+            {
+                sendError(http::StatusCode::Forbidden, requestUri.toString(), socket,
+                          "Invalid log token.", "");
+                return true;
+            }
+
+            constexpr std::size_t maxLogSize = 4096;
+            std::string logMsg;
+            logMsg.resize(maxLogSize);
+            message.read(logMsg.data(), maxLogSize);
+            logMsg.resize(message.gcount());
+            std::replace(logMsg.begin(), logMsg.end(), '\n', ' ');
+            LOG_ERR("Browser: " << logMsg);
+
+            http::Response httpResponse(http::StatusCode::OK);
+            FileServerRequestHandler::hstsHeaders(httpResponse);
+            socket->send(httpResponse);
+            return true;
         }
 
         if (endPoint == "upload-settings")
@@ -1072,9 +1087,10 @@ public:
 
         extractVariable(form, "permission", PERMISSION);
 
-#if ENABLE_DEBUG
-        extractVariable(form, "configid", DEBUG_WOPI_CONFIG_ID);
-#endif
+        if constexpr (Util::isDebugEnabled())
+        {
+            extractVariable(form, "configid", DEBUG_WOPI_CONFIG_ID);
+        }
 
         extractVariable(form, "wopi_setting_base_url", WOPI_SETTING_BASE_URL);
 
@@ -1205,11 +1221,9 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
     std::string protocolDebug = stringifyBoolFromConfig(config, "logging.protocol", false);
     Poco::replaceInPlace(preprocess, std::string("%PROTOCOL_DEBUG%"), protocolDebug);
 
-    bool enableDebug = false;
-#if ENABLE_DEBUG
-    enableDebug = true;
-#endif
-    std::string enableDebugStr = stringifyBoolFromConfig(config, "logging.protocol", enableDebug);
+    std::string enableDebugStr =
+        stringifyBoolFromConfig(config, "logging.protocol", Util::isDebugEnabled());
+
     Poco::replaceInPlace(preprocess, std::string("%ENABLE_DEBUG%"), enableDebugStr);
 
     static const std::string hexifyEmbeddedUrls =
@@ -1581,9 +1595,24 @@ void FilePartHandler::handlePart(const Poco::Net::MessageHeader& header, std::is
             if (endPos != std::string::npos)
                 _fileName = _fileName.substr(0, endPos);
 
-            std::ostringstream oss;
-            Poco::StreamCopier::copyStream(stream, oss);
-            _fileContent = oss.str();
+            std::string dirPath = FileUtil::createRandomTmpDir(
+                COOLWSD::ChildRoot + JailUtil::CHILDROOT_TMP_INCOMING_PATH) + '/';
+            _filePath = dirPath + "upload";
+
+            std::ofstream fileStream;
+            fileStream.open(_filePath, std::ios::binary);
+            if (fileStream.good())
+            {
+                Poco::StreamCopier::copyStream(stream, fileStream);
+                fileStream.close();
+                _fileDir = std::make_shared<FileUtil::OwnedFile>(std::move(dirPath), true);
+            }
+            else
+            {
+                LOG_ERR("Unable to open [" << _filePath << "] for FilePartHandler streaming");
+                _filePath.clear();
+                FileUtil::removeFile(dirPath);
+            }
         }
     }
 }
@@ -1825,8 +1854,8 @@ void FileServerRequestHandler::uploadFileToIntegrator(const Poco::Net::HTTPReque
 
     const std::string& shortMessage = "Failed to upload preset file.";
     const std::string& fileName = partHandler.getFileName();
-    const std::string& fileContent = partHandler.getFileContent();
-    if (fileName.empty() || fileContent.empty())
+    const std::string& uploadedFilePath = partHandler.getFilePath();
+    if (fileName.empty() || uploadedFilePath.empty())
     {
         sendError(http::StatusCode::BadRequest, getRequestPath(request), socket, shortMessage,
                   "No valid file uploaded.");
@@ -1861,15 +1890,17 @@ void FileServerRequestHandler::uploadFileToIntegrator(const Poco::Net::HTTPReque
     httpRequest.setVerb(http::Request::VERB_POST);
 
     httpRequest.set("Content-Type", "application/octet-stream");
-    httpRequest.setBody(fileContent);
+    httpRequest.setBodyFile(uploadedFilePath);
 
     auto httpSession = StorageConnectionManager::getHttpSession(wopiUri);
 
     std::weak_ptr<StreamSocket> socketWeak(socket);
 
+    auto uploadedFileOwnership = partHandler.getFileOwnership();
+
     http::Session::FinishedCallback finishedCallback =
         [fileName, uriAnonym, socketWeak, requestPath = getRequestPath(request),
-         shortMessage](const std::shared_ptr<http::Session>& wopiSession)
+         shortMessage, uploadedFileOwnership = std::move(uploadedFileOwnership)](const std::shared_ptr<http::Session>& wopiSession)
     {
         std::shared_ptr<StreamSocket> destSocket = socketWeak.lock();
         if (!destSocket)
@@ -1931,13 +1962,10 @@ void FileServerRequestHandler::preprocessIntegratorAdminFile(const HTTPRequest& 
     Poco::replaceInPlace(adminFile, CSS_VARS, cssVarsToStyle(urv[CSS_VARS]));
     Poco::replaceInPlace(adminFile, UI_THEME, urv[UI_THEME]);
     Poco::replaceInPlace(adminFile, VERSION, Util::getCoolVersionHash());
-#if ENABLE_DEBUG
-    const bool enableDebug = true;
-#else
-    const bool enableDebug = false;
-#endif
+
     Poco::replaceInPlace(adminFile, std::string("%ENABLE_DEBUG%"),
-                         std::string(enableDebug ? "true" : "false"));
+                         std::string(Util::isDebugEnabled() ? "true" : "false"));
+
     std::string enableAccessibility = stringifyBoolFromConfig(config, "accessibility.enable", false);
     Poco::replaceInPlace(adminFile, std::string("%ENABLE_ACCESSIBILITY%"), enableAccessibility);
 

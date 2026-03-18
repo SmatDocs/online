@@ -42,78 +42,80 @@ AM_CXXFLAGS = $(CPPUNIT_CFLAGS) -DTDOC=\"$(abs_top_srcdir)/test/data\" -DTDIST=\
 # 'Finished in' in the `make check` output.
 # When adding new tests, please maintain order.
 all_la_unit_tests = \
-	unit-wopi-async-slow.la \
 	unit-wopi-fail-upload.la \
-	unit-wopi-lock.la \
 	unit-tiletest.la \
 	unit-wopi-documentconflict.la \
 	unit-wopi-stuck-save.la \
-	unit-wopi-transient-connect-fault.la \
+	unit-wopi-async-slow.la \
+	unit-wopi-lock.la \
 	unit-perf.la \
+	unit-invalidation.la \
 	unit-close.la \
-	unit-user-presets.la \
 	unit-wopi-watermark.la \
 	unit-crash.la \
-	unit-invalidation.la \
-	unit-httpws.la \
-	unit-synthetic-lok.la \
-	unit-any-input.la \
-	unit-convert.la \
-	unit-copy-paste.la \
+	unit-user-presets.la \
+	unit-integration.la \
+	unit-initial-load-fail.la \
 	unit-wopi-save-on-exit.la \
 	unit-uno-command.la \
-	unit-proxy.la \
-	unit-proxy-protocol.la \
-	unit-each-view.la \
-	unit-load.la \
-	unit-integration.la \
 	unit-quarantine.la \
-	unit-multi-tenant.la \
-	unit-load-torture.la \
-	unit-save-torture.la \
-	unit-copy-paste-writer.la \
-	unit-wopi-fileurl.la \
-	unit-wopi-languages.la \
 	unit-insert-delete.la \
-	unit-password-protected.la \
-	unit-wopi-httpredirect.la \
-	unit-calc.la \
-	unit-http.la \
-	unit-wopi-temp.la \
-	unit-session.la \
-	unit-render-shape.la \
-	unit-wopi-ownertermination.la \
-	unit-wopi-httpheaders.la \
 	unit-wopi.la \
-	unit-wopi-crash-modified.la \
-	unit-oauth.la \
-	unit-wopi-versionrestore.la \
-	unit-rendering-options.la \
-	unit-paste.la \
-	unit-large-paste.la \
-	unit-typing.la \
-	unit-cursor.la \
-	unit-render-search-result.la \
-	unit-tiff-load.la \
-	unit-save.la \
-	unit-wopi-saveas-with-encoded-file-name.la \
-	unit-storage.la \
-	unit-wopi-async-upload-modifyclose.la \
-	unit-wopi-saveas.la \
-	unit_wopi_renamefile.la \
-	unit-prefork.la \
-	unit-bad-doc-load.la \
-	unit-hosting.la \
-	unit-join-disconnect.la \
-	unit-initial-load-fail.la \
-	unit-timeout.la \
-	unit-timeout_inactive.la \
+	unit-each-view.la \
+	unit-copy-paste.la \
+	unit-load-torture.la \
+	unit-httpws.la \
+	unit-wopi-languages.la \
+	unit-load.la \
 	unit-timeout_conn.la \
+	unit-session.la \
+	unit-save-torture.la \
+	unit-wopi-fileurl.la \
+	unit-join-disconnect.la \
+	unit-timeout_inactive.la \
+	unit-multi-tenant.la \
+	unit-password-protected.la \
+	unit-calc.la \
+	unit-wopi-temp.la \
+	unit-convert.la \
+	unit-timeout.la \
+	unit-copy-paste-writer.la \
+	unit-render-shape.la \
+	unit-http.la \
+	unit-save.la \
+	unit-cursor.la \
+	unit-large-paste.la \
+	unit-render-search-result.la \
+	unit-convert-csv.la \
+	unit-tiff-load.la \
+	unit-oauth.la \
+	unit-typing.la \
+	unit-prefork.la \
+	unit-synthetic-lok.la \
+	unit-wopi-versionrestore.la \
+	unit-wopi-transient-connect-fault.la \
+	unit-paste.la \
+	unit-wopi-ownertermination.la \
+	unit-wopi-async-upload-modifyclose.la \
+	unit-wopi-saveas-with-encoded-file-name.la \
+	unit-any-input.la \
+	unit-clipboard-close.la \
+	unit-storage.la \
+	unit-convert-to-password-protected.la \
+	unit_wopi_renamefile.la \
 	unit-timeout_none.la \
+	unit-wopi-crash-modified.la \
+	unit-wopi-saveas.la \
+	unit-kit-child-session.la \
+	unit-wopi-httpheaders.la \
+	unit-rendering-options.la \
+	unit-proxy-protocol.la \
+	unit-bad-doc-load.la \
+	unit-wopi-httpredirect.la \
+	unit-hosting.la \
 	unit-serversock_accept1.la \
 	unit-streamsock_ctor1.la \
-	unit-clipboard-close.la \
-	unit-kit-child-session.la
+	unit-proxy.la
 #	unit-admin.la
 #	unit-tilecache.la # Empty test.
 
@@ -159,6 +161,7 @@ test_base_sources = \
 	KitQueueTests.cpp \
 	LoggingWhiteBoxTests.cpp \
 	NetUtilWhiteBoxTests.cpp \
+	NumUtilWhiteBoxTests.cpp \
 	RequestDetailsTests.cpp \
 	StringVectorTests.cpp \
 	TestGlobals.cpp \
@@ -176,7 +179,8 @@ common_sources = \
 	../common/DummyTraceEventEmitter.cpp \
 	../common/FileUtil-unix.cpp \
 	../common/FileUtil.cpp \
-	../common/Log.cpp \
+	../common/Log-common.cpp \
+	../common/Log-poco.cpp \
 	../common/Protocol.cpp \
 	../common/RegexUtil.cpp \
 	../common/Session.cpp \
@@ -225,7 +229,7 @@ unithttplib_LDADD += -lssl -lcrypto
 endif
 
 fakesockettest_CPPFLAGS = -g
-fakesockettest_SOURCES = fakesockettest.cpp  ../net/FakeSocket.cpp ../common/DummyTraceEventEmitter.cpp ../common/Log.cpp ../common/Util.cpp ../common/Util-server.cpp $(util_platform_cpp) ../common/Util-unix.cpp ../common/Globals.cpp
+fakesockettest_SOURCES = fakesockettest.cpp  ../net/FakeSocket.cpp ../common/DummyTraceEventEmitter.cpp ../common/Log-common.cpp ../common/Log-poco.cpp ../common/Util.cpp ../common/Util-server.cpp $(util_platform_cpp) ../common/Util-unix.cpp ../common/Globals.cpp
 fakesockettest_LDADD = $(CPPUNIT_LIBS)
 
 # old-style unit tests - bootstrapped via UnitClient
@@ -255,6 +259,8 @@ unit_clipboard_close_la_LIBADD = $(CPPUNIT_LIBS)
 unit_copy_paste_writer_la_SOURCES = UnitCopyPasteWriter.cpp
 unit_copy_paste_writer_la_LIBADD = $(CPPUNIT_LIBS)
 unit_convert_la_SOURCES = UnitConvert.cpp
+unit_convert_csv_la_SOURCES = UnitConvertCSV.cpp
+unit_convert_to_password_protected_la_SOURCES = UnitConvertToPasswordProtected.cpp
 unit_initial_load_fail_la_SOURCES = UnitInitialLoadFail.cpp
 unit_initial_load_fail_la_LIBADD = $(CPPUNIT_LIBS)
 unit_join_disconnect_la_SOURCES = UnitJoinDisconnect.cpp

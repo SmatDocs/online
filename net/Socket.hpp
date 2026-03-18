@@ -566,8 +566,11 @@ protected:
     /// Sets the context used by logPrefix.
     void setLogContext(int fd) { _fdSocket = fd; }
 
+    /// Returns the log prefix string for use outside of member context.
+    std::string getLogPrefix() const { return '#' + std::to_string(_fdSocket) + ": "; }
+
     /// Used by the logging macros to automatically log a context prefix.
-    inline void logPrefix(std::ostream& os) const { os << '#' << _fdSocket << ": "; }
+    inline void logPrefix(std::ostream& os) const { os << getLogPrefix(); }
 
 public:
     ProtocolHandlerInterface()
@@ -640,24 +643,17 @@ public:
     /// Sends a text message.
     /// Returns the number of bytes written (including frame overhead) on success,
     /// 0 for closed/invalid socket, and -1 for other errors.
-    virtual int sendTextMessage(const char* msg, size_t len, bool flush = false) const = 0;
-
-    /// Convenience wrapper
-    int sendTextMessage(const std::string_view msg, bool flush = false) const
-    {
-        ASSERT_CORRECT_THREAD();
-        return sendTextMessage(msg.data(), msg.size(), flush);
-    }
+    virtual int sendTextMessage(std::string_view msg, bool flush = false) const = 0;
 
     /// Sends a binary message.
     /// Returns the number of bytes written (including frame overhead) on success,
     /// 0 for closed/invalid socket, and -1 for other errors.
-    virtual int sendBinaryMessage(const char* data, size_t len, bool flush = false) const = 0;
+    virtual int sendBinaryMessage(std::string_view data, bool flush = false) const = 0;
 
     /// Shutdown the socket and specify if the endpoint is going away or not (useful for WS).
     /// Optionally provide a message sent in the close frame (useful for WS).
     virtual void shutdown(bool goingAway = false,
-                          const std::string& statusMessage = std::string()) = 0;
+                          const std::string_view statusMessage = std::string_view()) = 0;
 
     virtual void getIOStats(uint64_t &sent, uint64_t &recv) = 0;
 
@@ -724,9 +720,9 @@ class SimpleSocketHandler : public ProtocolHandlerInterface
 {
 public:
     SimpleSocketHandler() = default;
-    int sendTextMessage(const char*, const size_t, bool) const override { return 0; }
-    int sendBinaryMessage(const char*, const size_t, bool) const override { return 0; }
-    void shutdown(bool, const std::string &) override {}
+    int sendTextMessage(std::string_view, bool) const override { return 0; }
+    int sendBinaryMessage(std::string_view, bool) const override { return 0; }
+    void shutdown(bool, const std::string_view) override {}
     void getIOStats(uint64_t &, uint64_t &) override {}
 };
 
@@ -993,7 +989,7 @@ public:
         const std::shared_ptr<WebSocketHandler>& websocketHandler,
         const std::vector<int>* shareFDs = nullptr);
 #else
-    void insertNewFakeSocket(
+    bool insertNewFakeSocket(
         int peerSocket,
         const std::shared_ptr<ProtocolHandlerInterface>& websocketHandler);
 #endif
@@ -1351,7 +1347,7 @@ public:
     }
 
     /// Send a string to the socket peer.
-    void send(const std::string& str, const bool doFlush = true)
+    void send(const std::string_view str, const bool doFlush = true)
     {
         send(str.data(), str.size(), doFlush);
     }
@@ -1527,7 +1523,11 @@ public:
                 len = readData(buf.data(), available);
                 assert(len == available);
                 notifyBytesRcvd(len);
-                assert(_inBuffer.empty());
+                // It might happen that several messages need to be buffered if they arrive quicker
+                // than we can handle them. In the non-MOBILEAPP case they are WebSocket messages so
+                // they already contain a header indicating their length. Not so in the MOBILEAPP
+                // case, so prefix them with a length header.
+                _inBuffer.append((const char*)&len, sizeof(ssize_t));
                 _inBuffer.append(buf.data(), len);
             }
         }

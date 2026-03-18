@@ -66,6 +66,7 @@
 #include <wsd/DocumentBroker.hpp>
 #include <wsd/PlatformDesktop.hpp>
 #include <wsd/PlatformMobile.hpp>
+#include <wsd/PlatformUnix.hpp>
 #include <wsd/Process.hpp>
 #include <wsd/TraceFile.hpp>
 #include <wsd/wopi/StorageConnectionManager.hpp>
@@ -177,6 +178,7 @@ std::atomic<std::chrono::milliseconds> ChildSpawnTimeoutMs =
 
 std::atomic<unsigned> COOLWSD::NumConnections;
 std::unordered_set<std::string> COOLWSD::EditFileExtensions;
+std::string COOLWSD::ViewModeFileExtensions;
 
 extern "C"
 {
@@ -471,30 +473,60 @@ void COOLWSD::cleanupDocBrokers()
                                                              3600);
 
         // consider shutting down unused subforkits
-        for (auto it = SubForKitProcs.begin(); it != SubForKitProcs.end(); )
+        // Always drop those older than IdleServerSettingsTimeoutSecs, and cap
+        // the remainder to a reasonable number of recently-used entries.
+        CONFIG_STATIC const size_t MaxRecentlyUsedSubForKits = []{
+            size_t value = ConfigUtil::getConfigValue<size_t>("serverside_config.max_idle_subforkits", 5);
+            if (value < 1)
+            {
+                LOG_WRN("max_idle_subforkits is 0, clamping to 1.");
+                value = 1;
+            }
+            return value;
+        }();
+
+        // idle candidates: pair of (idle duration, configId)
+        std::vector<std::pair<std::chrono::steady_clock::duration, std::string>> idleCandidates;
+
+        for (const auto& [configId, subForKitProc] : SubForKitProcs)
         {
-            // copy as it will be used after erase()
-            std::string configId = it->first;
 
             if (configId.empty()) {
                 // ignore primordial forkit
-                ++it;
             } else if (activeConfigs.contains(configId)) {
                 LOG_DBG("subforkit " << configId << " has active document, keep it");
-                ++it;
             } else if (OutstandingForks[configId] > 0) {
                 LOG_DBG("subforkit " << configId << " has a pending fork underway, keep it");
-                ++it;
+            } else {
+                auto idleDuration = now - LastSubForKitBrokerExitTimes[configId];
+                idleCandidates.emplace_back(idleDuration, configId);
             }
-            else if (now - LastSubForKitBrokerExitTimes[configId] < IdleServerSettingsTimeoutSecs)
+        }
+
+        // sort shortest-idle first so we keep the most recently used
+        std::sort(idleCandidates.begin(), idleCandidates.end());
+
+        size_t recentlyUsedKept = 0;
+        for (const auto& [idleDuration, configId] : idleCandidates)
+        {
+            if (idleDuration >= IdleServerSettingsTimeoutSecs)
             {
-                LOG_DBG("subforkit " << configId << " recently used, keep it");
-                ++it;
+                LOG_DBG("subforkit " << configId << " is unused, dropping it");
+                auto it = SubForKitProcs.find(configId);
+                assert(it != SubForKitProcs.end());
+                dropSubForKit(it);
+            }
+            else if (recentlyUsedKept >= MaxRecentlyUsedSubForKits)
+            {
+                LOG_DBG("subforkit " << configId << " recently used but excess idle subforkit, dropping it");
+                auto it = SubForKitProcs.find(configId);
+                assert(it != SubForKitProcs.end());
+                dropSubForKit(it);
             }
             else
             {
-                LOG_DBG("subforkit " << configId << " is unused, dropping it");
-                it = dropSubForKit(it);
+                LOG_DBG("subforkit " << configId << " recently used, keep it");
+                ++recentlyUsedKept;
             }
         }
 
@@ -776,7 +808,7 @@ std::string COOLWSD::LOKitVersion;
 std::string COOLWSD::LOKitVersionNumber;
 std::string COOLWSD::LOKitVersionHash;
 std::string COOLWSD::ConfigFile =
-#if defined(MACOS) && ENABLE_CODA
+#if defined(MACOS) && MOBILEAPP
     getResourcePath("coolwsd", "xml");
 #else
     COOLWSD_CONFIGDIR "/coolwsd.xml";
@@ -896,12 +928,6 @@ private:
 /// And also cleans up and balances the correct number of children.
 static std::shared_ptr<PrisonPoll> PrisonerPoll;
 
-#if MOBILEAPP
-#ifndef IOS
-std::mutex COOLWSD::lokit_main_mutex;
-#endif
-#endif
-
 std::shared_ptr<ChildProcess> getNewChild_Blocks(const std::shared_ptr<SocketPoll>& destPoll,
                                                  const std::string& configId,
                                                  unsigned mobileAppDocId)
@@ -935,18 +961,14 @@ std::shared_ptr<ChildProcess> getNewChild_Blocks(const std::shared_ptr<SocketPol
 #else // MOBILEAPP
     const auto timeout = std::chrono::hours(100);
 
-#ifdef IOS
-    assert(mobileAppDocId > 0 && "Unexpected to have no mobileAppDocId in the iOS build");
+#if defined(IOS) || defined(QTAPP) || defined(MACOS) || defined(_WIN32)
+    assert(mobileAppDocId > 0 && "Unexpected to have no mobileAppDocId in the mobile build");
 #endif
 
     std::thread([&]
                 {
-#ifndef IOS
-                    std::lock_guard<std::mutex> lock(COOLWSD::lokit_main_mutex);
-                    Util::setThreadName("lokit_main");
-#else
                     Util::setThreadName("lokit_main_" + Util::encodeId(mobileAppDocId, 3));
-#endif
+
                     // Ugly to have that static global PrisonerServerSocketFD, Otoh we know
                     // there is just one COOLWSD object. (Even in real Online.)
                     lokit_main(PrisonerServerSocketFD, COOLWSD::UserInterface, mobileAppDocId);
@@ -1447,6 +1469,10 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
     if (EnableAccessibility)
         UserInterface = "notebookbar";
 
+    // Load view mode file extensions configuration
+    COOLWSD::ViewModeFileExtensions = ConfigUtil::getConfigValue<std::string>(
+        conf, "view_mode.file_extensions", "");
+
     // Set the log-level after complete initialization to force maximum details at startup.
     LogLevel = ConfigUtil::getConfigValue<std::string>(conf, "logging.level", "trace");
     LogDisabledAreas = ConfigUtil::getConfigValue<std::string>(conf, "logging.disabled_areas",
@@ -1587,6 +1613,7 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
     std::ostringstream ossConfig;
     ossConfig << "Loaded config file [" << configFilePath << "] (non-default values):\n";
     ossConfig << ConfigUtil::getLoggableConfig(conf);
+    LOG_DBG_S("View mode extensions: [" << COOLWSD::ViewModeFileExtensions << ']');
 
     LoggableConfigEntries = ossConfig.str();
     LOG_INF(LoggableConfigEntries);
@@ -1710,6 +1737,7 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
     }
 
     std::uint64_t anonymizationSalt = 82589933;
+    bool highStrengthAnonymize = false;
     LOG_INF("Anonymization of user-data is " << (AnonymizeUserData ? "enabled." : "disabled."));
     if (AnonymizeUserData)
     {
@@ -1718,13 +1746,24 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
             conf, "logging.anonymize.anonymization_salt", 82589933);
         const std::string anonymizationSaltStr = std::to_string(anonymizationSalt);
         setenv("COOL_ANONYMIZATION_SALT", anonymizationSaltStr.c_str(), true);
+
+        highStrengthAnonymize = ConfigUtil::getConfigValue<bool>(
+            conf, "logging.anonymize.high_strength", false);
+        if (highStrengthAnonymize)
+        {
+            LOG_INF("Using high-strength cryptographic anonymization (PBKDF2-HMAC-SHA512).");
+            setenv("COOL_ANONYMIZATION_HIGH_STRENGTH", "1", true);
+        }
     }
 
-    Anonymizer::initialize(AnonymizeUserData, anonymizationSalt);
+    Anonymizer::initialize(AnonymizeUserData, anonymizationSalt, highStrengthAnonymize);
 
     {
         bool enableWebsocketURP =
             ConfigUtil::getConfigValue<bool>("security.enable_websocket_urp", false);
+        if (enableWebsocketURP)
+            LOG_WRN("NOTE: Deprecated config option security.enable_websocket_urp is enabled. "
+                    "This feature is deprecated and will be removed in a future release.");
         setenv("ENABLE_WEBSOCKET_URP", enableWebsocketURP ? "true" : "false", 1);
     }
 
@@ -2148,11 +2187,15 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
 
 #if !WASMAPP && !defined(_WIN32)
     struct rlimit rlim;
-    ::getrlimit(RLIMIT_NOFILE, &rlim);
-    LOG_INF("Maximum file descriptor supported by the system: " << rlim.rlim_cur - 1);
-    // 4 fds per document are used for client connection, Kit process communication, and
-    // a wakeup pipe with 2 fds. 32 fds (i.e. 8 documents) are reserved.
-    LOG_INF("Maximum number of open documents supported by the system: " << rlim.rlim_cur / 4 - 8);
+    if (::getrlimit(RLIMIT_NOFILE, &rlim) == 0)
+    {
+        LOG_INF("Maximum file descriptor supported by the system: " << rlim.rlim_cur - 1);
+        // 4 fds per document are used for client connection, Kit process communication, and
+        // a wakeup pipe with 2 fds. 32 fds (i.e. 8 documents) are reserved.
+        LOG_INF("Maximum number of open documents supported by the system: " << rlim.rlim_cur / 4 - 8);
+    }
+    else
+        LOG_SYS("Failed to get RLIMIT_NOFILE");
 #endif
 
     LOG_INF("Maximum concurrent open Documents limit: " << COOLWSD::MaxDocuments);
@@ -2310,6 +2353,10 @@ void COOLWSD::setLokitEnvironmentVariables(const Poco::Util::LayeredConfiguratio
         }
 #endif
     }
+
+#if !MOBILEAPP
+    setenv("LOK_ALLOWED_EXTREF_PATHS", "", true);
+#endif
 }
 
 void COOLWSD::initializeSSL()
@@ -2376,11 +2423,13 @@ void COOLWSD::defineOptions(Poco::Util::OptionSet& optionSet)
                         .repeatable(false)
                         .argument("port_number"));
 
-#if ENABLE_DEBUG
-    optionSet.addOption(Option("find-free-port", "", "Find a free port to listen on, starting from the default.")
-                        .required(false)
-                        .repeatable(false));
-#endif
+    if constexpr (Util::isDebugEnabled())
+    {
+        optionSet.addOption(Option("find-free-port", "",
+                                   "Find a free port to listen on, starting from the default.")
+                                .required(false)
+                                .repeatable(false));
+    }
 
     optionSet.addOption(Option("disable-ssl", "", "Disable SSL security layer.")
                         .required(false)
@@ -2428,25 +2477,28 @@ void COOLWSD::defineOptions(Poco::Util::OptionSet& optionSet)
                             .required(false)
                             .repeatable(false));
 
-#if ENABLE_DEBUG
-    optionSet.addOption(Option("unitlib", "", "Unit testing library path.")
-                        .required(false)
-                        .repeatable(false)
-                        .argument("unitlib"));
+    if constexpr (Util::isDebugEnabled())
+    {
+        optionSet.addOption(Option("unitlib", "", "Unit testing library path.")
+                                .required(false)
+                                .repeatable(false)
+                                .argument("unitlib"));
 
-    optionSet.addOption(Option("careerspan", "", "How many seconds to run.")
-                        .required(false)
-                        .repeatable(false)
-                        .argument("seconds"));
+        optionSet.addOption(Option("careerspan", "", "How many seconds to run.")
+                                .required(false)
+                                .repeatable(false)
+                                .argument("seconds"));
 
-    optionSet.addOption(Option("singlekit", "", "Spawn one libreoffice kit.")
-                        .required(false)
-                        .repeatable(false));
+        optionSet.addOption(Option("singlekit", "", "Spawn one libreoffice kit.")
+                                .required(false)
+                                .repeatable(false));
 
-    optionSet.addOption(Option("forcecaching", "", "Force HTML & asset caching even in debug mode: accelerates cypress.")
-                        .required(false)
-                        .repeatable(false));
-#endif
+        optionSet.addOption(
+            Option("forcecaching", "",
+                   "Force HTML & asset caching even in debug mode: accelerates cypress.")
+                .required(false)
+                .repeatable(false));
+    }
 }
 
 void COOLWSD::handleOption(const std::string& optionName,
@@ -3689,10 +3741,7 @@ void COOLWSD::innerMain()
     remoteConfigThread->start();
 #endif
 
-#ifndef IOS
-    // We can open files with non-ASCII names just fine on iOS without this, and this code is
-    // heavily Linux-specific anyway.
-
+#if !defined(IOS) && !defined(MACOS) && !defined(_WIN32) && !defined(QTAPP)
     // Force a uniform UTF-8 locale for ourselves & our children.
     char* locale = std::setlocale(LC_ALL, "C.UTF-8");
     if (!locale)
@@ -3708,7 +3757,7 @@ void COOLWSD::innerMain()
         LOG_INF("Locale is set to " << std::string(locale));
         ::setenv("LC_ALL", locale, 1);
     }
-#endif // !IOS
+#endif // !IOS && !MACOS && !_WIN32 && !QTAPP
 
 #if !MOBILEAPP
     // We use the same option set for both parent and child coolwsd,
@@ -3984,7 +4033,7 @@ void COOLWSD::innerMain()
 #endif
     }
 
-#ifndef IOS // SigUtil::getShutdownRequestFlag() always returns false on iOS, thus the above while
+#if !defined(IOS) // SigUtil::getShutdownRequestFlag() always returns false on iOS, thus the above while
             // loop never exits.
 
     COOLWSD::alertAllUsersInternal("close: shuttingdown");
@@ -4462,7 +4511,7 @@ void forwardSignal(const int signum)
 #endif
 
 // Avoid this in the Util::isFuzzing() case because libfuzzer defines its own main().
-#if !MOBILEAPP && !LIBFUZZER && !ENABLE_CODA
+#if !MOBILEAPP && !LIBFUZZER
 
 int main(int argc, char** argv)
 {

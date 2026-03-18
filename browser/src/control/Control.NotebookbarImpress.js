@@ -358,7 +358,9 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 				'command': 'downloadas',
 				'class': 'unodownloadas',
 				'type': 'exportmenubutton',
-				'text': _('Download'),
+				'text': !window.ThisIsAMobileApp ? _('Download') :
+					(window.ThisIsTheWindowsApp ? _('Export as') :
+					 _('Save As')),
 				'accessibility': { focusBack: true, combination: 'DA', de: null }
 			});
 		}
@@ -467,6 +469,7 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 				'id': 'slide-fullscreen-presentation',
 				'type': 'bigcustomtoolitem',
 				'text': _('From Beginning'),
+				'tooltip': _('Fullscreen, starting at slide 1'),
 				'command': 'fullscreen-presentation',
 				'accessibility': { focusBack: true, combination: 'FB', de: null }
 			},
@@ -474,23 +477,31 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 				'id': 'slide-presentation-currentslide',
 				'type': 'bigcustomtoolitem',
 				'text':  _('From Current Slide'),
+				'tooltip': _('Fullscreen, starting at this slide'),
 				'command': 'presentation-currentslide',
 				'accessibility': { focusBack: true, combination: 'FC', de: null }
 			},
-			{ type: 'separator', id: 'slide-show-presentation', orientation: 'vertical' },
-			!window.ThisIsAMobileApp ?
+			!window.ThisIsAMobileApp || window.mode.isCODesktop() ?
+				{
+					type: 'separator',
+					id: 'slide-show-presentation',
+					orientation: 'vertical'
+				} : {},
+			!window.ThisIsAMobileApp || window.mode.isCODesktop() ?
 				{
 					'id': 'slide-presentation-in-window',
 					'type': 'bigcustomtoolitem',
 					'text': _('Present in Window'),
+					'tooltip': _('Plays inside the document window. Starts at slide 1'),
 					'command': 'presentinwindow',
 					'accessibility': { focusBack: true, combination: 'PW', de: null }
 				} : {},
-			!window.ThisIsAMobileApp && window.canvasSlideshowEnabled ?
+			(!window.ThisIsAMobileApp || window.mode.isCODesktop()) && window.canvasSlideshowEnabled ?
 			  {
 					'id': 'slide-presentation-in-console',
 					'type': 'bigcustomtoolitem',
 					'text': _('Presenter View'),
+					'tooltip': _('Shows your notes, next slide, and a timer'),
 					'command': 'presenterconsole',
 					'accessibility': { focusBack: true, combination: 'PC', de: null }
 				}: {},
@@ -499,6 +510,7 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 					'id': 'slide-presentation-follow-me',
 					'type': 'bigcustomtoolitem',
 					'text': _('Present to All'),
+					'tooltip': _('Starts a slideshow on every viewer\'s screen'),
 					'command': 'followmepresentation',
 					'accessibility': { focusBack: true, combination: 'PL', de: null }
 				} : {},
@@ -507,6 +519,7 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 					'id': 'slide-presentation-follow',
 					'type': 'bigcustomtoolitem',
 					'text': _('Follow Presenter'),
+					'tooltip': _('View slides as the presenter advances them'),
 					'command': 'followpresentation',
 					'accessibility': { focusBack: true, combination: 'PF', de: null }
 				} : {},
@@ -712,7 +725,7 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 	getHomeTab: function() {
 		var content = [
 			{
-				'id': 'home-undo-redo',
+				'id': 'home-do',
 				'type': 'container',
 				'children': [
 					{
@@ -1260,7 +1273,7 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 			{ type: 'separator', id: 'home-insertobjectchart-break', orientation: 'vertical' },
 			{
 				'type': 'overflowgroup',
-				'id': 'home-search',
+				'id': 'home-find-n-filter',
 				'name':_('Search'),
 				'accessibility': { focusBack: true, combination: 'SS', de: null },
 				'children' : [
@@ -1797,8 +1810,28 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 				'icon': 'lc_masterslide.svg',
 				'children': [
 					{
-						'id': 'masterpageall_icons', // has to match core id
-						'type': 'iconview'
+						'id': 'masterpagenb',
+						'type': 'iconviewlist',
+						'children': [
+							{
+								'id': 'masterpagecurrent_label',
+								'type': 'fixedtext',
+								'text': _('This Presentation'),
+							},
+							{
+								'id': 'masterpagecurrent_icons', // has to match core id
+								'type': 'iconview',
+							},
+							{
+								'id': 'masterpageall_label',
+								'type': 'fixedtext',
+								'text': _('Presentation Templates'),
+							},
+							{
+								'id': 'masterpageall_icons', // has to match core id
+								'type': 'iconview',
+							}
+						]
 					}
 				]
 			},
@@ -1811,8 +1844,14 @@ window.L.Control.NotebookbarImpress = window.L.Control.NotebookbarWriter.extend(
 				'icon': 'lc_themesthames.svg',
 				'children': [
 					{
-						'id': 'iconview_theme_colors', // has to match core id
-						'type': 'iconview'
+						'id': 'iconview_theme_colors-iconview-list',
+						'type': 'iconviewlist',
+						'children': [
+							{
+								'id': 'iconview_theme_colors', // has to match core id
+								'type': 'iconview'
+							}
+						]
 					}
 				]
 			},

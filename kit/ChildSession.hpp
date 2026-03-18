@@ -16,11 +16,14 @@
 #include <kit/StateRecorder.hpp>
 #include <kit/Watermark.hpp>
 
-#define LOK_USE_UNSTABLE_API
-#include <LibreOfficeKit/LibreOfficeKit.hxx>
-
 #include <chrono>
 #include <queue>
+
+namespace lok
+{
+class Document;
+class Office;
+}
 
 class Document;
 class ChildSession;
@@ -120,7 +123,7 @@ public:
             return false;
         }
         const auto msg = "client-" + getId() + ' ' + std::string(buffer, length);
-        return _docManager->sendFrame(msg.data(), msg.size(), WSOpCode::Text);
+        return _docManager->sendFrame(msg, WSOpCode::Text);
     }
 
     bool sendBinaryFrame(const char* buffer, int length) override
@@ -132,7 +135,7 @@ public:
             return false;
         }
         const auto msg = "client-" + getId() + ' ' + std::string(buffer, length);
-        return _docManager->sendFrame(msg.data(), msg.size(), WSOpCode::Binary);
+        return _docManager->sendFrame(msg, WSOpCode::Binary);
     }
 
     bool sendProgressFrame(const char* id, const std::string& jsonProps,

@@ -247,7 +247,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 			var isMasterView = this._map['stateChangeHandler'].getItemValue('.uno:SlideMasterPage');
 			var pcw = document.getElementById('presentation-controls-wrapper');
 			var $trigger = $(pcw);
-			if (isMasterView === 'true' || app.isReadOnly()) {
+			if (isMasterView === 'true' || app.map.isReadOnlyMode()) {
 				$trigger.contextMenu(false);
 				return;
 			}
@@ -268,16 +268,25 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 				className: 'cool-font',
 				items: {
 					paste: {
-						name: app.IconUtil.createMenuItemLink(_('Paste Slide'), 'Paste'),
+						name: app.IconUtil.createMenuItemLink(_('Paste'), 'Paste'),
 						isHtmlName: true,
 						callback: function(key, options) {
-								if (!nPos)
+								if (nPos === undefined)
 									nPos = that._findClickedPart(options.$trigger[0]);
-								that._setPart(that.copiedSlide);
-								that._map.duplicatePage(nPos);
+								if (that.copiedSlide) {
+									// Same-tab paste: use duplicate allows insertion at a position
+									that._setPart(that.copiedSlide);
+									that._map.duplicatePage(nPos);
+								} else {
+									// Cross-tab/browser paste: use system clipboard
+									that._map.setPart(nPos - 1); // new slide is inserted after set slide
+									that._map._clip.filterExecCopyPaste('.uno:Paste');
+								}
 						},
 						visible: function() {
-							return that.copiedSlide;
+							// Show paste if we have a local copied slide OR
+							// the system clipboard API is available (may have content from another tab)
+							return that.copiedSlide || window.L.Browser.clipboardApiAvailable;
 						}
 					},
 					newslide: {
@@ -297,7 +306,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		window.L.DomEvent.on(img, 'contextmenu', function(e) {
 			var isMasterView = this._map['stateChangeHandler'].getItemValue('.uno:SlideMasterPage');
 			var $trigger = $('#' + img.id);
-			if (isMasterView === 'true' || app.isReadOnly()) {
+			if (isMasterView === 'true' || app.map.isReadOnlyMode()) {
 				$trigger.contextMenu(false);
 				return;
 			}
@@ -326,7 +335,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 						name: app.IconUtil.createMenuItemLink(_('Paste'), 'Paste'),
 						isHtmlName: true,
 						callback: function() {
-							that._map._clip._execCopyCutPaste('paste', ".uno:Paste")
+							that._map._clip.filterExecCopyPaste('.uno:Paste');
 						},
 					},
 					newslide: {

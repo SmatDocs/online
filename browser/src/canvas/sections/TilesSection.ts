@@ -335,8 +335,6 @@ export class TilesSection extends CanvasSectionObject {
 	}
 
 	private drawForViewLayoutMultiPage() {
-		if (!app.activeDocument.activeLayout.areViewTilesReady()) return; // Draw after we have all the tiles.
-
 		const view = app.activeDocument.activeLayout as ViewLayoutMultiPage;
 
 		const visibleCoordList: Array<TileCoordData> = view.getCurrentCoordList();
@@ -372,9 +370,12 @@ export class TilesSection extends CanvasSectionObject {
 
 		for (let i = 0; i < visibleCoordList.length; i++) {
 			const tile = TileManager.get(visibleCoordList[i]);
-			const tilePos = tile.coords.getPosSimplePoint();
 
-			this.drawTileToCanvas(tile, this.context, tilePos.vX, tilePos.vY, TileManager.tileSize, TileManager.tileSize);
+			if (tile && tile.isReadyToDraw()) {
+				const tilePos = tile.coords.getPosSimplePoint();
+
+				this.drawTileToCanvas(tile, this.context, tilePos.vX, tilePos.vY, TileManager.tileSize, TileManager.tileSize);
+			}
 		}
 	}
 

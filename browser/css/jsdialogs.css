@@ -163,11 +163,23 @@ div#autoFillPreviewTooltip .lokdialog.ui-dialog-content.ui-widget-content {
 	background-color: var(--color-background-lighter);
 }
 
+/* Draw close "X" icon with SVG instead of bitmap sprite.
+   Branding layers override this background-image via higher specificity. */
+.ui-dialog-titlebar-close .ui-icon-closethick {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath d='M3 3 L13 13 M13 3 L3 13' stroke='%23222' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+	background-position: center;
+	background-size: 16px 16px;
+}
+
+[data-theme='dark'] .ui-dialog-titlebar-close .ui-icon-closethick {
+	filter: invert(1);
+}
+
 .jsdialog-container .ui-dialog-content {
 	max-height: calc( 90vh - 34px);
 	overflow-y: auto !important;
 	background-color: var(--color-background-lighter) !important;
-	font-family: var(--jquery-ui-font);
+	font-family: var(--cool-font);
 	line-height: 1.5;
 	scrollbar-color: var(--scrollbar-color);
 	scrollbar-width: var(--scrollbar-width);
@@ -533,12 +545,19 @@ algned to the bottom */
 	margin-top: 8px;
 }
 
+.ui-expander-heading {
+	margin: 0;
+	padding: 0;
+	font: inherit;
+	display: contents;
+}
+
 .ui-expander-label {
 	color: #666;
 }
 
 .ui-expander-label.jsdialog {
-	font-family: var(--jquery-ui-font);
+	font-family: var(--cool-font);
 }
 
 .ui-expander-label::before,
@@ -1200,7 +1219,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 }
 
 .ui-listbox,
-.ui-combobox,
+.ui-combobox-wrapper,
 .ui-timefield {
 	box-sizing: border-box;
 	-webkit-appearance: none;
@@ -1209,10 +1228,16 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	height: 1.5rem;
 	line-height: normal;
 	font-size: var(--default-font-size);
-	font-family: var(--jquery-ui-font);
+	font-family: var(--cool-font);
 	border-radius: var(--border-radius);
 	background-color: var(--color-background-dark);
 	color: var(--color-text-dark);
+	display: flex;
+}
+
+.ui-combobox-label {
+	font-size: var(--default-font-size);
+	font-family: var(--cool-font);
 }
 
 .jsdialog-window .ui-listbox,
@@ -1269,7 +1294,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 }
 
 /* ui-combobox */
-.ui-combobox,
+.ui-combobox-wrapper,
 .ui-timefield {
 	border: 1px solid var(--color-border);
 }
@@ -1364,7 +1389,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	display: block;
 	width: 100%;
 	font-size: var(--default-font-size);
-	font-family: var(--jquery-ui-font);
+	font-family: var(--cool-font);
 	color: var(--color-text-dark);
 }
 
@@ -1482,7 +1507,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 
 
 .ui-overflow-group-label {
-	font-family: var(--jquery-ui-font);
+	font-family: var(--cool-font);
 	font-size: var(--overflow-group-font-size);
 	color: var(--color-text-lighter);
 	flex-grow: 1;
@@ -1525,7 +1550,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	border: 1px solid transparent;
 	border-radius: var(--border-radius);
 	text-wrap: nowrap;
-	font-family: var(--jquery-ui-font);
+	font-family: var(--cool-font);
 }
 
 .ui-iconview-entry.selected {
@@ -1541,6 +1566,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 
 .ui-iconview-entry img {
 	vertical-align: middle;
+	justify-self: center;
 }
 
 .ui-iconview-separator {
@@ -1579,7 +1605,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	position: absolute;
 	z-index: 1105;
 	padding: 0;
-	font-family: var(--jquery-ui-font);
+	font-family: var(--cool-font);
 }
 
 .autofilter-container > .root-container,
@@ -1851,7 +1877,7 @@ input[type='number']:hover::-webkit-outer-spin-button {
 	box-sizing: border-box;
 	line-height: normal;
 	font-size: calc(var(--default-font-size)*1.2);
-	font-family: var(--jquery-ui-font);
+	font-family: var(--cool-font);
 	border: 1px solid var(--color-border-dark);
 	border-radius: var(--border-radius);
 	padding: 8px 10px;
@@ -1878,6 +1904,11 @@ button.menubutton.sidebar > span {
 .jsdialog .unobutton img {
 	width: var(--btn-img-size);
 	height: var(--btn-img-size);
+}
+
+button.has-img img {
+	min-width: 16px;
+	min-height: 16px;
 }
 
 .menubutton .arrow {
@@ -2185,7 +2216,6 @@ button.menubutton.sidebar > span {
 	width: max-content;
 }
 
-.unoarrow::after,
 .jsdialog .ui-content.unobutton::after {
 	--click-increment: -1px;
 	position: absolute;
@@ -2194,6 +2224,7 @@ button.menubutton.sidebar > span {
 	right: var(--click-increment);
 	bottom: var(--click-increment);
 	left: var(--click-increment);
+	pointer-events: none;
 }
 
 /* targetting buttons inside of split button */
@@ -2896,9 +2927,7 @@ kbd,
 	align-items: center;
 }
 
-/* Writer - Format - Paragraph - Text Flow */
 /* Writer - Format - Paragraph - Tabs */
-#ParagraphPropertiesDialog #textflow #checkAcrossPage.checkbutton,
 #ParagraphPropertiesDialog #labelTP_TABULATOR #ParagraphTabsPage {
 	grid-column-gap: 0;
 }

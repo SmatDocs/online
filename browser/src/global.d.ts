@@ -196,13 +196,14 @@ interface AppInterface {
 	colorPalettes: any; // TODO declare according to Widget.ColorPicker.ts
 	colorNames: any; // TODO declare according to Widget.ColorPicker.ts
 	console: Console;
-	map: any; // TODO should be window.L.Map
+	map: MapInterface; // TODO should be window.L.Map
 	// file defined in: src/docstate.ts
 	file: {
 		editComment: boolean;
 		allowManageRedlines: boolean;
 		readOnly: boolean;
 		permission: string;
+		viewModeExtensions: string;
 		disableSidebar: boolean;
 		textCursor: {
 			visible: boolean;
@@ -224,6 +225,7 @@ interface AppInterface {
 	};
 	languages: Array<{ translated: string; neutral: string; iso: string }>;
 	favouriteLanguages: Array<string>;
+	tableStyles: TableStylesService;
 	colorLastSelection: any;
 	serverAudit: any;
 	events: DocEvents;
@@ -336,6 +338,8 @@ interface Window {
 		isMobile(): boolean;
 		isDesktop(): boolean;
 		isTablet(): boolean;
+		isCODesktop(): boolean;
+		isNewDocument(): boolean;
 		getDeviceFormFactor(): string;
 	};
 	prefs: {
@@ -350,6 +354,7 @@ interface Window {
 	};
 	KeyboardShortcuts: KeyboardShortcuts;
 
+	starterScreen: boolean;
 	allowUpdateNotification: boolean;
 	autoShowWelcome: boolean;
 	bundlejsLoaded: boolean;
@@ -375,9 +380,9 @@ interface Window {
 	userInterfaceMode: string;
 	ThisIsAMobileApp: boolean;
 	ThisIsTheEmscriptenApp: boolean;
-	ThisIsTheGtkApp: boolean;
 	ThisIsTheiOSApp: boolean;
 	ThisIsTheMacOSApp: boolean;
+	ThisIsTheQtApp: boolean;
 	ThisIsTheWindowsApp: boolean;
 	wopiSrc: string;
 	zoteroEnabled: boolean;
@@ -397,6 +402,7 @@ interface Window {
 	errorMessages: ErrorMessages;
 	queueMsg: MessageInterface[];
 
+	makeWopiCoolWsUrl(path: string, docUrlParams: string): string;
 	makeWsUrlWopiSrc(
 		path: string,
 		docUrlParams: string,

@@ -29,6 +29,7 @@ interface AboutDialogElements {
 	routeToken: HTMLElement;
 	timeZone: HTMLElement;
 	wopiHostId: HTMLElement;
+	licenseInfo: HTMLElement;
 	copyright: HTMLElement;
 }
 
@@ -214,7 +215,7 @@ class AboutDialog {
 			link.addEventListener('click', (e: MouseEvent) => {
 				e.preventDefault();
 				app.socket.sendMessage('uno .uno:WidgetTestDialog');
-				app.map.uiManager.closeModal('modal-dialog-about-dialog-box', false);
+				app.map.uiManager.closeModal('modal-dialog-about-dialog-box');
 			});
 
 			elements.jsDialog.appendChild(label);
@@ -223,6 +224,17 @@ class AboutDialog {
 
 		// WOPI Host ID
 		elements.wopiHostId.textContent = window.wopiHostId;
+
+		// License information (apps only)
+		if (window.ThisIsAMobileApp) {
+			const licenseLink = document.createElement('a');
+			licenseLink.href = 'javascript:void(0)';
+			licenseLink.textContent = _UNO('.uno:ShowLicense');
+			licenseLink.addEventListener('click', () =>
+				window.postMobileMessage('LICENSE'),
+			);
+			elements.licenseInfo.appendChild(licenseLink);
+		}
 
 		// Copyright and vendor
 		const span = document.createElement('span');
@@ -378,7 +390,10 @@ class AboutDialog {
 
 		text = text.replace(/\u00A0/g, ' ');
 
-		if (navigator.clipboard && window.isSecureContext) {
+		if ((window as any).ThisIsTheQtApp || (window as any).ThisIsTheMacOSApp) {
+			(window as any).postMobileMessage('TEXTCLIPBOARD ' + text);
+			this.contentHasBeenCopiedShowSnackbar();
+		} else if (navigator.clipboard && window.isSecureContext) {
 			navigator.clipboard
 				.writeText(text)
 				.then(
@@ -412,7 +427,7 @@ class AboutDialog {
 	private contentHasBeenCopiedShowSnackbar() {
 		const timeout = 1000;
 		this.map.uiManager.showSnackbar(
-			'Version information has been copied',
+			_('Version information has been copied'),
 			null,
 			null,
 			timeout,
@@ -507,6 +522,14 @@ class AboutDialog {
 			infoDiv.appendChild(wopiHostId);
 		}
 
+		// License information (apps only)
+		const licenseInfo = AboutDialog.createElement('div', {
+			id: 'license-information',
+		});
+		if (window.ThisIsAMobileApp) {
+			infoDiv.appendChild(licenseInfo);
+		}
+
 		// Copyright
 		const copyright = AboutDialog.createElement('p', {
 			className: 'about-dialog-info-div',
@@ -522,6 +545,7 @@ class AboutDialog {
 			routeToken,
 			timeZone,
 			wopiHostId,
+			licenseInfo,
 			copyright,
 		};
 	}

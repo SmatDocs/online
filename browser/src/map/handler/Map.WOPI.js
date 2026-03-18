@@ -295,7 +295,7 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			this._allowedOrigins = ancestors;
 			// convert to JS regexps from localhost:* to https*://localhost:.*
 			for (i = 0; i < ancestors.length; i++) {
-				this._allowedOrigins[i] = '(http|https)://' + ancestors[i].replace(/:\*/, ':?.*');
+				this._allowedOrigins[i] = '^(http|https)://' + ancestors[i].replace(/:\*/, ':?.*') + '$';
 			}
 		}
 
@@ -550,6 +550,7 @@ window.L.Map.WOPI = window.L.Handler.extend({
 
 		if (msg.MessageId === 'Grab_Focus') {
 			app.idleHandler._activate();
+			app.map.focus();
 			return;
 		}
 
@@ -791,6 +792,18 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		else if (msg.MessageId === 'Action_Mention') {
 			var list = msg.Values.list;
 			this._map.mention.openMentionPopup(list);
+		}
+		else if (msg.MessageId === 'Action_ResolveComment') {
+			// Currently only Writer has "Resolve Comment" feature.
+			if (msg.Values && this._map._docLayer._docType === 'text') {
+				const commentSection = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
+				if (commentSection) {
+					const comment = commentSection.getComment(msg.Values.Id);
+					if (comment && comment.sectionProperties.data.resolved !== 'true') {
+						commentSection.resolve(comment);
+					}
+				}
+			}
 		}
 		else if (msg.sender === 'EIDEASY_SINGLE_METHOD_SIGNATURE') {
 			// This is produced by the esign popup.

@@ -21,10 +21,12 @@
 #include <common/Anonymizer.hpp>
 #include <common/HexUtil.hpp>
 #include <common/Log.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Unit.hpp>
 #include <common/Util.hpp>
 
 #define LOK_USE_UNSTABLE_API
+#include <LibreOfficeKit/LibreOfficeKit.hxx>
 #include <LibreOfficeKit/LibreOfficeKitEnums.h>
 
 #include <Poco/StreamCopier.h>
@@ -64,6 +66,7 @@
 #include <wasmapp.hpp>
 #endif
 
+#include <cassert>
 #include <climits>
 #include <fstream>
 #include <sstream>
@@ -721,7 +724,8 @@ bool ChildSession::_handleInput(const char *buffer, int length)
             if (!saving)
             { // fallback to foreground save
 
-                UnitKit::get().preSaveHook();
+                if (!Util::isMobileApp())
+                    UnitKit::get().preSaveHook();
 
                 // Disable processing of other messages while saving document
                 InputProcessingManager processInput(getProtocol(), false);
@@ -1375,6 +1379,13 @@ std::string ChildSession::getJailDocRoot() const
 
 bool ChildSession::downloadAs(const StringVector& tokens)
 {
+#ifdef IOS
+    NSLog(@"We should never come here, aborting");
+    std::abort();
+#elif defined(_WIN32)
+    // Presumably ditto for CODA-W
+    std::abort();
+#else
     std::string name, id, format, filterOptions;
 
     if (tokens.size() < 5 ||
@@ -1409,10 +1420,6 @@ bool ChildSession::downloadAs(const StringVector& tokens)
         filterOptions += std::string(",Watermark=") + getWatermarkText() + std::string("WATERMARKEND");
     }
 
-#ifdef IOS
-    NSLog(@"We should never come here, aborting");
-    std::abort();
-#else
     // Prevent user inputting anything funny here.
     // A "name" should always be a name, not a path
     const Poco::Path filenameParam(name);
@@ -1449,7 +1456,7 @@ bool ChildSession::downloadAs(const StringVector& tokens)
     // Register download id -> URL mapping in the DocumentBroker
     const std::string docBrokerMessage =
         "registerdownload: downloadid=" + tmpDir + " url=" + urlToSend + " clientid=" + getId();
-    _docManager->sendFrame(docBrokerMessage.c_str(), docBrokerMessage.length());
+    _docManager->sendFrame(docBrokerMessage);
 
     // Send download id to the client
     sendTextFrame("downloadas: downloadid=" + tmpDir + " port=" + std::to_string(ClientPortNumber) +
@@ -1670,7 +1677,14 @@ bool ChildSession::setClipboard(const StringVector& tokens)
             return false;
         }
 
-        SigUtil::addActivity(getId(), "setClipboard " + std::to_string(FileUtil::Stat(clipFile).size()) + " bytes");
+        const auto clipFileSize = FileUtil::Stat(clipFile).size();
+        SigUtil::addActivity(getId(), "setClipboard " + std::to_string(clipFileSize) + " bytes");
+
+        if (clipFileSize == 0)
+        {
+            LOG_WRN("Ignoring empty clipboard file: " << clipFile);
+            return false;
+        }
 
         // See if the data is in the usual mimetype-size-content format or is just plain HTML.
         std::string firstLine;
@@ -1744,7 +1758,20 @@ bool ChildSession::paste(const char* buffer, int length, const StringVector& tok
 
     const std::string firstLine = getFirstLine(buffer, length);
     const char* data = buffer + firstLine.size() + 1;
-    const int size = length - firstLine.size() - 1;
+    int size = length - firstLine.size() - 1;
+#if defined QTAPP || defined _WIN32
+    // In CODA-Q, to work around a qtwebchannel "Could not convert argument QJsonValue(object,
+    // QJsonObject()) to target type QString ." bug, _pasteTypedBlob in browser/src/map/Clipboard.js
+    // base64-encoded the payload:
+    //
+    // The same root problem in CODA-W, although there we end up with a "the server encountered a
+    // unknown error while parsing the [object command" error message.
+    std::string dec;
+    [[maybe_unused]] auto const res = macaron::Base64::Decode(std::string_view(data, size), dec);
+    assert(res.empty());
+    data = dec.data();
+    size = dec.size();
+#endif
     bool success = false;
     std::string result = "pasteresult: ";
     if (size > 0)
@@ -1859,10 +1886,10 @@ bool ChildSession::insertFile(const StringVector& tokens)
             macaron::Base64::Decode(data, binaryData);
             const std::string tempFile = FileUtil::createRandomTmpDir() + '/' + name;
             std::ofstream fileStream;
-            fileStream.open(tempFile);
+            fileStream.open(tempFile, std::ios::out | std::ios::binary);
             fileStream.write(binaryData.data(), binaryData.size());
             fileStream.close();
-            url = "file://" + tempFile;
+            url = Poco::URI(Poco::Path(tempFile)).toString();
         }
 
         std::string command;
@@ -1991,7 +2018,9 @@ bool ChildSession::keyEvent(const StringVector& tokens,
     // Don't close LO window!
     constexpr int KEY_CTRL = 0x2000;
     constexpr int KEY_W = 0x0216;
+#if !MOBILEAPP
     constexpr int KEY_INSERT = 0x0505;
+#endif
     if (keycode == (KEY_CTRL | KEY_W))
     {
         return true;
@@ -2008,11 +2037,12 @@ bool ChildSession::keyEvent(const StringVector& tokens,
     getLOKitDocument()->setView(_viewId);
     if (target == LokEventTargetEnum::Document)
     {
+#if !MOBILEAPP
         // Check if override mode is disabled.
         if (type == LOK_KEYEVENT_KEYINPUT && charcode == 0 && keycode == KEY_INSERT &&
             !ConfigUtil::getBool("overwrite_mode.enable", false))
             return true;
-
+#endif
         getLOKitDocument()->postKeyEvent(type, charcode, keycode);
     }
     else if (winId != 0)
@@ -2490,11 +2520,8 @@ bool ChildSession::renderNextSlideLayer(SlideCompressor& scomp, const unsigned w
             std::string json = jsonMsg;
             Poco::JSON::Parser parser;
             Poco::JSON::Object::Ptr root = parser.parse(json).extract<Poco::JSON::Object::Ptr>();
-            if (EnableExperimental)
-            {
-                root->set("cacheKey", cacheKey);
-                root->set("isCompressed", isCompressed);
-             }
+            root->set("cacheKey", cacheKey);
+            root->set("isCompressed", isCompressed);
 
             json = JsonUtil::jsonToString(root);
 
@@ -2529,71 +2556,45 @@ bool ChildSession::renderNextSlideLayer(SlideCompressor& scomp, const unsigned w
             if (size_t start = json.find("%IMAGECHECKSUM%"); start != std::string::npos)
                 json.replace(start, 15, std::to_string(pixmapHash));
 
-            if (EnableExperimental) // ZSTD
+            // Use ZSTD to compress the slide layer
+            if (size_t start = json.find("%IMAGETYPE%"); start != std::string::npos)
+                json.replace(start, 11, "zstd");
+
+            root = parser.parse(json).extract<Poco::JSON::Object::Ptr>();
+            root->set("width", width);
+            root->set("height", height);
+            json = JsonUtil::jsonToString(root);
+
+            std::string response = "zstdslidelayer: " + json;
+
+            response += "\n";
+
+            size_t compressed_max_size = ZSTD_COMPRESSBOUND(pixmap->size());
+            size_t max_required_size = response.size() + compressed_max_size;
+            output.resize(max_required_size);
+            std::memcpy(output.data(), response.data(), response.size());
+
+            if (tileMode == LibreOfficeKitTileMode::LOK_TILEMODE_BGRA)
             {
-                if (size_t start = json.find("%IMAGETYPE%"); start != std::string::npos)
-                    json.replace(start, 11, "zstd");
-
-                {
-                    root = parser.parse(json).extract<Poco::JSON::Object::Ptr>();
-                    root->set("width", width);
-                    root->set("height", height);
-                    json = JsonUtil::jsonToString(root);
-                }
-
-                std::string response = "zstdslidelayer: " + json;
-
-                response += "\n";
-
-                size_t compressed_max_size = ZSTD_COMPRESSBOUND(pixmap->size());
-                size_t max_required_size = response.size() + compressed_max_size;
-                output.resize(max_required_size);
-                std::memcpy(output.data(), response.data(), response.size());
-                std::vector<char> compressedOutPut;
-                compressedOutPut.resize(ZSTD_COMPRESSBOUND(pixmap->size()));
-
-                if (tileMode == LibreOfficeKitTileMode::LOK_TILEMODE_BGRA)
-                {
-                    png_row_info rowInfo;
-                    rowInfo.rowbytes = pixmap->size();
-                    // Following function just needs row size to transform from BGRA to RGBA
-                    // We have a flat array so its safe to pass pixmap size as row size
-                    Png::unpremultiply_bgra_data(nullptr, &rowInfo, pixmap->data());
-                }
-                size_t compSize = ZSTD_compress(&output[response.size()], compressed_max_size,
-                                                pixmap->data(), pixmap->size(), -3);
-
-                if (ZSTD_isError(compSize))
-                {
-                    output.resize(0);
-                    LOG_ERR("Failed to compress slidelayer of size " << pixmap->size() << " with "
-                                                                    << ZSTD_getErrorName(compSize));
-                    return;
-                }
-                output.resize(response.size() + compSize);
-
-                LOG_TRC("Compressed slidelayer of size " << pixmap->size() << " to size " << compSize);
+                png_row_info rowInfo;
+                rowInfo.rowbytes = pixmap->size();
+                // Following function just needs row size to transform from BGRA to RGBA
+                // We have a flat array so its safe to pass pixmap size as row size
+                Png::unpremultiply_bgra_data(nullptr, &rowInfo, pixmap->data());
             }
-            else // PNG
+            size_t compSize = ZSTD_compress(&output[response.size()], compressed_max_size,
+                                            pixmap->data(), pixmap->size(), -3);
+
+            if (ZSTD_isError(compSize))
             {
-                if (size_t start = json.find("%IMAGETYPE%"); start != std::string::npos)
-                    json.replace(start, 11, "png");
-
-                std::string response = "slidelayer: " + json;
-
-                response += "\n";
-
-                output.reserve(response.size() + pixmap->size());
-                output.resize(response.size());
-
-                std::memcpy(output.data(), response.data(), response.size());
-
-                if (!Png::encodeSubBufferToPNG(pixmap->data(), 0, 0, width, height, width, height, output, tileMode))
-                {
-                    LOG_ERR("Failed to encode into PNG.");
-                    output.resize(0);
-                }
+                output.resize(0);
+                LOG_ERR("Failed to compress slidelayer of size " << pixmap->size() << " with "
+                                                                << ZSTD_getErrorName(compSize));
+                return;
             }
+            output.resize(response.size() + compSize);
+
+            LOG_TRC("Compressed slidelayer of size " << pixmap->size() << " to size " << compSize);
         });
     return true;
 }
@@ -2861,7 +2862,7 @@ bool ChildSession::resizeWindow(const StringVector& tokens)
 
 bool ChildSession::sendWindowCommand(const StringVector& tokens)
 {
-    const unsigned winId = (tokens.size() > 1 ? Util::u64FromString(tokens[1], 0).first : 0);
+    const unsigned winId = (tokens.size() > 1 ? NumUtil::u64FromString(tokens[1], 0) : 0);
 
     getLOKitDocument()->setView(_viewId);
 
@@ -3649,6 +3650,7 @@ void ChildSession::loKitCallback(const int type, const std::string& payload)
         if (payload == ".uno:NotesMode=true" || payload == ".uno:NotesMode=false" ||
             payload == ".uno:RedlineRenderMode=true" || payload == ".uno:RedlineRenderMode=false")
         {
+            getLOKitDocument()->setView(_viewId);
             std::string status = LOKitHelper::documentStatus(getLOKitDocument()->get());
             sendTextFrame("statusupdate: " + status);
         }
@@ -3986,12 +3988,23 @@ void ChildSession::loKitCallback(const int type, const std::string& payload)
             CODocument *document = DocumentData::get(_docManager->getMobileAppDocId()).coDocument;
             [[document viewController] exportFileURL:payloadURL];
         });
+#elif defined(_WIN32)
+        // We don't need to do any registerdownload thing for CODA-W. When we come here, the PDF has
+        // been exported by core already and the user will continue editing the same document. Some
+        // "registerdownload" with a weird relative URI ../..//foo.pdf is surely a meaningless thing
+        // to do?
+        //
+        // When we eventually turn CODA-W's "Export as" functionality into "Save As" where you
+        // continue editing the saved and differently named copy, the PDF and EPUB cases that
+        // continue to be more like "Export" need to be put into a separate "Export" menu. Or
+        // something.
 #else
         // Register download id -> URL mapping in the DocumentBroker
         auto url = std::string("../../") + payload.substr(payload.find_last_of('/'));
         auto downloadId = Util::rng::getFilename(64);
-        std::string docBrokerMessage = "registerdownload: downloadid=" + downloadId + " url=" + url + " clientid=" + getId();
-        _docManager->sendFrame(docBrokerMessage.c_str(), docBrokerMessage.length());
+        const std::string docBrokerMessage =
+            "registerdownload: downloadid=" + downloadId + " url=" + url + " clientid=" + getId();
+        _docManager->sendFrame(docBrokerMessage);
         std::string message = "downloadas: downloadid=" + downloadId + " port=" + std::to_string(ClientPortNumber) + " id=export";
         sendTextFrame(message);
 #endif
@@ -4053,6 +4066,9 @@ void ChildSession::saveLogUiBackground()
 
 void LogUiCommands::logLine(LogUiCommandsLine &line, bool isUndoChange)
 {
+    if constexpr (Util::isMobileApp())
+        return;
+
     // log command
     double timeDiffStart = std::chrono::duration<double>(line._timeStart - _session._docManager->getLogUiCmd().getKitStartTimeSec()).count();
 
@@ -4104,6 +4120,9 @@ void LogUiCommands::logLine(LogUiCommandsLine &line, bool isUndoChange)
 
 void LogUiCommands::logSaveLoad(std::string cmd, const std::string & path, std::chrono::steady_clock::time_point timeStart)
 {
+    if constexpr (Util::isMobileApp())
+        return;
+
     LogUiCommandsLine uiLogLine;
     uiLogLine._timeStart = timeStart;
     uiLogLine._timeEnd = std::chrono::steady_clock::now();
@@ -4134,12 +4153,18 @@ void LogUiCommands::logSaveLoad(std::string cmd, const std::string & path, std::
 LogUiCommands::LogUiCommands(ChildSession& session, const StringVector* tokens)
     : _session(session), _tokens(tokens)
 {
+    if constexpr (Util::isMobileApp())
+        return;
+
     if (_session._isDocLoaded)
         _document = session.getLOKitDocument();
 }
 
 LogUiCommands::~LogUiCommands()
 {
+    if constexpr (Util::isMobileApp())
+        return;
+
     auto document = _document.lock();
     if (!document)
         return;

@@ -29,6 +29,7 @@
 #include <FileServer.hpp>
 #include <HttpRequest.hpp>
 #include <common/JsonUtil.hpp>
+#include <common/NumUtil.hpp>
 #include <ProofKey.hpp>
 #include <ProxyRequestHandler.hpp>
 #include <RequestDetails.hpp>
@@ -80,6 +81,11 @@ std::unordered_map<std::string, std::shared_ptr<RequestVettingStation>>
 
 extern std::map<std::string, std::shared_ptr<DocumentBroker>> DocBrokers;
 extern std::mutex DocBrokersMutex;
+
+#if !MOBILEAPP
+static constexpr std::string_view MEDIA_STR = "str";
+static constexpr std::string_view MEDIA_MP4 = "url";
+#endif
 
 namespace
 {
@@ -866,30 +872,41 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
 #else // !MOBILEAPP
     Poco::Net::HTTPRequest request;
 
-    // The URL of the document is sent over the FakeSocket by the code in
+    // In the iOS app, the URL of the document is sent over the FakeSocket by the code in
     // -[DocumentViewController userContentController:didReceiveScriptMessage:] when it gets the
     // HULLO message from the JavaScript in global.js.
 
-    // The "app document id", the numeric id of the document, from the appDocIdCounter
+    // In other mobile apps and in CODA, it is done in some similar place.
+
     // It's currently relevant only for iOS, macOS, and Windows, so fallback if it is not found
-    char* space = strchr(socket->getInBuffer().data(), ' ');
-    if (space != nullptr)
+    // (Android?).
+
+    // Unwrap what StreamSocket::readIncomingData() did
+    ssize_t len;
+    memcpy(&len, socket->getInBuffer().data(), sizeof(ssize_t));
+    const char* payload = socket->getInBuffer().data() + sizeof(ssize_t);
+    auto const space = std::string_view(payload, len).find(' ');
+    if (space != std::string_view::npos)
     {
         // The socket buffer is not nul-terminated so we can't just call strtoull() on the number at
         // its end, it might be followed in memory by more digits. Is there really no better way to
         // parse the number at the end of the buffer than to copy the bytes into a nul-terminated
         // buffer?
-        const size_t appDocIdLen =
-        (socket->getInBuffer().data() + socket->getInBuffer().size()) - (space + 1);
+        const size_t appDocIdLen = len - (space + 1);
         char* appDocIdBuffer = (char*)malloc(appDocIdLen + 1);
-        memcpy(appDocIdBuffer, space + 1, appDocIdLen);
+        memcpy(appDocIdBuffer, payload + space + 1, appDocIdLen);
         appDocIdBuffer[appDocIdLen] = '\0';
-        const unsigned mobileAppDocId = Util::u64FromString(appDocIdBuffer, 0).first;
+        auto [mobileAppDocId, docIdOk] = NumUtil::u64FromString(appDocIdBuffer);
+        if (!docIdOk)
+        {
+            mobileAppDocId = 0;
+            LOG_ERR("Bad document ID \"" << appDocIdBuffer << "\" in \""
+                                         << std::string_view(payload, len) << "\"");
+        }
         free(appDocIdBuffer);
 
         handleClientWsUpgrade(request,
-                              RequestDetails(std::string(socket->getInBuffer().data(),
-                                                         space - socket->getInBuffer().data())),
+                              RequestDetails(std::string(payload, space)),
                               disposition, socket, mobileAppDocId);
     }
     else
@@ -897,7 +914,7 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
         // no appDocId provided
         handleClientWsUpgrade(
             request,
-            RequestDetails(std::string(socket->getInBuffer().data(), socket->getInBuffer().size())),
+            RequestDetails(std::string(payload, len)),
             disposition, socket);
     }
     socket->getInBuffer().clear();
@@ -1219,7 +1236,11 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
 
         else if (requestDetails.equals(RequestDetails::Field::Type, "cool") &&
                  requestDetails.equals(1, "media"))
-            servedSync = handleMediaRequest(request, disposition, socket);
+            servedSync = handleMediaRequest(request, disposition, socket, false);
+
+        else if (requestDetails.equals(RequestDetails::Field::Type, "cool") &&
+                 requestDetails.equals(1, "mediaVTT"))
+            servedSync = handleMediaRequest(request, disposition, socket, true);
 
         else if (requestDetails.equals(RequestDetails::Field::Type, "cool") &&
                  requestDetails.equals(1, "clipboard"))
@@ -1234,9 +1255,13 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
 
         else if (requestDetails.isProxy() && requestDetails.equals(2, "ws"))
             servedSync = handleClientProxyRequest(request, requestDetails, message, disposition);
-        else if (requestDetails.equals(RequestDetails::Field::Type, "cool") &&
-                 requestDetails.equals(2, "ws") && requestDetails.isWebSocket())
+        else if (requestDetails.isWebSocket() &&
+                 requestDetails.equals(RequestDetails::Field::Type, "cool") &&
+                 (requestDetails.equals(1, "ws") || requestDetails.equals(2, "ws")))
+        {
+            // The new WebSocket URL has 'ws' as the second segment; support both old and new.
             servedSync = handleClientWsUpgrade(request, requestDetails, disposition, socket);
+        }
 
         else if (!requestDetails.isWebSocket() &&
                  (requestDetails.equals(RequestDetails::Field::Type, "cool") ||
@@ -1404,6 +1429,7 @@ bool ClientRequestDispatcher::handleWopiDiscoveryRequest(
     return true;
 }
 
+//static
 void ClientRequestDispatcher::sendResult(const std::shared_ptr<StreamSocket>& socket, CheckStatus result)
 {
     std::string output = R"({"status": ")" + JsonUtil::escapeJSONValue(nameShort(result)) + "\"}\n";
@@ -1415,7 +1441,7 @@ void ClientRequestDispatcher::sendResult(const std::shared_ptr<StreamSocket>& so
     jsonResponse.set("X-Content-Type-Options", "nosniff");
 
     socket->sendAndShutdown(jsonResponse);
-    LOG_INF("Wopi Access Check request, result: " << nameShort(result));
+    LOG_INF_S("Wopi Access Check request, result: " << nameShort(result));
 }
 
 bool ClientRequestDispatcher::handleWopiAccessCheckRequest(
@@ -1539,9 +1565,10 @@ bool ClientRequestDispatcher::handleWopiAccessCheckRequest(
     httpProbeSession->setTimeout(std::chrono::seconds(2));
 
     std::weak_ptr<StreamSocket> socketWeak(socket);
+    const std::string logPfx = getLogPrefix();
 
     httpProbeSession->setConnectFailHandler(
-        [socketWeak, callbackUrlStr, this](const std::shared_ptr<http::Session>& probeSession)
+        [socketWeak, callbackUrlStr, logPfx](const std::shared_ptr<http::Session>& probeSession)
         {
             CheckStatus status = CheckStatus::UnspecifiedError;
 
@@ -1566,34 +1593,32 @@ bool ClientRequestDispatcher::handleWopiAccessCheckRequest(
                     status = CheckStatus::ExpiredCertificate;
                 } else {
                     status = CheckStatus::CertificateValidation;
-                    LOG_DBG("Result ssl: " << probeSession->getSslVerifyMessage());
+                    LOG_DBG_S(logPfx << "Result ssl: " << probeSession->getSslVerifyMessage());
                 }
             }
-#else
-            (void) this; // to make the compiler happy wrt. the lambda capture
 #endif
 
             std::shared_ptr<StreamSocket> destSocket = socketWeak.lock();
             if (!destSocket)
             {
-                LOG_ERR("Invalid socket while sending wopi access check result for: "
+                LOG_ERR_S(logPfx << "Invalid socket while sending wopi access check result for: "
                         << callbackUrlStr);
                 return;
             }
             sendResult(destSocket, status);
     });
 
-    auto finishHandler = [socketWeak, callbackUrlStr = std::move(callbackUrlStr),
-                          this](const std::shared_ptr<http::Session>& probeSession)
+    auto finishHandler = [socketWeak, callbackUrlStr = std::move(callbackUrlStr), logPfx]
+                          (const std::shared_ptr<http::Session>& probeSession)
     {
-        LOG_TRC("finishHandler ");
+        LOG_TRC_S(logPfx << "finishHandler ");
 
         const auto lastErrno = errno;
 
         const std::shared_ptr<http::Response> httpResponse = probeSession->response();
         const http::Response::State responseState = httpResponse->state();
         const http::StatusCode statusCode = httpResponse->statusCode();
-        LOG_DBG("Wopi Access Check: got response state: " << responseState << " "
+        LOG_DBG_S(logPfx << "Wopi Access Check: got response state: " << responseState << " "
                                             << ", response status code: " << statusCode << " "
                                             << ", last errno: " << lastErrno);
 
@@ -1626,7 +1651,7 @@ bool ClientRequestDispatcher::handleWopiAccessCheckRequest(
                 status = CheckStatus::Ok;
             } else {
                 status = CheckStatus::CertificateValidation;
-                LOG_WRN("Unexpected failed Result ssl in a connection success: " << probeSession->getSslVerifyMessage());
+                LOG_WRN_S(logPfx << "Unexpected failed Result ssl in a connection success: " << probeSession->getSslVerifyMessage());
             }
         }
 #endif
@@ -1634,8 +1659,8 @@ bool ClientRequestDispatcher::handleWopiAccessCheckRequest(
         std::shared_ptr<StreamSocket> destSocket = socketWeak.lock();
         if (!destSocket)
         {
-            LOG_ERR(
-                "Invalid socket while sending wopi access check result for: " << callbackUrlStr);
+            LOG_ERR_S(logPfx
+                << "Invalid socket while sending wopi access check result for: " << callbackUrlStr);
             return;
         }
         sendResult(destSocket, status);
@@ -1863,7 +1888,8 @@ bool ClientRequestDispatcher::handleRobotsTxtRequest(const Poco::Net::HTTPReques
 
 bool ClientRequestDispatcher::handleMediaRequest(const Poco::Net::HTTPRequest& request,
                                                  SocketDisposition& /*disposition*/,
-                                                 const std::shared_ptr<StreamSocket>& socket)
+                                                 const std::shared_ptr<StreamSocket>& socket,
+                                                 bool bVTT)
 {
     assert(socket && "Must have a valid socket");
 
@@ -1947,7 +1973,8 @@ bool ClientRequestDispatcher::handleMediaRequest(const Poco::Net::HTTPRequest& r
         LOG_TRC_S("Move media request " << tag << " to docbroker thread");
 
         std::string range = request.get("Range", "none");
-        docBroker->handleMediaRequest(std::move(range), socket, tag);
+        docBroker->handleMediaRequest(std::move(range), socket, tag, (bVTT ? std::string(MEDIA_STR)
+                                                                      : std::string(MEDIA_MP4)));
     }
     return false; // async
 }
@@ -2165,7 +2192,7 @@ bool ClientRequestDispatcher::handlePostRequest(const RequestDetails& requestDet
         LOG_INF("Conversion request for URI [" << fromPath << "] format [" << format << "].");
         if (!fromPath.empty() && hasRequiredParameters)
         {
-            Poco::URI uriPublic = RequestDetails::sanitizeURI(fromPath);
+            Poco::URI uriPublic = RequestDetails::sanitizeLocalPath(fromPath);
             AdditionalFilePocoUris additionalFileUrisPublic;
             for (const auto& key : {"template", "compare"})
             {
@@ -2175,7 +2202,7 @@ bool ClientRequestDispatcher::handlePostRequest(const RequestDetails& requestDet
                     continue;
                 }
 
-                additionalFileUrisPublic[key] = RequestDetails::sanitizeURI(it->second);
+                additionalFileUrisPublic[key] = RequestDetails::sanitizeLocalPath(it->second);
             }
             const std::string docKey = RequestDetails::getDocKey(uriPublic);
 
@@ -2437,7 +2464,7 @@ bool ClientRequestDispatcher::handlePostRequest(const RequestDetails& requestDet
         if (fromPath.empty())
             return false;
 
-        Poco::URI uriPublic = RequestDetails::sanitizeURI(fromPath);
+        Poco::URI uriPublic = RequestDetails::sanitizeLocalPath(fromPath);
         const std::string docKey = RequestDetails::getDocKey(uriPublic);
 
         // This lock could become a bottleneck.
@@ -2606,9 +2633,9 @@ bool ClientRequestDispatcher::handleClientWsUpgrade(const Poco::Net::HTTPRequest
         }
 
         // Indicate to the client that document broker is searching.
-        static constexpr const char* const status = R"(progress: { "id":"find" })";
+        static constexpr std::string_view status = R"(progress: { "id":"find" })";
         LOG_TRC("Sending to Client [" << status << ']');
-        ws->sendMessage(status);
+        ws->sendTextMessage(status);
 
         // We have the client's WS and we either got the proactive CheckFileInfo
         // results, which we can use, or we need to issue a new async CheckFileInfo.
@@ -2618,8 +2645,8 @@ bool ClientRequestDispatcher::handleClientWsUpgrade(const Poco::Net::HTTPRequest
     catch (const std::exception& exc)
     {
         LOG_ERR("Error while handling Client WS Request: " << exc.what());
-        const std::string msg = "error: cmd=internal kind=load";
-        ws->sendMessage(msg);
+        constexpr std::string_view msg = "error: cmd=internal kind=load";
+        ws->sendTextMessage(msg);
         ws->shutdown(WebSocketHandler::StatusCodes::ENDPOINT_GOING_AWAY, msg);
         socket->ignoreInput();
         return true;

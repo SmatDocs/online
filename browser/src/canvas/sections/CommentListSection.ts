@@ -89,6 +89,9 @@ export class CommentSection extends CanvasSectionObject {
 		calcLastTab: number;
 		// Keep a reference to the original set of comments received.
 		calcMasterList: Array<any>;
+		// Has the 'commandstatechanged' msg arrived after a tab switch.
+		// This a precondition for drawing spreadsheet comment marker.
+		calcCommandStateChanged: boolean;
 		commentList: Array<Comment>;
 		selectedComment: Comment | null;
 		calcCurrentComment: Comment | null;
@@ -122,6 +125,11 @@ export class CommentSection extends CanvasSectionObject {
 	// To associate comment id with its index in commentList array.
 	private idIndexMap: Map<any, number>;
 
+	// Dirty flag: set by onNewDocumentTopLeft, consumed by onDraw.
+	// Collapses multiple onNewDocumentTopLeft calls into a single layout
+	// pass and avoids the extra requestReDraw that updateDOM would trigger.
+	private _commentPositionDirty: boolean = false;
+
 	private annotationMinSize: number;
 	private annotationMaxSize: number;
 	escapeListener: (e: KeyboardEvent) => void;
@@ -134,6 +142,7 @@ export class CommentSection extends CanvasSectionObject {
 		this.sectionProperties.docLayer = this.map._docLayer;
 		this.sectionProperties.calcLastTab = -1;
 		this.sectionProperties.calcMasterList = [];
+		this.sectionProperties.calcCommandStateChanged = true;
 		this.sectionProperties.commentList = new Array(0);
 		this.sectionProperties.selectedComment = null;
 		this.sectionProperties.arrow = null;
@@ -171,6 +180,7 @@ export class CommentSection extends CanvasSectionObject {
 		this.map.on('AnnotationScrollDown', this.onAnnotationScrollDown, this);
 
 		this.map.on('commandstatechanged', function (event: any) {
+			this.sectionProperties.calcCommandStateChanged = true;
 			if (event.commandName === '.uno:ShowResolvedAnnotations')
 				this.setViewResolved(event.state === 'true');
 			else if (event.commandName === 'showannotations')
@@ -359,6 +369,8 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public shouldCollapse (): boolean {
+		if (app.map._docLayer._docType === 'text')
+			return false;
 		if (!this.containerObject.getDocumentAnchorSection() || app.map._docLayer._docType === 'spreadsheet' || (<any>window).mode.isMobile())
 			return false;
 		const availableSpace = this.calculateAvailableSpace();
@@ -374,7 +386,7 @@ export class CommentSection extends CanvasSectionObject {
 		*/
 		if (app.activeDocument.activeLayout.viewHasEnoughSpaceToShowFullWidthComments())
 			return false;
-		return availableSpace < this.sectionProperties.commentWidth && availableSpace > this.sectionProperties.collapsedCommentWidth;
+		return availableSpace < this.sectionProperties.commentWidth && availableSpace >= 0;
 	}
 
 	public hideAllComments (): void {
@@ -729,6 +741,10 @@ export class CommentSection extends CanvasSectionObject {
 
 	public click (annotation: any): void {
 		this.select(annotation);
+		app.map.fire('postMessage', {
+			msgId: 'Clicked_Comment',
+			args: { Id: annotation.sectionProperties.data.id }
+		});
 	}
 
 	public save (annotation: any): void {
@@ -957,20 +973,26 @@ export class CommentSection extends CanvasSectionObject {
 
 		const anchorPos = rootComment.sectionProperties.data.anchorSPoint;
 
-		const topLeftArray = anchorPos.toArray();
-		const topLeftVisible = app.isPointVisibleInTheDisplayedArea(topLeftArray);
-		const bottomRightVisible = app.isPointVisibleInTheDisplayedArea([
-			topLeftArray[0] + (this.sectionProperties.commentWidth * app.pixelsToTwips),
-			topLeftArray[1] + Math.round(rootComment.getCommentHeight() * app.pixelsToTwips)
-		]);
+		let topTwips: number = anchorPos.toArray()[1];
+		if (app.map._docLayer._docType === 'spreadsheet' && rootComment.sectionProperties.data.id !== 'new') {
+			// anchorPos is in display twips but
+			// app.isYVisibleInTheDisplayedArea() expects print-twips.
+			topTwips = (app.map._docLayer.sheetGeometry as cool.SheetGeometry)
+				.getPrintTwipsPointFromTile(new cool.Point(0, topTwips)).y;
+		}
+		const topVisible = app.isYVisibleInTheDisplayedArea(topTwips);
+		const bottomVisible = app.isYVisibleInTheDisplayedArea(
+			topTwips + Math.round(rootComment.getCommentHeight() * app.pixelsToTwips)
+		);
 
 		const topBottom = this.getScreenTopBottom();
 
-		if (!topLeftVisible || !bottomRightVisible) {
-			if (!topLeftVisible)
-				app.activeDocument.activeLayout.scroll(0, topBottom[0] - anchorPos.pY);
-			else if (!bottomRightVisible)
-				app.activeDocument.activeLayout.scroll(0, (anchorPos.pY + rootComment.getCommentHeight() - topBottom[1]));
+		if (!topVisible || !bottomVisible) {
+			const topPixels = topTwips * app.twipsToPixels;
+			if (!topVisible)
+				app.activeDocument.activeLayout.scroll(0, topBottom[0] - topPixels);
+			else if (!bottomVisible)
+				app.activeDocument.activeLayout.scroll(0, (topPixels + rootComment.getCommentHeight() - topBottom[1]));
 
 			if (app.map._docLayer._docType === 'spreadsheet' && rootComment) {
 				rootComment.positionCalcComment();
@@ -1348,10 +1370,17 @@ export class CommentSection extends CanvasSectionObject {
 				this.sectionProperties.selectedComment.hide();
 		}
 
-		var previousAnimationState = this.disableLayoutAnimation;
-		this.disableLayoutAnimation = true;
-		this.update(false);
-		this.disableLayoutAnimation = previousAnimationState;
+		this._commentPositionDirty = true;
+	}
+
+	public onDraw (frameCount?: number, elapsedTime?: number): void {
+		if (this._commentPositionDirty) {
+			this._commentPositionDirty = false;
+			var previousAnimationState = this.disableLayoutAnimation;
+			this.disableLayoutAnimation = true;
+			this.update(false);
+			this.disableLayoutAnimation = previousAnimationState;
+		}
 	}
 
 	private showHideComments (): void {
@@ -1896,10 +1925,15 @@ export class CommentSection extends CanvasSectionObject {
 			comment.cellRange = app.map._docLayer._parseCellRange(comment.cellRange);
 		}
 
-		var cellPos = comment.cellRange ? app.map._docLayer._cellRangeToTwipRect(comment.cellRange).toRectangle() : null;
-		comment.rectangles = this.stringToRectangles(comment.textRange || comment.anchorPos || comment.rectangle || cellPos); // Simple array of point arrays [x1, y1, x2, y2].
-		comment.rectanglesOriginal = this.stringToRectangles(comment.textRange || comment.anchorPos || comment.rectangle || cellPos); // This unmodified version will be kept for re-calculations.
-		comment.anchorPos = this.stringToRectangles(comment.anchorPos || comment.rectangle || cellPos)[0];
+		const cellPos = comment.cellRange ? app.map._docLayer._cellRangeToTwipRect(comment.cellRange).toRectangle() : null;
+		const rectangles = this.stringToRectangles(comment.textRange || comment.anchorPos || comment.rectangle); // Simple array of point arrays [x1, y1, x2, y2].
+		if (rectangles.length === 0 && cellPos?.length) {
+			rectangles.push(cellPos);
+		}
+		console.assert(rectangles.length, 'Found no rectangles in comment!');
+		comment.rectangles = rectangles;
+		comment.rectanglesOriginal = structuredClone(rectangles);
+		comment.anchorPos = rectangles[0];
 		comment.anchorSPoint = new cool.SimplePoint(comment.anchorPos[0], comment.anchorPos[1]);
 
 		if (app.map._docLayer._docType === 'spreadsheet' && app.map._docLayer.sheetGeometry)
@@ -2121,7 +2155,7 @@ export class CommentSection extends CanvasSectionObject {
 		this.sectionProperties.canvasContainerTop = document.getElementById('document-container').getBoundingClientRect().top;
 
 		const availableSpace = this.calculateAvailableSpace();
-		if (this.sectionProperties.commentList.length > 0) {
+		if (!this.commentsHiddenOrNotPresent()) {
 			this.orderCommentList();
 			if (relayout)
 				this.resetCommentsSize();
@@ -2311,6 +2345,7 @@ export class CommentSection extends CanvasSectionObject {
 				}
 			}
 		}
+		this.update();
 	}
 
 	private orderCommentList (): void {
@@ -2412,7 +2447,7 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	private resizeLastComment (): void {
-		if (app.map._docLayer._docType === 'text' && this.sectionProperties.commentList.length > 0) {
+		if (app.map._docLayer._docType === 'text' && !this.commentsHiddenOrNotPresent()) {
 			const minMaxHeight = Number(getComputedStyle(document.documentElement).getPropertyValue('--annotation-min-size'));
 			const maxMaxHeight = Number(getComputedStyle(document.documentElement).getPropertyValue('--annotation-max-size'));
 			//last comment
@@ -2548,6 +2583,8 @@ export class CommentSection extends CanvasSectionObject {
 			// To ignore updateparts events without actual change in sheet.
 			return;
 		}
+
+		this.sectionProperties.calcCommandStateChanged = false;
 
 		this.importComments();
 	}

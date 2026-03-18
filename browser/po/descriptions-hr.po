@@ -1,12 +1,12 @@
-# Milo Ivir <mail@milotype.de>, 2020, 2024, 2025, 2026.
+# Milo Ivir <mail@milotype.de>, 2020, 2024, 2025.
 # Weblate <noreply@weblate.org>, 2020.
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-02-13 19:20+0200\n"
-"PO-Revision-Date: 2026-02-03 12:02+0000\n"
-"Last-Translator: Anonymous <noreply@weblate.org>\n"
+"POT-Creation-Date: 2026-03-09 17:39+0200\n"
+"PO-Revision-Date: 2025-11-18 07:51+0000\n"
+"Last-Translator: Milo Ivir <mail@milotype.de>\n"
 "Language-Team: Croatian <https://hosted.weblate.org/projects/collabora-"
 "online/app-store-descriptions/hr/>\n"
 "Language: hr\n"

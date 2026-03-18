@@ -5,13 +5,22 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#define LOK_USE_UNSTABLE_API
 #include <LibreOfficeKit/LibreOfficeKit.hxx>
 
 #include <string>
 
 extern int coolwsd_server_socket_fd;
 extern const char *user_name;
+
+// The location of the app .exe file. Note that currently that is the "program" subfolder of the top
+// directory of the app.
 extern std::string app_installation_path;
+
+// The file: URI for the above.
 extern std::string app_installation_uri;
+
+extern void load_next_document();
+void output_file_dialog_from_core(const char* suggestedURI, char* result, size_t resultLen);
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

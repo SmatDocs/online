@@ -110,7 +110,8 @@ private:
     /// @return true if request has been handled synchronously and response sent, otherwise false
     static bool handleMediaRequest(const Poco::Net::HTTPRequest& request,
                                    SocketDisposition& /*disposition*/,
-                                   const std::shared_ptr<StreamSocket>& socket);
+                                   const std::shared_ptr<StreamSocket>& socket,
+                                   bool bVTT);
 
     static std::string getContentType(const std::string& fileName);
 
@@ -126,7 +127,7 @@ private:
                                   const RequestDetails& requestDetails,
                                   std::istream& message, SocketDisposition& disposition);
 
-    void sendResult(const std::shared_ptr<StreamSocket>& socket, CheckStatus result);
+    static void sendResult(const std::shared_ptr<StreamSocket>& socket, CheckStatus result);
 
     enum class MessageResult : std::uint8_t
     {

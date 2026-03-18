@@ -234,8 +234,8 @@ DocumentBroker::DocumentBroker(ChildType type, const std::string& uri, const Poc
 
     if constexpr (!Util::isMobileApp())
         assert(_mobileAppDocId == 0 && "Unexpected to have mobileAppDocId in the non-mobile build");
-#ifdef IOS
-    assert(_mobileAppDocId > 0 && "Unexpected to have no mobileAppDocId in the iOS build");
+#if defined(IOS) || defined(QTAPP) || defined(MACOS) || defined(_WIN32)
+    assert(_mobileAppDocId > 0 && "Unexpected to have no mobileAppDocId in a mobile app");
 #endif
 
     LOG_INF("DocumentBroker [" << COOLWSD::anonymizeUrl(_uriPublic.toString())
@@ -933,7 +933,7 @@ void DocumentBroker::joinThread()
     _poll->joinThread();
 }
 
-void DocumentBroker::stop(const std::string& reason)
+void DocumentBroker::stop(const std::string_view reason)
 {
     if (_closeReason.empty() || _closeReason == reason)
     {
@@ -2504,24 +2504,25 @@ bool DocumentBroker::isStorageOutdated() const
             << " and the last uploaded file was modified at " << lastModifiedTime << ", which are "
             << (currentModifiedTime == lastModifiedTime ? "identical" : "different"));
 
-    if (Util::isDebugEnabled())
+    if (Util::isDebugEnabled() && _storageManager.getLastUploadedFileModifiedLocalTime() !=
+                                      _saveManager.getLastModifiedLocalTime())
     {
-        if (_storageManager.getLastUploadedFileModifiedLocalTime() !=
-            _saveManager.getLastModifiedLocalTime())
-        {
-            const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-            LOG_ERR(
-                "StorageManager's lastModifiedTime ["
+        const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        LOG_ERR("StorageManager's lastModifiedTime ["
                 << Util::getTimeForLog(now, _storageManager.getLastUploadedFileModifiedLocalTime())
                 << "] doesn't match that of SaveManager's ["
                 << Util::getTimeForLog(now, _saveManager.getLastModifiedLocalTime())
                 << "]. File lastModifiedTime: [" << Util::getTimeForLog(now, currentModifiedTime)
                 << ']');
-        }
     }
 
     // Compare to the last uploaded file's modified-time.
     return currentModifiedTime != lastModifiedTime;
+}
+
+bool DocumentBroker::isNextSaveAutosave() const
+{
+    return _nextStorageAttrs.isAutosave();
 }
 
 void DocumentBroker::handleSaveResponse(const std::shared_ptr<ClientSession>& session,
@@ -3615,7 +3616,7 @@ bool DocumentBroker::autoSave(const bool force, const bool dontSaveIfUnmodified,
     return sent;
 }
 
-void DocumentBroker::autoSaveAndStop(const std::string& reason)
+void DocumentBroker::autoSaveAndStop(const std::string_view reason)
 {
     LOG_TRC("autoSaveAndStop for docKey [" << getDocKey() << "]: " << reason);
 
@@ -3677,7 +3678,7 @@ void DocumentBroker::autoSaveAndStop(const std::string& reason)
         // very late, or not at all. We care that there is nothing to upload
         // and the last save succeeded, possibly because there was no
         // modifications, and there has been no activity since.
-        LOG_ASSERT_MSG(_saveManager.lastSaveRequestTime() < _saveManager.lastSaveResponseTime(),
+        LOG_ASSERT_MSG(_saveManager.lastSaveRequestTime() <= _saveManager.lastSaveResponseTime(),
                        "Unexpected active save in flight");
         LOG_ASSERT_MSG(!_saveManager.isSaving(), "Unexpected active save in flight");
         if (!haveModifyActivityAfterSaveRequest() && _saveManager.lastSaveSuccessful())
@@ -3979,8 +3980,6 @@ std::size_t DocumentBroker::removeSession(const std::shared_ptr<ClientSession>& 
         {
             LOG_WRN("Failed to upload presets for session [" << id << "]: " << exc.what());
         }
-#endif
-#ifndef IOS
         if (activeSessionCount <= 1 && !isConvertTo())
         {
             // rescue clipboard before shutdown.
@@ -4205,7 +4204,7 @@ std::shared_ptr<ClientSession> DocumentBroker::createNewClientSession(
                                   << id << ']');
             if (ws)
             {
-                const std::string msg("error: cmd=load kind=docunloading");
+                constexpr std::string_view msg("error: cmd=load kind=docunloading");
                 ws->sendTextMessage(msg);
                 ws->shutdown(true, msg);
             }
@@ -4216,7 +4215,7 @@ std::shared_ptr<ClientSession> DocumentBroker::createNewClientSession(
         // Now we have a DocumentBroker and we're ready to process client commands.
         if (ws)
         {
-            static constexpr const char* const statusReady = "progress: { \"id\":\"ready\" }";
+            static constexpr std::string_view statusReady = "progress: { \"id\":\"ready\" }";
             LOG_TRC("Sending to Client [" << statusReady << ']');
             ws->sendTextMessage(statusReady);
         }
@@ -4244,7 +4243,7 @@ std::shared_ptr<ClientSession> DocumentBroker::createNewClientSession(
 
     if (ws)
     {
-        const std::string msg("error: cmd=internal kind=load");
+        constexpr std::string_view msg("error: cmd=internal kind=load");
         ws->sendTextMessage(msg);
         ws->shutdown(true, msg);
     }
@@ -4826,7 +4825,8 @@ void DocumentBroker::handleClipboardRequest(ClipboardRequest type, const std::sh
 
 void DocumentBroker::handleMediaRequest(const std::string_view range,
                                         const std::shared_ptr<Socket>& socket,
-                                        const std::string& tag)
+                                        const std::string& tag,
+                                        const std::string& field)
 {
     LOG_DBG("handleMediaRequest: " << tag);
 
@@ -4850,7 +4850,7 @@ void DocumentBroker::handleMediaRequest(const std::string_view range,
     if (JsonUtil::parseJSON(it->second, object))
     {
         LOG_ASSERT(JsonUtil::getJSONValue<std::string>(object, "id") == tag);
-        const std::string url = JsonUtil::getJSONValue<std::string>(object, "url");
+        const std::string url = JsonUtil::getJSONValue<std::string>(object, field);
         LOG_ASSERT(!url.empty());
         if (Util::toLower(url).starts_with("file://"))
         {
@@ -4861,7 +4861,7 @@ void DocumentBroker::handleMediaRequest(const std::string_view range,
 
             auto session = std::make_shared<http::ServerSession>();
             http::ServerSession::ResponseHeaders responseHeaders;
-            responseHeaders.emplace_back("Content-Type", "video/mp4");
+            responseHeaders.emplace_back("Content-Type", (field == "url" ? "video/mp4" : "text/plain"));
             session->asyncUpload(std::move(path), std::move(responseHeaders), range);
             streamSocket->setHandler(std::static_pointer_cast<ProtocolHandlerInterface>(session));
         }
@@ -5169,18 +5169,26 @@ std::string DocumentBroker::applyBrowserAccessibility(const std::string& message
                                                    const std::string& viewId)
 {
     bool accessibilityEnabled = false;
+    bool lockAccessibilityOn = false;
     const auto it = _sessions.find(viewId);
     if (it != _sessions.end())
     {
         auto session = it->second;
         auto json = session->getBrowserSettingJSON();
         JsonUtil::findJSONValue(json, "accessibilityState", accessibilityEnabled);
+        JsonUtil::findJSONValue(json, "lockAccessibilityOn", lockAccessibilityOn);
     }
     else
         LOG_WRN("Cannot lock accessibility on for ClientSession [" << viewId << ']');
 
     if (!accessibilityEnabled)
         return message;
+
+    if (lockAccessibilityOn && it != _sessions.end())
+    {
+        auto session = it->second;
+        session->sendTextFrame("lockaccessibilityon");
+    }
 
     // Ensure accessibilityState=true is enabled. Overwrite accessibilityState=
     // if it exists, append otherwise.
@@ -5339,7 +5347,7 @@ bool DocumentBroker::forwardToClient(const std::shared_ptr<Message>& payload)
     return false;
 }
 
-void DocumentBroker::shutdownClients(const std::string& closeReason)
+void DocumentBroker::shutdownClients(const std::string_view closeReason)
 {
     ASSERT_CORRECT_THREAD();
     LOG_INF("Terminating " << _sessions.size() << " clients of doc [" << _docKey << "] with reason: " << closeReason);
@@ -5371,7 +5379,7 @@ void DocumentBroker::shutdownClients(const std::string& closeReason)
     }
 }
 
-void DocumentBroker::terminateChild(const std::string& closeReason)
+void DocumentBroker::terminateChild(const std::string_view closeReason)
 {
     ASSERT_CORRECT_THREAD();
 

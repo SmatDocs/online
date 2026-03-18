@@ -61,6 +61,9 @@ namespace FileUtil
     // As std::ifstream::open.
     void openFileToIFStream(const std::string& file, std::ifstream& stream, std::ios_base::openmode mode = std::ios_base::in);
 
+    // As std::ofstream::open.
+    void openFileToOFStream(const std::string& file, std::ofstream& stream, std::ios_base::openmode mode = std::ios_base::out);
+
     // As stat().
     int getStatOfFile(const std::string& file, struct stat& sb);
 
@@ -274,7 +277,7 @@ namespace FileUtil
         /// nanosecond precision, if/when the filesystem supports it.
         timespec modifiedTime() const
         {
-#if defined(IOS) || defined(MACOS)
+#if defined(__APPLE__)
             return _sb.st_mtimespec;
 #elif defined(_WIN32)
             timespec result{ _sb.st_mtime, 0 };

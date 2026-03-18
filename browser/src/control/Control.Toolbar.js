@@ -311,6 +311,7 @@ function getInsertTablePopupElements(closeCallback) {
 
 	const grid = document.createElement('div');
 	grid.className = 'inserttable-grid';
+	grid.setAttribute('role', 'grid');
 	grid.onmouseover = highlightTableFunction;
 	grid.onclick = sendInsertTableFunction;
 
@@ -344,10 +345,12 @@ function insertTable(grid = document.getElementsByClassName('inserttable-grid')[
 	for (var r = 0; r < rows; r++) {
 		const row = document.createElement('div');
 		row.className = 'row';
+		row.setAttribute('role', 'row');
 		grid.appendChild(row);
 
 		for (var c = 0; c < cols; c++) {
 			const col = document.createElement('button');
+			col.setAttribute('role', 'gridcell');
 			col.setAttribute('aria-label', (1 + r) + 'x' + (1 + c));
 			col.onfocus = highlightTableFunction;
 			col.className = 'col';
@@ -569,18 +572,18 @@ var onShapeClickFunction = function(e) {
 	e.stopPropagation();
 };
 
-var onShapeKeyUpFunction = function(event) {
-	if (event.code === 'Enter' || event.code === 'Space') {
-		app.map.sendUnoCommand('.uno:' + event.target.dataset.uno);
-		closePopup();
-	}
-	event.stopPropagation();
-};
-
 var onShapeKeyDownFunction = function(event) {
 	if (event.code === 'Escape') {
 		closePopup();
 		app.map.focus();
+	}
+	else if (event.code === 'Enter' || event.code === 'Space') {
+		let name = $(event.target).data().uno;
+		if (name) {
+			app.map.sendUnoCommand('.uno:' + name);
+			closePopup();
+		}
+		event.preventDefault();
 	}
 };
 
@@ -595,18 +598,27 @@ function insertShapes(shapeType, grid = document.getElementsByClassName('inserts
 		return;
 
 	var collection = shapes[shapeType];
-
+	let cIdx = 1;
+	let isFirstItem = true;
 	for (let s in collection) {
+		const group = document.createElement('div');
+		group.setAttribute('role', 'group');
+
 		const rowHeader = document.createElement('div');
+		rowHeader.setAttribute('role', 'presentation');
+		rowHeader.id = `${shapeType}_row_${cIdx++}`;
 		rowHeader.className = 'row-header cool-font';
 		rowHeader.textContent = _(s);
-		grid.appendChild(rowHeader);
+		group.appendChild(rowHeader);
+		grid.appendChild(group);
+
+		group.setAttribute('aria-labelledby', rowHeader.id);
 
 		var rows = Math.ceil(collection[s].length / width);
 		var idx = 0;
 		const row = document.createElement('div');
 		row.className = 'row';
-		grid.appendChild(row);
+		group.appendChild(row);
 		for (let r = 0; r < rows; r++) {
 
 			for (let c = 0; c < width; c++) {
@@ -618,10 +630,15 @@ function insertShapes(shapeType, grid = document.getElementsByClassName('inserts
 				const col = document.createElement('div');
 
 				col.className = 'col w2ui-icon ' + shape.img;
+				col.setAttribute('role', 'gridcell');
 				col.dataset.uno = shape.uno;
 				col.setAttribute('data-cooltip', shape.text);
+				col.setAttribute('aria-label', shape.text);
 				window.L.control.attachTooltipEventListener(col, map);
 				col.tabIndex = 0;
+				col.setAttribute('role', 'option');
+				col.setAttribute('aria-selected', isFirstItem);
+				isFirstItem = false;
 				col.setAttribute('index', r + ':' + c);
 				row.appendChild(col);
 			}
@@ -638,7 +655,6 @@ function getShapesPopupElements(closeCallback) {
 	const grid = document.createElement('div');
 	grid.className = 'insertshape-grid';
 	grid.onclick = onShapeClickFunction;
-	grid.onkeyup = onShapeKeyUpFunction;
 	grid.onkeydown = onShapeKeyDownFunction;
 
 	const container = document.createElement('div');
@@ -672,7 +688,6 @@ function getConnectorsPopupElements(closeCallback) {
 	const grid = document.createElement('div');
 	grid.className = 'insertshape-grid';
 	grid.onclick = onShapeClickFunction;
-	grid.onkeyup = onShapeKeyUpFunction;
 	grid.onkeydown = onShapeKeyDownFunction;
 
 	gridContainer.appendChild(grid);

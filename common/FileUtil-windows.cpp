@@ -38,7 +38,7 @@ namespace FileUtil
         }
         catch (const std::filesystem::filesystem_error& e)
         {
-            // Don't complain if already non-existant.
+            // Don't complain if already non-existent.
             if (FileUtil::Stat(path).exists())
             {
                 // Error only if it still exists.
@@ -125,6 +125,11 @@ namespace FileUtil
         stream.open(Util::string_to_wide_string(file), mode | std::ios_base::binary);
     }
 
+    void openFileToOFStream(const std::string& file, std::ofstream& stream, std::ios_base::openmode mode)
+    {
+        stream.open(Util::string_to_wide_string(file), mode | std::ios_base::binary);
+    }
+
     int getStatOfFile(const std::string& file, struct stat& sb)
     {
         return _wstat64i32(Util::string_to_wide_string(file).c_str(), (struct _stat64i32*) &sb);
@@ -162,8 +167,10 @@ namespace FileUtil
 
         // Try some fallbacks
         wchar_t *tmp = _wgetenv(L"TEMP");
-        if (!tmp)
+        if (!tmp || tmp[0] == L'\0')
             tmp = _wgetenv(L"TMP");
+        if (tmp && tmp[0] == L'\0')
+            tmp = NULL;
 
         // We don't want to modify the environment string directly.
         if (tmp)

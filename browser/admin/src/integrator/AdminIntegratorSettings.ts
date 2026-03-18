@@ -112,6 +112,7 @@ const defaultBrowserSetting: Record<string, any> = {
 	},
 	darkTheme: false,
 	accessibilityState: false,
+	lockAccessibilityOn: false,
 	spreadsheet: {
 		ShowStatusbar: false,
 		A11yCheckDeck: false,
@@ -145,7 +146,193 @@ const defaultBrowserSetting: Record<string, any> = {
 	},
 };
 
+abstract class SettingsStorage {
+	abstract fetchSettingsConfig(): Promise<ConfigData>;
+	abstract uploadSettings(filePath: string, file: File): Promise<void>;
+	abstract fetchSettingFile(fileUrl: string): Promise<string | null>;
+	abstract deleteSettingsConfig(fileId: string): Promise<void>;
+}
+
+class DesktopSettingsStorage extends SettingsStorage {
+	async fetchSettingsConfig(): Promise<ConfigData> {
+		const configJson = await (window.parent as any).postMobileCall(
+			'FETCHSETTINGSCONFIG',
+		);
+		return JSON.parse(configJson);
+	}
+
+	async uploadSettings(filePath: string, file: File): Promise<void> {
+		const text = await file.text();
+		(window.parent as any).postMobileMessage(
+			'UPLOADSETTINGS ' +
+				JSON.stringify({
+					filePath,
+					fileName: file.name,
+					mimeType: file.type,
+					content: text,
+				}),
+		);
+	}
+
+	async fetchSettingFile(fileUrl: string): Promise<string | null> {
+		const result = await (window.parent as any).postMobileCall(
+			'FETCHSETTINGSFILE ' + fileUrl,
+		);
+		return result.content;
+	}
+
+	async deleteSettingsConfig(fileId: string): Promise<void> {
+		console.warn('Delete settings config not needed on desktop: ' + fileId);
+	}
+}
+
+class OnlineSettingsStorage extends SettingsStorage {
+	private getAPIEndpoints() {
+		return {
+			uploadSettings: window.serviceRoot + '/browser/dist/upload-settings',
+
+			fetchSharedConfig:
+				window.serviceRoot + '/browser/dist/fetch-settings-config',
+
+			deleteSharedConfig:
+				window.serviceRoot + '/browser/dist/delete-settings-config',
+
+			fetchSettingFile:
+				window.serviceRoot + '/browser/dist/fetch-settings-file',
+		};
+	}
+
+	private getConfigType(): string {
+		return window.iframeType === 'admin' ? 'systemconfig' : 'userconfig';
+	}
+
+	async fetchSettingsConfig(): Promise<ConfigData> {
+		if (!window.wopiSettingBaseUrl) {
+			console.error(_('Shared Config URL is missing in initial variables.'));
+			throw new Error('Shared Config URL is missing');
+		}
+		if (!window.accessToken) {
+			console.error(_('Access token is missing in initial variables.'));
+			throw new Error('Access token is missing');
+		}
+
+		const formData = new FormData();
+		formData.append('sharedConfigUrl', window.wopiSettingBaseUrl);
+		formData.append('accessToken', window.accessToken);
+		formData.append('type', this.getConfigType());
+
+		const response: Response = await fetch(
+			this.getAPIEndpoints().fetchSharedConfig,
+			{
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${window.accessToken}`,
+				},
+				body: formData,
+			},
+		);
+
+		if (!response.ok) {
+			console.error(
+				'something went wrong shared config response',
+				response.text(),
+			);
+			throw new Error(`Could not fetch shared config: ${response.statusText}`);
+		}
+
+		return await response.json();
+	}
+
+	async uploadSettings(filePath: string, file: File): Promise<void> {
+		const formData = new FormData();
+		formData.append('file', file);
+		formData.append('filePath', filePath);
+		if (window.wopiSettingBaseUrl) {
+			formData.append('wopiSettingBaseUrl', window.wopiSettingBaseUrl);
+		}
+
+		const apiUrl = this.getAPIEndpoints().uploadSettings;
+
+		const response = await fetch(apiUrl, {
+			method: 'POST',
+			headers: {
+				Authorization: `Bearer ${window.accessToken}`,
+			},
+			body: formData,
+		});
+
+		if (!response.ok) {
+			throw new Error(`Upload failed: ${response.statusText}`);
+		}
+	}
+
+	async fetchSettingFile(fileUrl: string): Promise<string | null> {
+		try {
+			const formData = new FormData();
+			formData.append('fileUrl', fileUrl);
+			formData.append('accessToken', window.accessToken ?? '');
+
+			const apiUrl = this.getAPIEndpoints().fetchSettingFile;
+
+			const response = await fetch(apiUrl, {
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${window.accessToken}`,
+				},
+				body: formData,
+			});
+
+			if (!response.ok) {
+				throw new Error(`Upload failed: ${response.statusText}`);
+			}
+
+			return await response.text();
+		} catch (error) {
+			SettingIframe.showErrorModal(
+				_(
+					'Something went wrong while fetching setting file. Please try to refresh the page.',
+				),
+			);
+			return null;
+		}
+	}
+
+	async deleteSettingsConfig(fileId: string): Promise<void> {
+		if (!window.accessToken) {
+			throw new Error('Access token is missing.');
+		}
+		if (!window.wopiSettingBaseUrl) {
+			throw new Error('wopiSettingBaseUrl is missing.');
+		}
+
+		const formData = new FormData();
+		formData.append('fileId', fileId);
+		formData.append('sharedConfigUrl', window.wopiSettingBaseUrl);
+		formData.append('accessToken', window.accessToken);
+
+		const response = await fetch(this.getAPIEndpoints().deleteSharedConfig, {
+			method: 'POST',
+			headers: {
+				Authorization: `Bearer ${window.accessToken}`,
+			},
+			body: formData,
+		});
+
+		if (!response.ok) {
+			throw new Error(`Delete failed: ${response.statusText}`);
+		}
+	}
+}
+
+let isCODesktop = false;
+try {
+	isCODesktop = (window as any).parent.mode.isCODesktop();
+} catch (e) {
+	isCODesktop = false;
+}
+
 class SettingIframe {
+	private settingsStorage: SettingsStorage;
 	private wordbook;
 	private xcuEditor;
 	private _viewSetting;
@@ -157,7 +344,7 @@ class SettingIframe {
 		signatureCa: _('Signature CA'),
 	};
 	private readonly settingLabels: Record<string, string> = {
-		accessibilityState: _('In-document Screen Reader'),
+		lockAccessibilityOn: _('In-document Screen Reader'),
 		darkTheme: _('Dark Mode'),
 		compactMode: _('Compact layout'),
 		ShowStatusbar: _('Show status bar'),
@@ -229,21 +416,6 @@ class SettingIframe {
 	private _sectionObserver: IntersectionObserver | null = null;
 	private _visibleSections: Set<Element> = new Set();
 
-	private getAPIEndpoints() {
-		return {
-			uploadSettings: window.serviceRoot + '/browser/dist/upload-settings',
-
-			fetchSharedConfig:
-				window.serviceRoot + '/browser/dist/fetch-settings-config',
-
-			deleteSharedConfig:
-				window.serviceRoot + '/browser/dist/delete-settings-config',
-
-			fetchSettingFile:
-				window.serviceRoot + '/browser/dist/fetch-settings-file',
-		};
-	}
-
 	private PATH = {
 		autoTextUpload: () => this.settingConfigBasePath() + '/autotext/',
 		wordBookUpload: () => this.settingConfigBasePath() + '/wordbook/',
@@ -257,8 +429,15 @@ class SettingIframe {
 	init(): void {
 		this._allConfigSection = document.getElementById('allConfigSection');
 		this.initWindowVariables();
-		this.insertConfigSections();
-		this.setupLeftNavbar();
+		if (isCODesktop) {
+			this.settingsStorage = new DesktopSettingsStorage();
+		} else {
+			this.settingsStorage = new OnlineSettingsStorage();
+		}
+		if (!isCODesktop) {
+			this.insertConfigSections();
+			this.setupLeftNavbar();
+		}
 		this.fetchAndPopulateSharedConfigs();
 		this.wordbook = (window as any).WordBook;
 	}
@@ -416,45 +595,8 @@ class SettingIframe {
 	}
 
 	private async fetchAndPopulateSharedConfigs(): Promise<void> {
-		if (!window.wopiSettingBaseUrl) {
-			console.error(_('Shared Config URL is missing in initial variables.'));
-			return;
-		}
-		console.debug('iframeType page', window.iframeType);
-
-		if (!window.accessToken) {
-			console.error(_('Access token is missing in initial variables.'));
-			return;
-		}
-
-		const formData = new FormData();
-		formData.append('sharedConfigUrl', window.wopiSettingBaseUrl);
-		formData.append('accessToken', window.accessToken);
-		formData.append('type', this.getConfigType());
-
 		try {
-			const response: Response = await fetch(
-				this.getAPIEndpoints().fetchSharedConfig,
-				{
-					method: 'POST',
-					headers: {
-						Authorization: `Bearer ${window.accessToken}`,
-					},
-					body: formData,
-				},
-			);
-
-			if (!response.ok) {
-				console.error(
-					'something went wrong shared config response',
-					response.text(),
-				);
-				throw new Error(
-					`Could not fetch shared config: ${response.statusText}`,
-				);
-			}
-
-			const data: ConfigData = await response.json();
+			const data = await this.settingsStorage.fetchSettingsConfig();
 			await this.populateSharedConfigUI(data);
 			console.debug('Shared config data: ', data);
 		} catch (error: unknown) {
@@ -572,41 +714,10 @@ class SettingIframe {
 		return buttonEl;
 	}
 
-	private async fetchSettingFile(fileId: string) {
-		try {
-			const formData = new FormData();
-			formData.append('fileUrl', fileId);
-			formData.append('accessToken', window.accessToken ?? '');
-
-			const apiUrl = this.getAPIEndpoints().fetchSettingFile;
-
-			const response = await fetch(apiUrl, {
-				method: 'POST',
-				headers: {
-					Authorization: `Bearer ${window.accessToken}`,
-				},
-				body: formData,
-			});
-
-			if (!response.ok) {
-				throw new Error(`Upload failed: ${response.statusText}`);
-			}
-
-			return await response.text();
-		} catch (error) {
-			SettingIframe.showErrorModal(
-				_(
-					'Something went wrong while fetching setting file. Please try to refresh the page.',
-				),
-			);
-			return null;
-		}
-	}
-
 	private async fetchWordbookFile(fileId: string): Promise<void> {
 		this.wordbook.startLoader();
 		try {
-			const textValue = await this.fetchSettingFile(fileId);
+			const textValue = await this.settingsStorage.fetchSettingFile(fileId);
 
 			if (!textValue) {
 				throw new Error('Failed to fetch wordbook file');
@@ -793,6 +904,9 @@ class SettingIframe {
 				);
 
 				await this.uploadFile(this.PATH.browserSettingsUpload(), file);
+				if (isCODesktop) {
+					(window.parent as any).postMobileMessage('SYNCSETTINGS');
+				}
 				button.disabled = false;
 			},
 		);
@@ -893,6 +1007,9 @@ class SettingIframe {
 			return container;
 		}
 		for (const key in data) {
+			// skip accessibilityState as it's only used for determining existing state of Help -> screen reader toggle button
+			if (key === 'accessibilityState') continue;
+
 			if (Object.prototype.hasOwnProperty.call(data, key)) {
 				const value = data[key];
 				const uniqueId = pathPrefix ? `${pathPrefix}-${key}` : key;
@@ -1042,7 +1159,7 @@ class SettingIframe {
 		let isDisabled = false;
 		let warningText: string | null = null;
 
-		if (key === 'accessibilityState') {
+		if (key === 'lockAccessibilityOn') {
 			isDisabled = !window.enableAccessibility;
 			if (isDisabled) {
 				warningText = _(
@@ -1084,6 +1201,9 @@ class SettingIframe {
 
 			if (sectionRaw === 'common') {
 				this.browserSettingOptions[settingKey] = value;
+
+				if (settingKey === 'lockAccessibilityOn')
+					this.browserSettingOptions['accessibilityState'] = value;
 			} else {
 				(this.browserSettingOptions[sectionRaw] as Record<string, boolean>)[
 					settingKey
@@ -1165,7 +1285,9 @@ class SettingIframe {
 		optionDiv.className = 'toggle-option';
 
 		const image = document.createElement('img');
-		image.src = `${window.serviceRoot}/browser/${window.versionHash}/admin/images/${imageSrc}`;
+		let src = `${window.serviceRoot}/browser/${window.versionHash}/admin/images/${imageSrc}`;
+		if (isCODesktop) src = `admin/images/${imageSrc}`;
+		image.src = src;
 		image.alt = imageAlt;
 		image.className = `toggle-image ${isSelected ? 'selected' : ''}`;
 		optionDiv.appendChild(image);
@@ -1181,28 +1303,8 @@ class SettingIframe {
 	}
 
 	private async uploadFile(filePath: string, file: File): Promise<void> {
-		const formData = new FormData();
-		formData.append('file', file);
-		formData.append('filePath', filePath);
-		if (window.wopiSettingBaseUrl) {
-			formData.append('wopiSettingBaseUrl', window.wopiSettingBaseUrl);
-		}
-
 		try {
-			const apiUrl = this.getAPIEndpoints().uploadSettings;
-
-			const response = await fetch(apiUrl, {
-				method: 'POST',
-				headers: {
-					Authorization: `Bearer ${window.accessToken}`,
-				},
-				body: formData,
-			});
-
-			if (!response.ok) {
-				throw new Error(`Upload failed: ${response.statusText}`);
-			}
-
+			await this.settingsStorage.uploadSettings(filePath, file);
 			await this.fetchAndPopulateSharedConfigs();
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : 'Unknown error';
@@ -1288,36 +1390,9 @@ class SettingIframe {
 				['button--vue-secondary', 'delete-icon'],
 				async (button) => {
 					try {
-						if (!window.accessToken) {
-							throw new Error('Access token is missing.');
-						}
-						if (!window.wopiSettingBaseUrl) {
-							throw new Error('wopiSettingBaseUrl is missing.');
-						}
-
 						const fileId =
 							this.settingConfigBasePath() + category + '/' + fileName;
-
-						const formData = new FormData();
-						formData.append('fileId', fileId);
-						formData.append('sharedConfigUrl', window.wopiSettingBaseUrl);
-						formData.append('accessToken', window.accessToken);
-
-						const response = await fetch(
-							this.getAPIEndpoints().deleteSharedConfig,
-							{
-								method: 'POST',
-								headers: {
-									Authorization: `Bearer ${window.accessToken}`,
-								},
-								body: formData,
-							},
-						);
-
-						if (!response.ok) {
-							throw new Error(`Delete failed: ${response.statusText}`);
-						}
-
+						await this.settingsStorage.deleteSettingsConfig(fileId);
 						await this.fetchAndPopulateSharedConfigs();
 					} catch (error: unknown) {
 						SettingIframe.showErrorModal(
@@ -1501,8 +1576,9 @@ class SettingIframe {
 
 		if (data.kind === 'user') {
 			if (data.viewsetting && data.viewsetting.length > 0) {
-				const fileId = data.viewsetting[0].uri;
-				const fetchContent = await this.fetchSettingFile(fileId);
+				const fetchContent = await this.settingsStorage.fetchSettingFile(
+					data.viewsetting[0].uri,
+				);
 				if (fetchContent) {
 					const loadedSettings = JSON.parse(fetchContent);
 					// Merge with default values to ensure all fields are present
@@ -1512,6 +1588,9 @@ class SettingIframe {
 						loadedSettings,
 					);
 					this.generateViewSettingUI(mergedSettings);
+				} else {
+					const defaultViewSetting = this.getDefaultViewSettings();
+					this.generateViewSettingUI(defaultViewSetting);
 				}
 			} else {
 				const defaultViewSetting = this.getDefaultViewSettings();
@@ -1520,8 +1599,10 @@ class SettingIframe {
 
 			// browser settings
 			if (data.browsersetting && data.browsersetting.length > 0) {
-				const fileId = data.browsersetting[0].uri;
-				const browserSettingContent = await this.fetchSettingFile(fileId);
+				const browserSettingContent =
+					await this.settingsStorage.fetchSettingFile(
+						data.browsersetting[0].uri,
+					);
 				this.browserSettingOptions = browserSettingContent
 					? this.mergeWithDefault(
 							defaultBrowserSetting,
@@ -1536,43 +1617,46 @@ class SettingIframe {
 
 		const settingsContainer = this._allConfigSection;
 		if (!settingsContainer) return;
-		if (data.xcu && data.xcu.length > 0) {
-			const fileId = data.xcu[0].uri;
-			const xcuFileContent = await this.fetchSettingFile(fileId);
-			this.xcuEditor = new (window as any).Xcu(
-				this.getFilename(fileId, false),
-				xcuFileContent,
-			);
-
-			const existingXcuSection = document.getElementById('xcu-section');
-			if (existingXcuSection) {
-				existingXcuSection.remove();
-			}
-
-			const xcuContainer = document.createElement('div');
-			xcuContainer.id = 'xcu-section';
-			xcuContainer.classList.add('section');
-			settingsContainer.appendChild(
-				this.xcuEditor.createXcuEditorUI(xcuContainer),
-			);
-		} else {
-			// If user doesn't have any xcu file, we generate with default settings...
-			try {
-				if (!this.xcuInitializationAttempted) {
-					this.xcuInitializationAttempted = true;
-					this.xcuEditor = new (window as any).Xcu('documentView.xcu', null);
-					await this.xcuEditor.generateXcuAndUpload();
-					return await this.fetchAndPopulateSharedConfigs();
-				} else {
-					document.getElementById('xcu-section')?.remove();
-					console.warn('XCU file not found and automatic creation failed.');
-				}
-			} catch (error) {
-				console.error(
-					'Something went wrong while generating or uploading xcu file:',
-					error,
+		if (!isCODesktop) {
+			if (data.xcu && data.xcu.length > 0) {
+				const xcuFileContent = await this.settingsStorage.fetchSettingFile(
+					data.xcu[0].uri,
 				);
-				document.getElementById('xcu-section')?.remove();
+				this.xcuEditor = new (window as any).Xcu(
+					this.getFilename(data.xcu[0].uri, false),
+					xcuFileContent,
+				);
+
+				const existingXcuSection = document.getElementById('xcu-section');
+				if (existingXcuSection) {
+					existingXcuSection.remove();
+				}
+
+				const xcuContainer = document.createElement('div');
+				xcuContainer.id = 'xcu-section';
+				xcuContainer.classList.add('section');
+				settingsContainer.appendChild(
+					this.xcuEditor.createXcuEditorUI(xcuContainer),
+				);
+			} else {
+				// If user doesn't have any xcu file, we generate with default settings...
+				try {
+					if (!this.xcuInitializationAttempted) {
+						this.xcuInitializationAttempted = true;
+						this.xcuEditor = new (window as any).Xcu('documentView.xcu', null);
+						await this.xcuEditor.generateXcuAndUpload();
+						return await this.fetchAndPopulateSharedConfigs();
+					} else {
+						document.getElementById('xcu-section')?.remove();
+						console.warn('XCU file not found and automatic creation failed.');
+					}
+				} catch (error) {
+					console.error(
+						'Something went wrong while generating or uploading xcu file:',
+						error,
+					);
+					document.getElementById('xcu-section')?.remove();
+				}
 			}
 		}
 
@@ -1583,6 +1667,11 @@ class SettingIframe {
 		if (data.wordbook)
 			this.populateList('wordbookList', data.wordbook, '/wordbook');
 		if (data.xcu) this.populateList('XcuList', data.xcu, '/xcu');
+
+		var navItem = document.querySelector<HTMLElement>(
+			'#settings-nav .settings-nav-item',
+		);
+		if (navItem) navItem.focus();
 	}
 
 	private setupLeftNavbar(): void {

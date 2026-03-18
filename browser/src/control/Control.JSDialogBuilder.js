@@ -60,6 +60,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 	_responses: {}, // Button id = response
 
 	_currentDepth: 0,
+	_expanderDepth: 0,
 
 	rendersCache: {
 		fontnamecombobox: { persistent: true, images: [] },
@@ -84,15 +85,15 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		this._colorPickers = [];
 
 		// list of types which can have multiple children but are not considered as containers
-		this._nonContainerType = ['buttonbox', 'treelistbox', 'iconview', 'combobox', 'listbox',
-			'scrollwindow', 'grid', 'tabcontrol', 'multilineedit', 'formulabaredit', 'frame'];
+		this._nonContainerType = ['buttonbox', 'treelistbox', 'iconview', 'iconviewlist', 'combobox', 'listbox',
+			'scrollwindow', 'grid', 'tabcontrol', 'multilineedit', 'formulabaredit', 'frame', 'expander'];
 
 		this._controlHandlers = {};
 		this._controlHandlers['overflowgroup'] = JSDialog.OverflowGroup;
 		this._controlHandlers['overflowmanager'] = JSDialog.OverflowManager;
 		this._controlHandlers['radiobutton'] = JSDialog.RadioButton;
 		this._controlHandlers['progressbar'] = JSDialog.progressbar;
-		this._controlHandlers['pagemarginentry'] = JSDialog.pageMarginEntry;
+		this._controlHandlers['pagemarginentry'] = JSDialog.PageMarginEntry;
 		this._controlHandlers['newslidelayoutentry'] = JSDialog.slideLayoutEntry;
 		this._controlHandlers['pagesizeentry'] = JSDialog.pageSizeEntry;
 		this._controlHandlers['checkbox'] = JSDialog.Checkbox;
@@ -142,6 +143,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		this._controlHandlers['colorlistbox'] = JSDialog.colorPickerButton;
 		this._controlHandlers['treelistbox'] = JSDialog.treeView;
 		this._controlHandlers['iconview'] = JSDialog.iconView;
+		this._controlHandlers['iconviewlist'] = JSDialog.notebookbarIconViewList;
 		this._controlHandlers['drawingarea'] = JSDialog.drawingArea;
 		this._controlHandlers['rootcomment'] = this._rootCommentControl;
 		this._controlHandlers['comment'] = this._commentControl;
@@ -182,6 +184,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		this._menus = JSDialog.MenuDefinitions;
 
 		this._currentDepth = 0;
+		this._expanderDepth = 0;
 
 		app.localeService.initializeNumberFormatting();
 		this._decimal = app.localeService.getDecimalSeparator();
@@ -750,13 +753,19 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (data.children.length > 0) {
 			var container = window.L.DomUtil.create('div', 'ui-expander-container ' + builder.options.cssClass, parentContainer);
 			container.id = data.id;
+			container.dataset.expanderDepth = builder._expanderDepth;
 
 			var expanded = data.expanded === true || (data.children[0] && data.children[0].checked === true);
 			var expander = window.L.DomUtil.create('div', 'ui-expander ' + builder.options.cssClass, container);
 			if (data.children[0].text && data.children[0].text !== '') {
 				var prefix = data.children[0].id ? data.children[0].id : data.id;
 
-				var expanderBtn = window.L.DomUtil.create('button', 'ui-expander-btn ' + builder.options.cssClass, expander);
+				// W3C accordion pattern: https://www.w3.org/WAI/ARIA/apg/patterns/accordion/examples/accordion
+				// For an initial expander (_expanderDepth of 0) we use h2 instead of h1
+				// to leave room for a conceptual parent heading
+				var headingLevel = Math.min(builder._expanderDepth + 2, 6);
+				var heading = window.L.DomUtil.create('h' + headingLevel, 'ui-expander-heading ' + builder.options.cssClass, expander);
+				var expanderBtn = window.L.DomUtil.create('button', 'ui-expander-btn ' + builder.options.cssClass, heading);
 				expanderBtn.tabIndex = '0';
 				expanderBtn.setAttribute('aria-controls', prefix + '-children');
 
@@ -798,6 +807,8 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 			var expanderChildren = window.L.DomUtil.create('div', 'ui-expander-content ' + builder.options.cssClass, container);
 			expanderChildren.id = prefix + '-children';
+			expanderChildren.setAttribute('role', 'region');
+			expanderChildren.setAttribute('aria-labelledby', prefix + '-label');
 
 			if (expanded) {
 				if (data.children.length > 1) {
@@ -824,7 +835,9 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 				children.push(data.children[i]);
 			}
 
+			builder._expanderDepth++;
 			builder.build(expanderChildren, children);
+			builder._expanderDepth--;
 		} else {
 			return true;
 		}
@@ -1067,18 +1080,63 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 				tabPage.addEventListener('keydown', function(e) {
 					// Determine key direction
 					let key;
-					if (e.key === 'Tab') {
+					let isTab = e.key === 'Tab';
+					if (isTab) {
 						key = e.shiftKey ? 'ArrowLeft' : 'ArrowRight'; // Reverse if Shift+Tab
 					} else {
 						key = e.key;
 					}
 					if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
 						var currentElement = e.srcElement;
-						if (!(currentElement.tagName === 'INPUT' || currentElement.tagName === 'TEXTAREA')) {
-							if (e.key === 'Tab')
+						if (!(currentElement.tagName === 'INPUT' || currentElement.tagName === 'TEXTAREA') || isTab) {
+							if (isTab)
 								e.preventDefault();
 							let container = document.getElementsByClassName('ui-tabs-content notebookbar');
-							let elementToFocus = JSDialog.FindNextElementInContainer(container[0], currentElement, key);
+							let elementToFocus;
+							// Use DOM order for left/right (ray-casting misses small
+							// vertically-stacked buttons) and also for up/down when
+							// inside an iconview widget.
+							const useDomOrder = key === 'ArrowLeft' || key === 'ArrowRight'
+								|| currentElement.closest('.ui-iconview-root');
+							if (useDomOrder) {
+								var allFocusables = Array.from(container[0].querySelectorAll('*'))
+									.filter(function(el) { return el.checkVisibility() && JSDialog.IsFocusable(el); });
+								// Only leaf-level focusable elements are navigation targets.
+								var focusables = allFocusables.filter(function(el) {
+									return !allFocusables.some(function(other) { return other !== el && el.contains(other); });
+								});
+								var idx = focusables.indexOf(currentElement);
+								if (idx !== -1) {
+									var forward = key === 'ArrowRight' || key === 'ArrowDown';
+									// When entering an iconview from outside, skip to the selected
+									// entry (per WAI-ARIA toolbar radio group pattern). When already
+									// inside the iconview, arrows move between entries normally.
+									var inIconview = !isTab && currentElement.classList.contains('ui-iconview-entry');
+									var shouldSkip = function(el) {
+										if (inIconview)
+											return false;
+										return el.classList.contains('ui-iconview-entry') && !el.classList.contains('selected');
+									};
+									var advance = function(i) {
+										i = forward ? i + 1 : i - 1;
+										if (i >= focusables.length) i = 0;
+										else if (i < 0) i = focusables.length - 1;
+										return i;
+									};
+									var next = idx;
+									do {
+										next = advance(next);
+									} while (next !== idx && shouldSkip(focusables[next]));
+									// If skip logic found nothing (e.g. iconview with no
+									// selected entry), just move to the next element.
+									if (next === idx)
+										next = advance(next);
+									if (next !== idx)
+										elementToFocus = focusables[next];
+								}
+							}
+							if (!elementToFocus)
+								elementToFocus = JSDialog.FindNextElementInContainer(container[0], currentElement, key);
 							if (elementToFocus && elementToFocus.tagName !== 'NAV')
 								elementToFocus.focus();
 							else if (elementToFocus)
@@ -1722,7 +1780,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		controls['container'] = div;
 		div.tabIndex = data.tabIndex !== undefined ? data.tabIndex : -1;
 
-		if(data.index)
+		if (data.index)
 			div.setAttribute('index', data.index);
 
 		if (data.class)
@@ -1731,21 +1789,15 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		const hasDropdownArrow = !!(options && options.hasDropdownArrow);
 		const isSplitButton = !!data.applyCallback;
 		const isDropdownButton = !!data.dropdown;
+		var shouldHaveArrowbackground = hasDropdownArrow || isDropdownButton;
 
 		const hasPopupRole = data.aria && data.aria.role === 'popup';
 
-		/**
-		 * Determines if the dropdown arrow should be interactive (focusable button) vs decorative (div).
-		 * This affects ARIA attribute placement and arrowbackground element type creation.
-		 */
-		const isArrowInteractive = (hasDropdownArrow && isSplitButton) || isDropdownButton;
 		var isRealUnoCommand = true;
-		var hasPopUp = false;
 		var hasImage = true;
 
 		if (data.text && data.text.endsWith('...')) {
 			data.text = data.text.replace('...', '');
-			hasPopUp = true;
 		}
 
 		if (data && data.image === false) {
@@ -1799,7 +1851,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			var buttonId = id + '-button';
 
 			button = window.L.DomUtil.create('button', 'ui-content unobutton', div);
-			if(div.tabIndex == 0)
+			if (div.tabIndex == 0)
 				button.tabIndex = -1; // prevent button from taking focus since container div itself is focusable element
 			button.id = buttonId;
 
@@ -1811,10 +1863,6 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 				builder._setAccessKey(button, builder._getAccessKeyFromText(data.text));
 			else
 				button.accessKey = data.accessKey;
-
-			// if dropdown arrow does not exist or is not interactive then only button can have aria-haspopup
-			if (hasPopUp && !isArrowInteractive || hasPopupRole)
-				button.setAttribute('aria-haspopup', true);
 
 			if (data.w2icon) {
 				// FIXME: DEPRECATED, this is legacy way to setup icon based on CSS class
@@ -1830,8 +1878,13 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 					buttonImage.src = data.image;
 				}
 				else {
-					buttonImage = window.L.DomUtil.create('img', '', button);
-					app.LOUtil.setImage(buttonImage, app.LOUtil.getIconNameOfCommand(data.command), builder.map);
+					var iconName = app.LOUtil.getIconNameOfCommand(data.command);
+					if (iconName) {
+						buttonImage = window.L.DomUtil.create('img', '', button);
+						app.LOUtil.setImage(buttonImage, iconName, builder.map);
+					} else {
+						buttonImage = false;
+					}
 				}
 			} else {
 				buttonImage = false;
@@ -1859,46 +1912,50 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 				$(div).addClass('no-label');
 			}
 
-			// for Accessibility : graphic elements are located within buttons, the img should receive an empty alt
-			if (button.getAttribute('aria-label') || button.getAttribute('aria-labelledby')){ // if we already set the aria-label or aria-labelledby then do not go for image alt attr
-				buttonImage.alt = '';
-			}
-			else if (buttonImage !== false) {
-				if(data.aria) {
-					buttonImage.alt = data.aria.label;
-				} else {
-					buttonImage.alt = builder._cleanText(data.text);
-				}
-			}
-
 			let tooltip = builder._cleanText(data.tooltip) || builder._cleanText(data.text);
 			if (data.command && (!tooltip || !tooltip.includes('('))) // Add shortcut to tooltip based on command
 				tooltip = JSDialog.ShortcutsUtil.getShortcut(tooltip, data.command);
 			div.setAttribute('data-cooltip', tooltip);
 
+			// Set aria-pressed only if:
+			// 1. A real toggle button
+			const setAriaPressedForToggleBtn = (value) => {
+				if (JSDialog.IsToggleButton(id, data.command, builder)) {
+					button.setAttribute('aria-pressed', value);
+				}
+			};
 			const selectFn = () => {
 				window.L.DomUtil.addClass(button, 'selected');
 				window.L.DomUtil.addClass(div, 'selected');
-				if(!button.hasAttribute('aria-haspopup'))
-					button.setAttribute('aria-pressed', true);
+				setAriaPressedForToggleBtn(true);
 			};
 
 			const unSelectFn = () => {
 				window.L.DomUtil.removeClass(button, 'selected');
 				window.L.DomUtil.removeClass(div, 'selected');
-				if(!button.hasAttribute('aria-haspopup'))
-					button.setAttribute('aria-pressed', false);
+				setAriaPressedForToggleBtn(false);
 			};
 
 			if (data.command) {
 				const updateFunction = () => {
 					const items = builder.map['stateChangeHandler'];
 					const state = items.getItemValue(data.command);
+					const isOn = state && state === 'true';
 
-					if (state && state === 'true')
+					if (isOn)
 						selectFn();
 					else
 						unSelectFn();
+
+					// Swap icon if stateIcons are provided
+					if (data.stateIcons && buttonImage) {
+						const iconName = isOn ? data.stateIcons.on : data.stateIcons.off;
+						app.LOUtil.setImage(
+							buttonImage,
+							'lc_' + iconName + '.svg',
+							builder.map,
+						);
+					}
 				};
 
 				updateFunction();
@@ -1928,64 +1985,113 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			controls['label'] = span;
 		}
 
-		if (hasDropdownArrow || isDropdownButton) {
+		const hasPopUp = hasPopupRole || JSDialog.IsDialogButton(id, data.command) || JSDialog.IsDropdownButton(id, data.command);
+
+		if (hasPopUp) {
+			button.setAttribute('aria-expanded', false);
+			if (JSDialog.IsDialogButton(id, data.command))
+				button.setAttribute('aria-haspopup', 'dialog');
+			else
+				button.setAttribute('aria-haspopup', true);
+		}
+
+		JSDialog.SetupA11yLabelForNonLabelableElement(button, data, builder);
+
+		// for Accessibility : graphic elements are located within buttons, the img should receive an empty alt
+		if (button.getAttribute('aria-label') || button.getAttribute('aria-labelledby')){ // if we already set the aria-label or aria-labelledby then do not go for image alt attr
+			buttonImage.alt = '';
+		}
+		else if (buttonImage !== false) {
+			if (data.aria)
+				buttonImage.alt = data.aria.label;
+			else
+				buttonImage.alt = builder._cleanText(data.text);
+		}
+
+		const getAriaLabelGroupText = function(command) {
+			if (JSDialog.IsToggleButton(id, command, builder))
+				return _('Toggle dropdown');
+			else if (JSDialog.IsDialogButton(id, command))
+				return _('Dialog dropdown');
+			else if (JSDialog.IsDropdownButton(id, data.command))
+				return _('Dropdown');
+
+			return _('Apply action dropdown');
+		};
+
+		var arrowbackground;
+		if (shouldHaveArrowbackground) {
 			$(div).addClass('has-dropdown');
 			div.setAttribute('role', 'group');
-			var arrowbackground;
-			// isArrowInteractive is true for split buttons or dropdown buttons
-			if (isArrowInteractive) {
+
+			const a11yData = {
+				id: id,
+				type: data.type,
+				aria: {
+					label: getAriaLabelGroupText(data.command),
+				},
+			};
+			JSDialog.AddAriaLabel(div, a11yData, builder);
+
+			// shouldHaveArrowbackground is true when we have dropdown arrow or dropdown button
+			// if main button and arrowbackground opens same dropdown then only arrowbackground should be div.
+			// otherwise, it should be button always.
+			const shouldArrowbackgroundButton = isSplitButton || !JSDialog.IsDropdownButton(id, data.command);
+			if (shouldArrowbackgroundButton) {
 				// Arrow should be a real button (user can interact with it)
 				arrowbackground = window.L.DomUtil.create('button', 'arrowbackground', div);
+
+				const buttonText = data.aria && data.aria.label ? data.aria.label : builder._cleanText(data.text);
+				const dropdownAriaLabelText = _('Open {name}').replace('{name}', buttonText);
+				arrowbackground.setAttribute('aria-label', dropdownAriaLabelText);
+
+				arrowbackground.setAttribute('aria-haspopup', true);
+				arrowbackground.setAttribute('aria-expanded', false);
 			} else {
 				// Arrow is just decoration
 				arrowbackground = window.L.DomUtil.create('div', 'arrowbackground', div);
 				arrowbackground.setAttribute('aria-hidden', 'true');
+				arrowbackground.tabIndex = '-1'; // arrow is just decorative
 			}
-			window.L.DomUtil.create('i', 'unoarrow', arrowbackground);
+			var unoarrow = window.L.DomUtil.create('span', 'unoarrow', arrowbackground);
+			unoarrow.setAttribute('aria-hidden', 'true');
 			controls['arrow'] = arrowbackground;
 
 			if (!hasDropdownArrow && isDropdownButton) {
-				// Attach both 'click' and 'keydown' event listeners for dropdown buttons only
+				// Attach 'click' event listeners for dropdown buttons only
 				arrowbackground.addEventListener('click', function (event) {
 					openToolBoxMenu(event);
-				});
-				arrowbackground.addEventListener('keydown', function (event) {
-					switch (event.key) {
-						case 'Enter':
-							openToolBoxMenu(event);
-							break;
+
+					if (shouldArrowbackgroundButton) {
+						arrowbackground.setAttribute('aria-expanded', 'true');
+					} else {
+						button.setAttribute('aria-expanded', 'true');
 					}
 				});
 
 				div.closeDropdown = function() {
 					builder.callback('toolbox', 'closemenu', parentContainer, data.command, builder);
+
+					if (shouldArrowbackgroundButton) {
+						arrowbackground.setAttribute('aria-expanded', 'false');
+					} else {
+						button.setAttribute('aria-expanded', 'false');
+					}
 				};
 			}
 			itemsToSyncWithContainer.push(arrowbackground);
 		}
 
-		if (arrowbackground) {
-			// if main button element in split button works same as arrowbackground then make sure arrowbackground not focusable due to a11y conflicts
-			isSplitButton ? arrowbackground.tabIndex = '0' : arrowbackground.tabIndex = '-1';
-
-			if (isArrowInteractive)  {
-				const buttonText = data.aria && data.aria.label ? data.aria.label : builder._cleanText(data.text);
-				const dropdownAriaLabelText = _('Open {name}').replace('{name}', buttonText);
-				arrowbackground.setAttribute('aria-label', dropdownAriaLabelText);
-				arrowbackground.setAttribute('aria-haspopup', true);
-				arrowbackground.setAttribute('aria-expanded', false);
-			} else {
-				// If the dropdown arrow is not interactive then we want aria-expanded on interactive button
-				button.setAttribute('aria-expanded', false);
-			}
-		}
-
 		JSDialog.SynchronizeDisabledState(div, itemsToSyncWithContainer);
+
+		// _onDropDown only works for splitbutton or dropdown arrow button
+		// for decorative button we need to manage it via click function and closeDropdown
 		div._onDropDown = function(open) {
-			// Only set aria-expanded on the button if the arrow is not interactive
-			if (!isArrowInteractive)
+
+			if (JSDialog.IsDropdownButton(id, data.command))
 				button.setAttribute('aria-expanded', open);
-			arrowbackground.setAttribute('aria-expanded', open);
+			else
+				arrowbackground.setAttribute('aria-expanded', open);
 		};
 
 		var openToolBoxMenu = function(event) {
@@ -2007,6 +2113,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 					builder.callback('toolbutton', 'click', button, data.command, builder);
 				else {
 					builder.callback('toolbox', 'click', parentContainer, data.command, builder);
+					button.setAttribute('aria-expanded', 'true');
 				}
 			}
 			e.preventDefault();
@@ -2014,6 +2121,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		};
 
 		const hasLabel = !!controls.label;
+		const hasExplicitTooltip = !!data.tooltip;
 		const hasShortcut = JSDialog.ShortcutsUtil.hasShortcut(data.command);
 		var mouseEnterFunction = window.touch.mouseOnly(function () {
 			if (builder.map.tooltip)
@@ -2031,7 +2139,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (data.isCustomTooltip) {
 			this._handleCustomTooltip(div, builder);
 		}
-		else if (!hasLabel || hasShortcut) {
+		else if (!hasLabel || hasExplicitTooltip || hasShortcut) {
 			$(div).on('mouseenter', mouseEnterFunction);
 			$(div).on('mouseleave', mouseLeaveFunction);
 		} else {
@@ -2259,9 +2367,12 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (!control && data.control)
 			control = this._getItemById(container, this._removeMenuId(data.control.id));
 		if (!control) {
-			window.app.console.warn('executeAction: not found control with id: "' + data.control_id + '"');
+			window.app.console.warn('executeAction: not found control with id: "' + data.control_id +
+				'" to perform action: "' + data.action_type + '"');
 			return;
 		}
+
+		console.assert(data.action_type);
 
 		switch (data.action_type) {
 		case 'grab_focus':
@@ -2378,7 +2489,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 			const oldImage = this.rendersCache[control.id].images[data.pos];
 			if (oldImage === data.image) {
-					app.console.debug('rendered_entry: no change');
+					app.console.debug('rendered_entry: "' + data.pos + '" for "' + control.id + '" - no change');
 					break;
 			}
 
@@ -2387,12 +2498,12 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			if (typeof control.updateRenders == 'function')
 				control.updateRenders(data.pos);
 			else
-				app.console.error('widget doesn\'t support custom entries');
+				app.console.error('widget "' + control.id + '" doesn\'t support custom entries');
 		}
 		break;
 
 		default:
-			app.console.error('unknown action: "' + data.action_type + '"');
+			app.console.error('unknown action: "' + data.action_type + '" for "' + control.id + '"');
 			break;
 		}
 	},
@@ -2417,6 +2528,13 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (!parent)
 			return;
 
+		// Restore expander depth so heading levels are correct when
+		// rebuilding a nested expander on-demand (see _expanderHandler).
+		var savedExpanderDepth = this._expanderDepth;
+		if (control.dataset && control.dataset.expanderDepth !== undefined) {
+			this._expanderDepth = parseInt(control.dataset.expanderDepth);
+		}
+
 		var scrollTop = control.scrollTop;
 		var focusedElement = document.activeElement;
 		var focusedElementInDialog = focusedElement ? container.querySelector('[id=\'' + focusedElement.id + '\']') : null;
@@ -2429,6 +2547,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		control.id = '';
 
 		buildFunc.bind(this)(temporaryParent, [data], false);
+		this._expanderDepth = savedExpanderDepth;
 		var backupGridColSpan = control.style.gridColumn;
 		var backupGridRowSpan = control.style.gridRow;
 
@@ -2506,6 +2625,11 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 		if (control) {
 			this._setGridStyles(control, data);
+
+			if (data.tooltip) {
+				control.setAttribute('data-cooltip', this._cleanText(data.tooltip));
+				window.L.control.attachTooltipEventListener(control, this.map);
+			}
 		}
 
 		// natural tab-order when using keyboard navigation
@@ -2538,6 +2662,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			&& data.type !== 'deck'
 			&& data.type !== 'pushbutton'
 			&& data.type !== 'iconview'
+			&& data.type !== 'overflowgroup'
 			)
 			control.setAttribute('tabIndex', '0');
 	},
@@ -2604,6 +2729,15 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			var isContainer = this.isContainerType(childData.type);
 			if (hasManyChildren && isContainer) {
 				var table = window.L.DomUtil.createWithId('div', childData.id, containerToInsert);
+
+				if (childData.cargo && childData.cargo['custom-label']) {
+					var label = window.L.DomUtil.create('label', '', table);
+					label.textContent = childData.cargo['custom-label'];
+					label.htmlFor = childData.cargo['custom-label-for'] + '-input';
+					table.id = '';
+					table = window.L.DomUtil.createWithId('div', childData.id, table);
+				}
+
 				$(table).addClass(this.options.cssClass);
 
 				if (!isVertical) {

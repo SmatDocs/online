@@ -13,9 +13,6 @@
 
 #if MOBILEAPP
 
-#define LIBO_INTERNAL_ONLY
-#include <LibreOfficeKit/LibreOfficeKit.hxx>
-
 #include <Storage.hpp>
 
 #ifdef IOS
@@ -39,6 +36,11 @@
 // and opening of several documents in sequence very quickly might cause discrepancies, so it is
 // better to use a different counter to be sure. Patches to use just one counter welcome.
 
+namespace lok
+{
+class Document;
+}
+
 class DocumentData
 {
 private:
@@ -56,6 +58,7 @@ public:
     static DocumentData &allocate(unsigned docId);
     static DocumentData &get(unsigned docId);
     static void deallocate(unsigned docId);
+    static int count();
 
 #ifdef IOS
     CODocument *coDocument;

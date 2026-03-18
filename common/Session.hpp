@@ -166,13 +166,13 @@ public:
     virtual void disconnect();
 
     /// clean & normal shutdown
-    void shutdownNormal(const std::string& statusMessage = std::string())
+    void shutdownNormal(const std::string_view statusMessage = std::string_view())
     {
         shutdown(false, statusMessage);
     }
 
     /// abnormal / hash shutdown end-point going away
-    void shutdownGoingAway(const std::string& statusMessage = std::string())
+    void shutdownGoingAway(const std::string_view statusMessage = std::string_view())
     {
         shutdown(true, statusMessage);
     }
@@ -314,14 +314,16 @@ protected:
 
     void dumpState(std::ostream& os) override;
 
-    void logPrefix(std::ostream& os) const { os << _name << ": "; }
+    std::string getLogPrefix() const { return _name + ": "; }
+    void logPrefix(std::ostream& os) const { os <<  _name + ": "; }
 
     void setSignToUserPrivateConfig(const std::string& key,
                                     const Poco::JSON::Object::Ptr& signatureDataObject,
                                     Poco::JSON::Object::Ptr& userPrivateInfoObject);
 
 private:
-    void shutdown(bool goingAway = false, const std::string& statusMessage = std::string());
+    void shutdown(bool goingAway = false,
+                  const std::string_view statusMessage = std::string_view());
 
     virtual bool _handleInput(const char* buffer, int length) = 0;
 

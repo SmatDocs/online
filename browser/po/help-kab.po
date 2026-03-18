@@ -2,8 +2,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-02-13 19:20+0200\n"
-"PO-Revision-Date: 2026-02-12 19:09+0000\n"
+"POT-Creation-Date: 2026-03-09 17:39+0200\n"
+"PO-Revision-Date: 2026-01-19 18:01+0000\n"
 "Last-Translator: Amadɣas <massiin@proton.me>\n"
 "Language-Team: Kabyle <https://hosted.weblate.org/projects/collabora-online/"
 "help/kab/>\n"
@@ -780,8 +780,7 @@ msgstr ""
 msgid ""
 "<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>Home</kbd>"
-msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Tazwara"
+msgstr "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Tazwara"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:75-38
 msgid "Go and select text to start of document"
@@ -796,8 +795,9 @@ msgid ""
 ">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>Home</kbd>"
 msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Shift</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Agejdan"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>V</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:76-38
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:239-38
@@ -844,8 +844,7 @@ msgstr ""
 msgid ""
 "<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>End</kbd>"
-msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Taggara"
+msgstr "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Taggara"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:79-38
 msgid "Go and select text to end of document"
@@ -860,8 +859,9 @@ msgid ""
 ">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>End</kbd>"
 msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Shift</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Tazwara"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>V</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:80-38
 msgid "Move the view up one page"
@@ -880,9 +880,7 @@ msgstr ""
 msgid ""
 "<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>PageUp</kbd>"
-msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
-"span><kbd>Asebter d asawen"
+msgstr "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Asebter d asawen"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:82-38
 msgid "Extend the selection up one page"
@@ -893,9 +891,7 @@ msgstr ""
 msgid ""
 "<kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>PageUp</kbd>"
-msgstr ""
-"Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
-"span><kbd>Asebter d asawen"
+msgstr "Shift</kbd><span class=\"kbd--plus\">+</span><kbd>Asebter d asawen"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:83-38
 msgid "Move the view down one page"
@@ -914,9 +910,7 @@ msgstr ""
 msgid ""
 "<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>PageDown</kbd>"
-msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
-"span><kbd>Asebter d akesser"
+msgstr "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Asebter d akesser"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:85-38
 msgid "Extend the selection down one page"
@@ -927,9 +921,7 @@ msgstr ""
 msgid ""
 "<kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>PageDown</kbd>"
-msgstr ""
-"Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
-"span><kbd>Asebter d akesser"
+msgstr "Shift</kbd><span class=\"kbd--plus\">+</span><kbd>Asebter d akesser"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:86-38
 msgid "Delete to beginning of word"
@@ -1027,9 +1019,7 @@ msgstr ""
 msgid ""
 "<kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
 "span><kbd>Arrow Keys</kbd>"
-msgstr ""
-"Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
-"span><kbd>Tiqeffalin n tnila"
+msgstr "Alt</kbd><span class=\"kbd--plus\">+</span><kbd>Tiqeffalin n tnila"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:99-152
 msgid ""
@@ -1043,9 +1033,8 @@ msgid ""
 ">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
 "span><kbd>Arrow Keys</kbd>"
 msgstr ""
-"Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Shift</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Tiqeffalin n "
-"tnila"
+"Alt</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span class=\"kbd"
+"--plus\">+</span><kbd>Tiqeffalin n tnila"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:100-219
 msgid "Increase/decrease the size of the column/row on the left/top cell edge"
@@ -1058,9 +1047,8 @@ msgid ""
 ">+</span><kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
 "span><kbd>Arrow Keys</kbd>"
 msgstr ""
-"Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>CTRL</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Tiqeffalin n "
-"tnila"
+"Alt</kbd><span class=\"kbd--plus\">+</span><kbd>CTRL</kbd><span class=\"kbd--"
+"plus\">+</span><kbd>Tiqeffalin n tnila"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:101-218
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:102-285
@@ -1075,17 +1063,17 @@ msgid ""
 ">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
 "span><kbd>Arrow Keys</kbd>"
 msgstr ""
-"Alt +Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
-">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
-"span><kbd>Tiqeffalin n tnila"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>V</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:103-38
 #, fuzzy
 msgid ""
 "<kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>Insert</kbd>"
-msgstr ""
-"Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Ger"
+msgstr "Alt</kbd><span class=\"kbd--plus\">+</span><kbd>Ger"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:103-148
 #, fuzzy
@@ -1095,8 +1083,8 @@ msgid ""
 "inserts cell"
 msgstr ""
 "3 n tasinin deg uskar n tukksa, Tasarut n uneccab tekkes izirigen/ijga, "
-"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
-"span><kbd>Tasarut n Uneccab</kbd> smezdi tibniqin akked tebniqt n lǧar"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Tasarut n Uneccab</"
+"kbd> smezdi tibniqin akked tebniqt n lǧar"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:104-38
 msgid ""
@@ -1165,8 +1153,9 @@ msgid ""
 ">+</span><kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>F</kbd>"
 msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Alt</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>F"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>5</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:115-38
 msgid "Insert endnote"
@@ -1179,8 +1168,9 @@ msgid ""
 ">+</span><kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>D</kbd>"
 msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Alt</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>D"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>5</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:116-38
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:167-38
@@ -1195,8 +1185,9 @@ msgid ""
 ">+</span><kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>C</kbd>"
 msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Alt</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>C"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>5</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:118-38
 msgid "Insert soft hyphen"
@@ -1207,7 +1198,7 @@ msgstr ""
 msgid ""
 "<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>-</kbd>"
-msgstr "Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>-"
+msgstr "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>-"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:119-38
 msgid "Insert non-breaking hyphen"
@@ -1220,8 +1211,9 @@ msgid ""
 ">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>-</kbd>"
 msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Shift</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>-"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>V</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:121-38
 msgid "Insert non-breaking space"
@@ -1234,8 +1226,9 @@ msgid ""
 ">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>Space</kbd>"
 msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Shift</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Tallunt"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Tuɣalin</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:122-38
 msgid "Insert line break"
@@ -1246,8 +1239,7 @@ msgstr ""
 msgid ""
 "<kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>Enter</kbd>"
-msgstr ""
-"Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Kcem"
+msgstr "Shift</kbd><span class=\"kbd--plus\">+</span><kbd>Kcem"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:123-38
 msgid "Manual page break"
@@ -1260,8 +1252,7 @@ msgstr ""
 msgid ""
 "<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>Enter</kbd>"
-msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Kcem"
+msgstr "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Kcem"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:124-38
 msgid "Column break (in multicolumnar text)"
@@ -1274,8 +1265,9 @@ msgid ""
 ">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>Enter</kbd>"
 msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Shift</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Taggara"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Kkes</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:125-38
 msgid ""
@@ -1288,8 +1280,7 @@ msgstr ""
 msgid ""
 "<kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>Enter</kbd>"
-msgstr ""
-"Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Kcem"
+msgstr "Alt</kbd><span class=\"kbd--plus\">+</span><kbd>Kcem"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:126-38
 msgid ""
@@ -1444,8 +1435,9 @@ msgid ""
 ">+</span><kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
 "span><kbd>Page Down</kbd>"
 msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Alt</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>D"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
+"span><kbd>Aneccab d akessar</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:147-38
 msgid "Go to previous sheet."
@@ -1458,8 +1450,9 @@ msgid ""
 ">+</span><kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
 "span><kbd>Page Up</kbd>"
 msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Alt</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>5"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>5</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:148-38
 msgid ""
@@ -1476,9 +1469,9 @@ msgid ""
 ">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>Arrow</kbd>"
 msgstr ""
-"CTRL</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Shift</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Aneccab d "
-"asawen"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
+"span><kbd>Aneccab d asawen</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:149-38
 msgid "Moves one sheet to the left."
@@ -1489,9 +1482,7 @@ msgstr "Senkez tiferkit ɣer tama tazelmaḍt."
 msgid ""
 "<kbd>Alt</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
 "span><kbd>Page Up</kbd>"
-msgstr ""
-"Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</"
-"span><kbd>Asebter d asawen"
+msgstr "Shift</kbd><span class=\"kbd--plus\">+</span><kbd>Asebter d asawen"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:150-38
 msgid "Moves one screen page to the right."
@@ -1612,8 +1603,7 @@ msgstr ""
 msgid ""
 "<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>F1</kbd>"
-msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>F1"
+msgstr "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>F1"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:169-38
 msgid "Fill Down"
@@ -1634,8 +1624,9 @@ msgid ""
 ">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>1</kbd>"
 msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Shift</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>1"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>V</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:177-38
 msgid "Standard exponential format"
@@ -1648,8 +1639,9 @@ msgid ""
 ">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>2</kbd>"
 msgstr ""
-"Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>Shift</"
-"kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>2"
+"<kbd>Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
+">+</span><kbd>V</kbd>"
 
 #: html/cool-help.html%2Bdiv.div.div.table.tr.td:178-38
 #, fuzzy
@@ -1750,9 +1742,7 @@ msgstr "Sneqs aswir n uferdis n tabdart (aferdis n tebdart ilaq ad yettwafren)"
 msgid ""
 "<kbd>Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
 ">+</span><kbd>Tab</kbd>"
-msgstr ""
-"Shift</kbd><span class=\"kbd--plus\" aria-hidden=\"true\""
-">+</span><kbd>Tarigla"
+msgstr "Shift</kbd><span class=\"kbd--plus\">+</span><kbd>Tarigla"
 
 #: html/cool-help.html%2Bdiv.div.div.h2:216-9
 #: html/cool-help.html%2Bdiv.div.div.h2:281-9
@@ -1853,13 +1843,12 @@ msgstr "Tiwuriwin tinaẓiyin"
 #: html/cool-help.html%2Bdiv.div.h2:330-9
 #: html/cool-help.html%2Bdiv.div.h3:483-5
 msgid "<span class=\"productname\">{productname}</span> spreadsheets"
-msgstr ""
-"<span class=\"productname\">{isem n ufaris}</span> tifelwitin tiliktṛunanin"
+msgstr "<span class=\"productname\">{isem n ufaris}</span> imbellezen"
 
 #: html/cool-help.html%2Bdiv.div.h2:331-9
 #: html/cool-help.html%2Bdiv.div.div.h3:485-5
 msgid "Editing spreadsheets"
-msgstr "Asiẓreg n tfelwitin tiliktṛunanin"
+msgstr "Asiẓreg n imbellezen"
 
 #: html/cool-help.html%2Bdiv.div.h2:332-9
 #: html/cool-help.html%2Bdiv.div.div.h3:489-5
@@ -1870,12 +1859,12 @@ msgstr "Tinfaliyin"
 #: html/cool-help.html%2Bdiv.div.h2:333-9
 #: html/cool-help.html%2Bdiv.div.div.h3:498-5
 msgid "Formatting spreadsheets"
-msgstr "Amasal n tfelwitin tiliktṛunanin"
+msgstr "Amasal n imbellezen"
 
 #: html/cool-help.html%2Bdiv.div.h2:335-9
 #: html/cool-help.html%2Bdiv.div.div.h3:759-5
 msgid "Spreadsheets"
-msgstr "Tifelwitin tiliktṛunanin"
+msgstr "Tiferlit n usiḍen"
 
 #: html/cool-help.html%2Bdiv.div.h2:338-9
 #: html/cool-help.html%2Bdiv.div.h3:547-5
@@ -1905,7 +1894,7 @@ msgstr "Isemliyen n uḍris"
 #: html/cool-help.html%2Bdiv.div.h2:345-9
 #: html/cool-help.html%2Bdiv.div.h3:596-5
 msgid "<span class=\"productname\">{productname}</span> presentations"
-msgstr "<span class=\"productname\">{isem n ufaris}</span> tihawin"
+msgstr "<span class=\"productname\">{isem n ufaris}</span> isenkiden"
 
 #: html/cool-help.html%2Bdiv.div.h2:346-9
 #: html/cool-help.html%2Bdiv.div.div.h3:598-5
@@ -1925,7 +1914,7 @@ msgstr "Tigri n ugalis"
 #: html/cool-help.html%2Bdiv.div.h2:350-9
 #: html/cool-help.html%2Bdiv.div.div.h3:798-5
 msgid "Presentations"
-msgstr "Tihawin"
+msgstr "Asenked"
 
 #: html/cool-help.html%2Bdiv.h2:352-5
 #: html/cool-help.html%2Bdiv.div.h3:628-5
@@ -2100,8 +2089,8 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.p:411-30
 msgid ""
-"Depending on the capabilities of your browser the print window may appear or "
-"a “Download PDF export?” popup shows. You can print this PDF in your "
+"Depending on the capabilities of your browser, the print window may appear or "
+"a “Download PDF export?” popup appears. You can print this PDF in your "
 "favorite PDF reader."
 msgstr ""
 "Ɣef leḥsab n tzemmar n yiminig-ik·im, asfaylu n usiggez yezmer ad d-iban, "
@@ -2162,7 +2151,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.h4:423-5
 msgid "Document repair"
-msgstr "Aseɣti n isemli"
+msgstr "Aṣeggem n isemli"
 
 #: html/cool-help.html%2Bdiv.div.div.p:424-5
 msgid ""
@@ -2182,7 +2171,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.img[alt]:426-29
 msgid "document repair"
-msgstr "aseɣti n isemli"
+msgstr "aseggem n isemli"
 
 #: html/cool-help.html%2Bdiv.div.div.p:427-5
 msgid ""
@@ -2395,10 +2384,9 @@ msgid ""
 "with suggested misspelling corrections."
 msgstr ""
 "<span class=\"productname\">{isem n ufaris}</span> tzemreḍ ad tessenqed tira "
-"deg isemliyen n uḍris, tiferkiyin n usiḍen akked tihawin. Ajerriḍ azeggaɣ "
-"mmalen-d awalen ur yettwarun akken iwata. Sit ɣef tqeffalt tayeffust n "
-"tɣerdayt i wakken ad teldiḍ umuɣ n usatal s uskan i d-yettwasumren i "
-"yiseɣtiyen."
+"deg isemliyen n uḍris, ambellez akked isenkaden. Ajerriḍ azeggaɣ mmalen-d "
+"awalen ur yettwarun akken iwata. Sit ɣef tqeffalt tayeffust n tɣerdayt i "
+"wakken ad teldiḍ umuɣ n usatal s uskan i d-yettwasumren i yiseɣtiyen."
 
 #: html/cool-help.html%2Bdiv.div.div.div.img[alt]:478-29
 msgid "spellchecking"
@@ -2456,7 +2444,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.p:500-5
 msgid ""
-"<span class=\"def\">Direct formatting:</span> You can format spreadsheets "
+"<span class=\"def\">Direct formatting:</span> You can format spreadsheet "
 "cells, columns, rows and sheets by formatting directly from the menus, "
 "toolbar or context menus. Direct formatting applies only to the current "
 "object selected. To format a cell either use the menu or hit <kbd>Ctrl</"
@@ -2550,7 +2538,7 @@ msgstr ""
 #: html/cool-help.html%2Bdiv.div.div.div.ol.li:528-7
 msgid ""
 "Select the validity criterion in the <span class=\"ui\">Allow</span> drop-"
-"box list. Depending on the criterion, more options shows. Fill the required "
+"box list. Depending on the criterion, more options show. Fill the required "
 "data."
 msgstr ""
 
@@ -2576,8 +2564,8 @@ msgid ""
 "the mouse on the cell to display comments."
 msgstr ""
 "<span class=\"def\">Iwenniten:</span> Deg tferkit n usiḍen ad tizmired ad "
-"tegreḍ yiwen n uwennit deg tebniqt. Ticki tferneḍ <span class=\"ui\">Ger "
-"awennit</span>, ad d-iban usfaylu ara k·kem-yeǧǧen ad taruḍ agbur i uwennit. "
+"tegreḍ yiwen n uwennit deg tebniqt. Ticki tferneḍ  <span class=\"ui\">Ger "
+"awennit</span>, ad d-iban usfaylu ara k-yeǧǧen ad taruḍ agbur i uwennit. "
 "Taneqqiḍt tazeggaɣt ad tban deg tama tayeffust n tebniqt ticki tesɛa "
 "awennit. Srifeg s tɣerdayt ɣef tebniqt akken ad tsekneḍ iwenniten."
 
@@ -2632,11 +2620,11 @@ msgid ""
 "<span class=\"productname\">{productname}</span> supports modern techniques "
 "for paragraph formatting through styles. A style is a set of text properties "
 "(font, color, background and many more) labeled with a name, the style name. "
-"Use style to apply the same set of properties to many paragraphs in the "
+"Use a style to apply the same set of properties to many paragraphs in the "
 "document and produce a uniform, professional look. Also, if you change one "
 "of the style formatting properties, all paragraphs with the same style "
-"changes formatting as well, simplifying the effort of formatting many "
-"paragraph individually."
+"change formatting as well, simplifying the effort of formatting many "
+"paragraphs individually."
 msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.p:560-5
@@ -2724,7 +2712,7 @@ msgstr "ḍfer ibeddilen"
 #: html/cool-help.html%2Bdiv.div.div.div.p:582-5
 msgid ""
 "Changes made by different people are shown in different colors and each "
-"tracked change can be accepted or rejected, using the box the appears on the "
+"tracked change can be accepted or rejected, using the box that appears on the "
 "right. You can also add a comment there."
 msgstr ""
 
@@ -2743,7 +2731,7 @@ msgstr ""
 #: html/cool-help.html%2Bdiv.div.div.div.p:587-5
 msgid ""
 "<span class=\"def\">Formatting marks:</span> Paragraph, page and unbreakable "
-"spaces are shown as marks to assisting text alignment, editing and "
+"spaces are shown as marks to assist text alignment, editing and "
 "formatting."
 msgstr ""
 
@@ -2780,7 +2768,7 @@ msgstr ""
 msgid ""
 "<span class=\"productname\">{productname}</span> Impress edits presentations "
 "in a way that should be familiar to people. Operations like typing text, "
-"cut, copy and pasting contents, selecting text , inserting, resizing, "
+"cut, copy and pasting contents, selecting text, inserting, resizing, "
 "anchoring images, adding and handling tables, are similar to a desktop "
 "presentation application. Use the keyboard, menus and toolbars to perform "
 "actions in your document."
@@ -2790,7 +2778,7 @@ msgstr ""
 msgid ""
 "<span class=\"productname\">{productname}</span> displays presentation slide "
 "shows, including a subset of slide transitions and object animations. Choose "
-"the slide show from the menu or click on icon in the bottom left toolbar in "
+"the slide show from the menu or click on the icon in the bottom left toolbar in "
 "the slide pane."
 msgstr ""
 
@@ -2814,13 +2802,13 @@ msgid ""
 "Use the slide pane toolbar in the bottom to start the slideshow, add slide, "
 "duplicate or delete the current slide."
 msgstr ""
-"Seqdec afeggag n ifecka n tigri n ugalis deg wadda akken ad tebduḍ tigri n "
-"tugna, ad ternuḍ tigri, ad tneɣleḍ neɣ ad tekkseḍ tigri tamirant."
+"Seqdec afeggag n ifecka n tmeccegin deg wadda akken ad tebduḍ askan n "
+"tmeccegin, ad ternuḍ timeccegt, ad tneɣleḍ neɣ ad tekkseḍ timeccegt tamirant."
 
 #: html/cool-help.html%2Bdiv.div.div.div.p:618-5
 msgid ""
 "<span class=\"def\">Slide layouts:</span> <span class=\"productname\""
-">{productname}</span> Impress let you change the slide layout. Select the "
+">{productname}</span> Impress lets you change the slide layout. Select the "
 "desired slide layout in the drop-down layout list."
 msgstr ""
 
@@ -2844,8 +2832,8 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.p:623-30
 msgid ""
-"<span class=\"def\">Object animation:</span> Individual object in the slide "
-"can have animation. Use the side bar to configure the slide transition for a "
+"<span class=\"def\">Object animation:</span> Individual objects in the slide "
+"can have animations. Use the side bar to configure the slide transition for a "
 "selected object or set of objects."
 msgstr ""
 
@@ -2857,7 +2845,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.h4:630-5
 msgid ""
-"What are the documents file formats supported by <span class=\"productname\""
+"What are the document file formats supported by <span class=\"productname\""
 ">{productname}</span>?"
 msgstr ""
 
@@ -2952,9 +2940,9 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.p:664-5
 msgid ""
-"Grammar errors in the text is marked with the blue wavy underline. Click on "
+"Grammar errors in the text are marked with the blue wavy underline. Click on "
 "the underlined text with the right mouse button to open a menu with "
-"suggestions to correct the grammar error and the offended grammar rules. "
+"suggestions to correct the grammar error and the offending grammar rules. "
 "Select the right suggestion to change the text."
 msgstr ""
 "Tuccḍiwin n tseddats deg uḍris ad ttwacerḍent s ujerriḍ anili s ddaw. Tekki "
@@ -2979,7 +2967,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.h4:672-5
 msgid ""
-"What are the blue <span class=\"blue\">¶</span> symbol and how can I remove "
+"What are the blue <span class=\"blue\">¶</span> symbols and how can I remove them "
 "from my text document?"
 msgstr ""
 
@@ -3032,7 +3020,7 @@ msgstr ""
 msgid ""
 "Choose <span class=\"ui\">Insert</span> → <span class=\"ui\">Special "
 "Characters </span> or click the corresponding icon in the toolbar. A dialog "
-"shows."
+"opens."
 msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.ol.div.img[alt]:693-31
@@ -3060,14 +3048,14 @@ msgstr ""
 #: html/cool-help.html%2Bdiv.div.div.div.p:700-5
 msgid ""
 "You have the Track Changes feature enabled for the document. Track Changes "
-"records all changes in the text and shows the editions for later revision. "
+"records all changes in the text and shows the edits for later revision. "
 "Useful for marking changes in text and spreadsheets. Track changes are "
 "enabled choosing <span class=\"ui\">Edit</span> → <span class=\"ui\">Track "
 "Changes </span> → <span class=\"ui\">Record</span>."
 msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.p:701-5
-msgid "With track changes enabled your document is shown the following manner:"
+msgid "With track changes enabled your document is shown in the following manner:"
 msgstr "S urmad n uḍfar n yibeddilen, isemli-ik ad yettwasken s tarrayt-a:"
 
 #: html/cool-help.html%2Bdiv.div.div.div.ul.li:703-7
@@ -3145,7 +3133,7 @@ msgid "page style"
 msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.h4:725-5
-msgid "How do I change the page orientation to landscape inside my document"
+msgid "How do I change the page orientation to landscape inside my document?"
 msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.ol.li:727-7
@@ -3225,9 +3213,9 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.p:753-5
 msgid ""
-"You have the AutoCorrection enabled. AutoCorrection changes the text just "
-"typed into an internal table of corresponding text. In most cases, "
-"AutoCorrection fixes typos while you are typing. If AutoCorrection is not "
+"You have the AutoCorrection enabled. AutoCorrection compares the text just "
+"typed to an internal table of text. In most cases, "
+"AutoCorrection corrects typos while you type. If AutoCorrection is not "
 "necessary, disable it in <span class=\"ui\">Tools</span> → <span class=\"ui\""
 ">AutoCorrection</span> → <span class=\"ui\">While typing</span>."
 msgstr ""
@@ -3329,7 +3317,7 @@ msgstr ""
 
 #: html/cool-help.html%2Bdiv.div.div.div.h4:800-5
 msgid "How can I run my slide show?"
-msgstr "Amek ara slekmeɣ tigri n tugna?"
+msgstr "Amek ara slekmeɣ asenked-iw tura?"
 
 #: html/cool-help.html%2Bdiv.div.div.div.ol.li:802-7
 msgid ""
@@ -3373,11 +3361,230 @@ msgstr ""
 msgid "Set the properties of the element of the object."
 msgstr "Sbadu timeẓliyin n uferdis n tɣawsa."
 
-#~ msgid "<span class=\"def\">The information bar:</span> At the right of the search bar, a set of information on the document is displayed. The actual information depends on the nature of the document."
-#~ msgstr "<span class=\"def\">Afeggag n telɣut:</span> Ɣer tama tayeffust n ufeggag n unadi, ad yettwabeqqeḍ tagrumma n telɣut ɣef isemli. Talɣut tamirant tcudd ɣer ugama n yisemli."
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>V</kbd>"
+#~ msgstr ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>V</kbd>"
+
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Shift</kbd><span class=\"kbd--"
+#~ "plus\">+</span><kbd>V</kbd>"
+#~ msgstr ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Shift</kbd><span class=\"kbd--"
+#~ "plus\">+</span><kbd>V</kbd>"
+
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>?</kbd>"
+#~ msgstr ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>?</kbd>"
+
+#~ msgid ""
+#~ "<kbd>Alt</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>F1</kbd>"
+#~ msgstr ""
+#~ "<kbd>Alt</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>F1</kbd>"
+
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>5</kbd>"
+#~ msgstr ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>5</kbd>"
+
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>P</kbd>"
+#~ msgstr ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>P</kbd>"
+
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>B</kbd>"
+#~ msgstr ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>B</kbd>"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Home</kbd>"
+#~ msgstr ""
+#~ "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Agejdan"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>End</kbd>"
+#~ msgstr ""
+#~ "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Tazwara"
+
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Del</kbd>"
+#~ msgstr ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Kkes</kbd>"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Shift</kbd><span class=\"kbd--"
+#~ "plus\">+</span><kbd>Arrow Keys</kbd>"
+#~ msgstr ""
+#~ "Alt +Alt</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Tiqeffalin n tnila"
+
+#~ msgid ""
+#~ "<kbd>Shift</kbd><span class=\"kbd--plus\">+</span><kbd>Ctrl</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Del</kbd>"
+#~ msgstr ""
+#~ "<kbd>Shift</kbd><span class=\"kbd--plus\">+</span><kbd>Ctrl</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Kkes</kbd>"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>F</kbd>"
+#~ msgstr ""
+#~ "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span class=\"kbd"
+#~ "--plus\">+</span><kbd>F"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>D</kbd>"
+#~ msgstr ""
+#~ "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span class=\"kbd"
+#~ "--plus\">+</span><kbd>D"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>C</kbd>"
+#~ msgstr ""
+#~ "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span class=\"kbd"
+#~ "--plus\">+</span><kbd>C"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>-</kbd>"
+#~ msgstr ""
+#~ "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>-"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Space</kbd>"
+#~ msgstr ""
+#~ "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Tallunt"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Enter</kbd>"
+#~ msgstr ""
+#~ "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Taggara"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Page Down</kbd>"
+#~ msgstr ""
+#~ "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span class=\"kbd"
+#~ "--plus\">+</span><kbd>D"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Page Up</kbd>"
+#~ msgstr ""
+#~ "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Alt</kbd><span class=\"kbd"
+#~ "--plus\">+</span><kbd>5"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Arrow</kbd>"
+#~ msgstr ""
+#~ "CTRL</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Aneccab d asawen"
+
+#~ msgid ""
+#~ "<kbd>Shift</kbd><span class=\"kbd--plus\">+</span><kbd>Ctrl</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Page Up</kbd>"
+#~ msgstr ""
+#~ "<kbd>Shift</kbd><span class=\"kbd--plus\">+</span><kbd>Ctrl</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>Asebter d Asawen</kbd>"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>1</kbd>"
+#~ msgstr ""
+#~ "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>1"
+
+#, fuzzy
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>2</kbd>"
+#~ msgstr ""
+#~ "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>2"
+
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>3</kbd>"
+#~ msgstr ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>3</kbd>"
+
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>4</kbd>"
+#~ msgstr ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>4</kbd>"
+
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>5</kbd>"
+#~ msgstr ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>5</kbd>"
+
+#~ msgid ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>6</kbd>"
+#~ msgstr ""
+#~ "<kbd>Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>Shift</kbd><span "
+#~ "class=\"kbd--plus\">+</span><kbd>6</kbd>"
+
+#~ msgid ""
+#~ "<span class=\"def\">The information bar:</span> At the right of the search "
+#~ "bar, a set of information on the document is displayed. The actual "
+#~ "information depends on the nature of the document."
+#~ msgstr ""
+#~ "<span class=\"def\">Afeggag n telɣut:</span> Ɣer tama tayeffust n ufeggag n "
+#~ "unadi, ad yettwabeqqeḍ tagrumma n telɣut ɣef isemli. Talɣut tamirant tcudd "
+#~ "ɣer ugama n yisemli."
 
 #~ msgid "General"
 #~ msgstr "Amatu"
 
-#~ msgid "Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>E"
-#~ msgstr "Ctrl</kbd><span class=\"kbd--plus\" aria-hidden=\"true\">+</span><kbd>E"
+#~ msgid "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>E"
+#~ msgstr "Ctrl</kbd><span class=\"kbd--plus\">+</span><kbd>E"

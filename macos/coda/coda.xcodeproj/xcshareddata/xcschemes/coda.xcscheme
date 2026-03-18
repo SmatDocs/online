@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "BECC4BAA2CBD3FA300A120B3"
-               BuildableName = "coda.app"
+               BuildableName = "Collabora Office.app"
                BlueprintName = "coda"
                ReferencedContainer = "container:coda.xcodeproj">
             </BuildableReference>
@@ -27,8 +27,13 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES"
-      shouldAutocreateTestPlan = "YES">
+      shouldUseLaunchSchemeArgsEnv = "YES">
+      <TestPlans>
+         <TestPlanReference
+            reference = "container:TestPlan.xctestplan"
+            default = "YES">
+         </TestPlanReference>
+      </TestPlans>
       <Testables>
          <TestableReference
             skipped = "NO"
@@ -69,7 +74,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BECC4BAA2CBD3FA300A120B3"
-            BuildableName = "coda.app"
+            BuildableName = "Collabora Office.app"
             BlueprintName = "coda"
             ReferencedContainer = "container:coda.xcodeproj">
          </BuildableReference>
@@ -86,7 +91,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BECC4BAA2CBD3FA300A120B3"
-            BuildableName = "coda.app"
+            BuildableName = "Collabora Office.app"
             BlueprintName = "coda"
             ReferencedContainer = "container:coda.xcodeproj">
          </BuildableReference>

@@ -71,6 +71,7 @@
 #  include <sys/syscall.h>
 #  include <sys/vfs.h>
 #  include <sys/resource.h>
+#  include <dlfcn.h>
 #elif defined __FreeBSD__
 #  include <sys/resource.h>
 #  include <sys/thr.h>
@@ -285,6 +286,14 @@ namespace Util
                 ThreadTid = tid;
         }
         return ThreadTid;
+#elif defined _WIN32
+        if (!ThreadTid)
+        {
+            DWORD tid = GetThreadId(GetCurrentThread());
+            if (tid)
+                ThreadTid = tid;
+        }
+        return ThreadTid;
 #else
         static long threadCounter = 1;
         if (!ThreadTid)
@@ -332,12 +341,12 @@ namespace Util
                               << " is now called [" << s << ']');
 #elif defined IOS
         [[NSThread currentThread] setName:[NSString stringWithUTF8String:ThreadName]];
-        LOG_INF("Thread " << getThreadId() << ") is now called [" << s << ']');
+        LOG_INF("Thread " << getThreadId() << " is now called [" << s << ']');
 #elif defined __EMSCRIPTEN__
         emscripten_console_logf("COOL thread name: \"%s\"", s.c_str());
 #elif defined _WIN32
         SetThreadDescription(GetCurrentThread(), string_to_wide_string(s).c_str());
-        LOG_INF("Thread " << getThreadId() << ") is now called [" << s << ']');
+        LOG_INF("Thread " << getThreadId() << " is now called [" << s << ']');
 #endif
 
         // Emit a metadata Trace Event identifying this thread. This will invoke a different function
@@ -360,6 +369,11 @@ namespace Util
 #elif defined IOS
             const char *const name = [[[NSThread currentThread] name] UTF8String];
             strncpy(ThreadName, name, sizeof(ThreadName) - 1);
+#elif defined _WIN32
+            PWSTR description;
+            if (SUCCEEDED(GetThreadDescription(GetCurrentThread(), &description)))
+                strncpy(ThreadName, wide_string_to_string(description).c_str(), sizeof(ThreadName) - 1);
+            LocalFree(description);
 #endif
             ThreadName[sizeof(ThreadName) - 1] = '\0';
         }
@@ -683,7 +697,7 @@ namespace Util
 
 #endif // !MOBILEAPP
 
-    /// Returns the given system_clock time_point as string in the local time.
+    /// Returns the given system_clock time_point as string in GMT.
     /// Format: Thu Jan 27 03:45:27.123 2022
     std::string getSystemClockAsString(const std::chrono::system_clock::time_point time)
     {
@@ -695,7 +709,7 @@ namespace Util
         const int msFraction = msSinceEpoch.count() % 1000;
 
         std::tm tm;
-        time_t_to_localtime(t, tm);
+        time_t_to_gmtime(t, tm);
 
         char buffer[128] = { 0 };
         std::strftime(buffer, 80, "%a %b %d %H:%M:%S", &tm);
@@ -737,56 +751,6 @@ namespace Util
     std::string getApplicationPath()
     {
         return ApplicationPath;
-    }
-
-    int safe_atoi(const char* p, int len)
-    {
-        long ret{};
-        if (!p || !len)
-        {
-            return ret;
-        }
-
-        int multiplier = 1;
-        int offset = 0;
-        while (isspace(p[offset]))
-        {
-            ++offset;
-            if (offset >= len)
-            {
-                return ret;
-            }
-        }
-
-        switch (p[offset])
-        {
-            case '-':
-                multiplier = -1;
-                ++offset;
-                break;
-            case '+':
-                ++offset;
-                break;
-        }
-        if (offset >= len)
-        {
-            return ret;
-        }
-
-        while (isdigit(p[offset]))
-        {
-            std::int64_t next = ret * 10 + (p[offset] - '0');
-            if (next >= std::numeric_limits<int>::max())
-                return multiplier * std::numeric_limits<int>::max();
-            ret = next;
-            ++offset;
-            if (offset >= len)
-            {
-                return multiplier * ret;
-            }
-        }
-
-        return multiplier * ret;
     }
 
     void forcedExit(int code)
@@ -1046,7 +1010,7 @@ namespace Util
         return oss.str();
     }
 
-    std::string base64EncodeRemovingNewLines(const std::string_view& input)
+    std::string base64EncodeRemovingNewLines(const std::string_view input)
     {
         std::ostringstream oss;
         // Use a line ending converter to remove these CRLF.

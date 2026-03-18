@@ -69,6 +69,7 @@ var lastClickHelperId = '';
 class TreeViewControl {
 	_isRealTree: boolean;
 	_isListbox: boolean;
+	_containerRole: string;
 	_container: HTMLElement;
 	_tbody: HTMLElement;
 	_thead: HTMLElement = null;
@@ -367,7 +368,14 @@ class TreeViewControl {
 		);
 		this._rows.set(String(entry.row), tr);
 		tr.setAttribute('level', String(level));
-		tr.setAttribute('role', this._isListbox ? 'option' : 'row');
+		(tr as any)._row = entry.row;
+		const rowRole =
+			this._containerRole === 'tree'
+				? 'treeitem'
+				: this._containerRole === 'listbox'
+					? 'option'
+					: 'row';
+		tr.setAttribute('role', rowRole);
 
 		let dummyColumns = 0;
 		if (this._hasState) dummyColumns++;
@@ -774,7 +782,10 @@ class TreeViewControl {
 				const element = rowElements[i];
 
 				// setup properties
-				if (!this._isListbox) {
+				if (
+					this._containerRole === 'grid' ||
+					this._containerRole === 'treegrid'
+				) {
 					element.setAttribute('role', 'gridcell');
 				}
 			}
@@ -1346,6 +1357,8 @@ class TreeViewControl {
 		listElements: Array<HTMLElement>,
 		fromIndex: number,
 		toIndex: number,
+		builder: JSBuilder,
+		data: TreeWidgetJSON,
 	) {
 		var nextElement = listElements.at(toIndex);
 		nextElement.tabIndex = 0;
@@ -1371,6 +1384,14 @@ class TreeViewControl {
 			) as Array<HTMLElement>;
 			if (oldInput && oldInput.length) oldInput.at(0).tabIndex = -1;
 		}
+
+		(builder as any).callback(
+			'treeview',
+			'select',
+			data,
+			(nextElement as any)._row,
+			builder,
+		);
 	}
 
 	getCurrentEntry(listElements: Array<HTMLElement>) {
@@ -1419,7 +1440,8 @@ class TreeViewControl {
 		var currIndex = this.getCurrentEntry(listElements);
 
 		if (event.key === 'ArrowDown') {
-			if (currIndex < 0) this.changeFocusedRow(listElements, currIndex, 0);
+			if (currIndex < 0)
+				this.changeFocusedRow(listElements, currIndex, 0, builder, data);
 			else {
 				var nextIndex = currIndex + 1;
 				while (
@@ -1428,18 +1450,36 @@ class TreeViewControl {
 				)
 					nextIndex++;
 				if (nextIndex < treeLength)
-					this.changeFocusedRow(listElements, currIndex, nextIndex);
+					this.changeFocusedRow(
+						listElements,
+						currIndex,
+						nextIndex,
+						builder,
+						data,
+					);
 			}
 			preventDef = true;
 		} else if (event.key === 'ArrowUp') {
 			if (currIndex < 0)
-				this.changeFocusedRow(listElements, currIndex, treeLength - 1);
+				this.changeFocusedRow(
+					listElements,
+					currIndex,
+					treeLength - 1,
+					builder,
+					data,
+				);
 			else {
 				var nextIndex = currIndex - 1;
 				while (nextIndex >= 0 && listElements[nextIndex].clientHeight <= 0)
 					nextIndex--;
 				if (nextIndex >= 0)
-					this.changeFocusedRow(listElements, currIndex, nextIndex);
+					this.changeFocusedRow(
+						listElements,
+						currIndex,
+						nextIndex,
+						builder,
+						data,
+					);
 			}
 
 			preventDef = true;
@@ -1465,6 +1505,8 @@ class TreeViewControl {
 	}
 
 	static isRealTree(data: TreeWidgetJSON) {
+		if (data.role) return data.role === 'tree' || data.role === 'treegrid';
+
 		let isRealTreeView = false;
 		for (var i in data.entries) {
 			if (data.entries[i].children && data.entries[i].children.length) {
@@ -1690,6 +1732,9 @@ class TreeViewControl {
 				'ui-treeview-expanded-content',
 				parent,
 			);
+			if (this._containerRole === 'tree') subGrid.setAttribute('role', 'group');
+			else if (this._containerRole === 'treegrid')
+				subGrid.setAttribute('role', 'rowgroup');
 			entryElements.push(subGrid);
 
 			let dummyColumns = 0;
@@ -1782,11 +1827,15 @@ class TreeViewControl {
 		return (
 			!data.noSearchField &&
 			!TreeViewControl.isMenu(data) &&
-			TreeViewControl.isListbox(data)
+			TreeViewControl.isListbox(data) &&
+			data.entries &&
+			data.entries.length > 25
 		);
 	}
 
 	static isListbox(data: TreeWidgetJSON): boolean {
+		if (data.role) return data.role === 'listbox';
+
 		if (TreeViewControl.isRealTree(data)) return false;
 
 		const columns = TreeViewControl.countColumns(data);
@@ -1810,6 +1859,9 @@ class TreeViewControl {
 	) {
 		this._isRealTree = TreeViewControl.isRealTree(data);
 		this._isListbox = TreeViewControl.isListbox(data);
+		this._containerRole =
+			data.role ||
+			(this._isRealTree ? 'treegrid' : this._isListbox ? 'listbox' : 'grid');
 		this._columns = TreeViewControl.countColumns(data);
 		this._hasState = TreeViewControl.hasState(data);
 		this._hasIcon = TreeViewControl.hasIcon(data);
@@ -1833,12 +1885,9 @@ class TreeViewControl {
 		this.setupKeyEvents(data, builder);
 		this.setupFocusOutHandler();
 
-		if (this._isRealTree) {
-			this._container.setAttribute('role', 'treegrid');
-			if (!data.headers || data.headers.length === 0)
-				window.L.DomUtil.addClass(this._container, 'ui-treeview-tree');
-		} else if (this._isListbox) this._container.setAttribute('role', 'listbox');
-		else this._container.setAttribute('role', 'grid');
+		this._container.setAttribute('role', this._containerRole);
+		if (this._isRealTree && (!data.headers || data.headers.length === 0))
+			window.L.DomUtil.addClass(this._container, 'ui-treeview-tree');
 
 		this.preprocessColumnData(data.entries);
 		this.fillHeaders(data, data.headers, builder);

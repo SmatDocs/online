@@ -290,7 +290,7 @@ private:
         }
     }
 
-    void shutdown(bool /*goingAway*/, const std::string& /*statusMessage*/) override
+    void shutdown(bool /*goingAway*/, const std::string_view /*statusMessage*/) override
     {
         LOG_TRC("shutdown");
     }
@@ -394,8 +394,8 @@ private:
         _connected = false;
     }
 
-    int sendTextMessage(const char*, const size_t, bool) const override { return 0; }
-    int sendBinaryMessage(const char*, const size_t, bool) const override { return 0; }
+    int sendTextMessage(std::string_view, bool) const override { return 0; }
+    int sendBinaryMessage(std::string_view, bool) const override { return 0; }
 
     std::string getMimeType() const
     {

@@ -16,6 +16,9 @@
 
 #include <config.h>
 
+// Work around a problem in Poco 1.14.2 and/or Visual Studio and clang-cl: Include <typeinfo> here.
+#include <typeinfo>
+
 #include "KitWebSocket.hpp"
 
 #include <common/Anonymizer.hpp>
@@ -90,7 +93,7 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
 
         if (!_document)
         {
-#ifndef IOS
+#if !defined(IOS) && !defined(QTAPP) && !defined(MACOS) && !defined(_WIN32)
             Util::setThreadName("kit" SHARED_DOC_THREADNAME_SUFFIX + docId);
 #endif
             _document = std::make_shared<Document>(
@@ -130,11 +133,11 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
         }
         else
         {
-#ifdef IOS
+#if defined(IOS) || defined(QTAPP) || defined(MACOS) || defined(_WIN32)
             LOG_INF("Setting our KitSocketPoll's termination flag due to 'exit' command.");
-            std::unique_lock<std::mutex> lock(_ksPoll->terminationMutex);
-            _ksPoll->terminationFlag = true;
-            _ksPoll->terminationCV.notify_all();
+            std::unique_lock<std::mutex> lock(_ksPoll->termination->mutex);
+            _ksPoll->termination->flag = true;
+            _ksPoll->termination->cv.notify_all();
 #else
             LOG_INF("Setting TerminationFlag due to 'exit' command.");
             SigUtil::setTerminationFlag();
@@ -211,11 +214,11 @@ void KitWebSocketHandler::onDisconnect()
                 << "] connection lost without exit arriving from wsd. Setting TerminationFlag");
         SigUtil::setTerminationFlag();
     }
-#ifdef IOS
+#if defined(IOS) || defined(QTAPP) || defined(MACOS) || defined(_WIN32)
     {
-        std::unique_lock<std::mutex> lock(_ksPoll->terminationMutex);
-        _ksPoll->terminationFlag = true;
-        _ksPoll->terminationCV.notify_all();
+        std::unique_lock<std::mutex> lock(_ksPoll->termination->mutex);
+        _ksPoll->termination->flag = true;
+        _ksPoll->termination->cv.notify_all();
     }
 #endif
     _ksPoll.reset();
@@ -266,7 +269,7 @@ void BgSaveParentWebSocketHandler::terminateSave(const std::string &reason)
     LOG_TRC("terminating bgsave: " << reason);
 
     // Hard terminate the bgsave child
-    sendMessage("exit");
+    sendTextMessage("exit");
     shutdown(true, "unexpected jsdialog");
 
     reportFailedSave(reason);
@@ -280,9 +283,10 @@ void BgSaveParentWebSocketHandler::reportFailedSave(const std::string &reason)
     // Synthesize a failed save result
     // FIXME: could this allow another new manual save to race against the ongoing bgsave ?
     // either way - that's better than hanging and blocking if we get interactive dialogs on save.
-    std::string saveFailed = "client-" + _session->getId() +
+    const std::string saveFailed =
+        "client-" + _session->getId() +
         " unocommandresult: { \"commandName\": \".uno:Save\", \"success\": false }";
-    _document->sendFrame(saveFailed.c_str(), saveFailed.size(), WSOpCode::Text);
+    _document->sendFrame(saveFailed, WSOpCode::Text);
 
     _document->updateModifiedOnFailedBgSave();
     _saveCompleted = true;
@@ -328,7 +332,7 @@ void BgSaveParentWebSocketHandler::handleMessage(const std::vector<char>& data)
     }
 
     // Messages already include client-foo prefixes inherited from ourselves
-    _document->sendFrame(data.data(), data.size(), WSOpCode::Text);
+    _document->sendFrame(std::string_view(data.data(), data.size()), WSOpCode::Text);
 
     if (tokens[1] == "error:")
         _document->disableBgSave("on save error");

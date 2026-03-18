@@ -33,6 +33,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Top toolbar tests.', funct
 	});
 
 	it('Apply italic on text shape.', function() {
+		desktopHelper.getCompactIconArrow('Bold').click();
 		desktopHelper.getCompactIcon('Italic').click();
 
 		impressHelper.triggerNewSVGForShapeInTheCenter();
@@ -41,6 +42,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Top toolbar tests.', funct
 	});
 
 	it('Apply underline on text shape.', function() {
+		desktopHelper.getCompactIconArrow('Bold').click();
 		desktopHelper.getCompactIcon('Underline').click();
 
 		impressHelper.triggerNewSVGForShapeInTheCenter();
@@ -49,6 +51,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Top toolbar tests.', funct
 	});
 
 	it('Apply strikethrough on text shape.', function() {
+		desktopHelper.getCompactIconArrow('Bold').click();
 		desktopHelper.getCompactIcon('Strikeout').click();
 
 		impressHelper.triggerNewSVGForShapeInTheCenter();
@@ -146,14 +149,13 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Top toolbar tests.', funct
 	});
 
 	it('Click shape hyperlink.', function() {
-		// Insert shape
+		// Insert shape - this creates and selects the shape
+		// immediately, no additional click needed to select it.
 		desktopHelper.getCompactIconArrow('DefaultNumbering').click();
 		desktopHelper.getCompactIconArrow('BasicShapes').click();
 		cy.cGet('.col.w2ui-icon.basicshapes_round-quadrat').click();
 		cy.cGet('#test-div-shapeHandlesSection').should('exist');
-
-		// Select shape at center of document
-		impressHelper.clickCenterOfSlide( { } );
+		helper.processToIdle(this.win);
 
 		helper.typeIntoDocument('{ctrl}k');
 		cy.cGet('#target').should('exist').should('be.visible');
@@ -162,6 +164,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Top toolbar tests.', funct
 
 		cy.cGet('#target-input').type('www.something.com');
 		cy.cGet('#ok').click();
+		cy.cGet('#target').should('not.exist');
 
 		helper.processToIdle(this.win);
 

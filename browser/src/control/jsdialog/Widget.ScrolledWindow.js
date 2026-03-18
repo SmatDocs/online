@@ -78,6 +78,48 @@ function _scrolledWindowControl(parentContainer, data, builder) {
 	if (data.horizontal.policy === 'always')
 		scrollwindow.style.overflowX = 'scroll';
 
+	// "External" horizontal scrolling: policy is "never" (no scrollbar) but content
+	// may be wider than the viewport. The browser determines actual overflow.
+	// Allow content to extend and handle scrolling via sibling scroll buttons.
+	if (noHorizontal) {
+		content.style.width = 'max-content';
+		content.style.minWidth = '100%';
+		scrollwindow.style.overflowX = 'hidden';
+
+		var setupExternalScroll = function() {
+			if (scrollwindow._externalScrollSetup)
+				return;
+
+			var hasOverflow = scrollwindow.scrollWidth > scrollwindow.clientWidth;
+			if (!hasOverflow)
+				return;
+
+			// Find sibling scroll buttons - deferred so all siblings exist in DOM
+			var prevSibling = scrollwindow.previousElementSibling;
+			var nextSibling = scrollwindow.nextElementSibling;
+			var leftBtn = prevSibling ? prevSibling.querySelector('button') : null;
+			var rightBtn = nextSibling ? nextSibling.querySelector('button') : null;
+
+			scrollwindow._externalScrollSetup = true;
+
+			// Hide sibling scroll buttons and show a native browser
+			// scrollbar instead - the browser handles overflow better
+			if (leftBtn)
+				leftBtn.parentElement.style.display = 'none';
+			if (rightBtn)
+				rightBtn.parentElement.style.display = 'none';
+
+			scrollwindow.style.overflowX = 'auto';
+		};
+
+		// Use ResizeObserver to detect when content overflows the
+		// viewport and enable a native horizontal scrollbar.
+		var observer = new ResizeObserver(function() {
+			setupExternalScroll();
+		});
+		observer.observe(content);
+	}
+
 	var realContentHeight = scrollwindow.scrollHeight;
 	var realContentWidth = scrollwindow.scrollwidth;
 
