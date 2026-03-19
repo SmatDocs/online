@@ -116,7 +116,7 @@ class UIManager extends window.L.Control {
 
 		this.map['stateChangeHandler'].setItemValue('toggledarktheme', 'false');
 		this.map['stateChangeHandler'].setItemValue('invertbackground', 'false');
-		this.map['stateChangeHandler'].setItemValue('showannotations', 'true');
+		this.map['stateChangeHandler'].setItemValue('showannotations', 'false');
 		window.addEventListener('browsersettingchanged', () => {
 			this.initDarkModeFromSettings();
 		});
