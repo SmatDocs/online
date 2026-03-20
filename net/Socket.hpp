@@ -54,8 +54,7 @@
 // Enable to dump socket traffic as hex in logs.
 // #define LOG_SOCKET_DATA ENABLE_DEBUG
 
-#define ASSERT_CORRECT_SOCKET_THREAD(socket) \
-    socket->assertCorrectThread(__FILE__, __LINE__);
+#define ASSERT_CORRECT_SOCKET_THREAD(socket) socket->assertCorrectThread();
 
 namespace http
 {
@@ -377,10 +376,10 @@ public:
     const std::thread::id& getThreadOwner() const { return _owner; }
 
     /// Asserts in the debug builds, otherwise just logs.
-    void assertCorrectThread(const char* fileName = "", int lineNo = 0) const
+    void assertCorrectThread(LOG_CAPTURE_CALLER_DECLARATION) const
     {
         if (!ThreadChecks::Inhibit)
-            Util::assertCorrectThread(_owner, fileName, lineNo);
+            Util::assertCorrectThread(_owner, LOG_PASS_PARENT_CALLER);
     }
 
     bool ignoringInput() const { return _ignoreInput; }
@@ -585,10 +584,10 @@ public:
     virtual ~ProtocolHandlerInterface() = default;
 
     /// Asserts in the debug builds, otherwise just logs.
-    void assertCorrectThread(const char* fileName = "", int lineNo = 0) const
+    void assertCorrectThread(LOG_CAPTURE_CALLER_DECLARATION) const
     {
         if (!ThreadChecks::Inhibit)
-            Util::assertCorrectThread(_owner, fileName, lineNo);
+            Util::assertCorrectThread(_owner, LOG_PASS_PARENT_CALLER);
     }
 
     /// Called when the socket is newly created to
@@ -864,17 +863,17 @@ public:
     /// Executed inside the poll in case of a wakeup
     virtual void wakeupHook() {}
 
-    const std::thread::id &getThreadOwner()
+    const std::thread::id &getThreadOwner() const
     {
         return _owner;
     }
 
     /// Are we running in either shutdown, or the polling thread.
     /// Asserts in the debug builds, otherwise just logs.
-    void assertCorrectThread(const char* fileName = "?", int lineNo = 0) const
+    void assertCorrectThread(LOG_CAPTURE_CALLER_DECLARATION) const
     {
         if (!ThreadChecks::Inhibit && isAlive())
-            Util::assertCorrectThread(_owner, fileName, lineNo);
+            Util::assertCorrectThread(_owner, LOG_PASS_PARENT_CALLER);
     }
 
     /// Kit poll can be called from LOK's Yield in any thread, adapt to that.
@@ -913,7 +912,7 @@ public:
     }
 
     /// Wakeup the main polling loop in another thread
-    void wakeup()
+    void wakeup() const
     {
         // There is a race when shutting down because
         // SocketPoll threads exit when shutting down.

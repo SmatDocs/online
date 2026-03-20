@@ -15,6 +15,7 @@
  */
 
 #include <config.h>
+#include <config_version.h>
 
 #include "Socket.hpp"
 
@@ -842,7 +843,7 @@ void SocketPoll::takeSocket(const std::shared_ptr<SocketPoll>& fromPoll,
     bool transferred = false;
 
     // Important we're not blocking the fromPoll thread.
-    toPoll->assertCorrectThread(__FILE__, __LINE__);
+    ASSERT_CORRECT_SOCKET_THREAD(toPoll);
 
     int socketFD = inSocket->getFD();
 
@@ -1271,7 +1272,7 @@ bool ServerSocket::bind([[maybe_unused]] Type type, [[maybe_unused]] int port)
 
 #if !MOBILEAPP
 
-bool ServerSocket::isUnrecoverableAcceptError(const int cause)
+bool ServerSocket::isUnrecoverableAcceptError(const int cause) const
 {
     constexpr const char * messagePrefix = "Failed to accept. (errno: ";
     switch(cause)
@@ -1933,13 +1934,13 @@ std::string WebSocketHandler::generateKey()
 // Required by Android and iOS apps.
 namespace http
 {
-std::string getAgentString() { return "COOLWSD HTTP Agent " + Util::getCoolVersion(); }
+std::string getAgentString() { return "COOLWSD HTTP Agent " COOLWSD_VERSION; }
 
 std::string getServerString()
 {
     CONFIG_STATIC const bool sig = ConfigUtil::getBool("security.server_signature", false);
     if (sig)
-        return "COOLWSD HTTP Server " + Util::getCoolVersion();
+        return "COOLWSD HTTP Server " COOLWSD_VERSION;
 
     return " ";
 }

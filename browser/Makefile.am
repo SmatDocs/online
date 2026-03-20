@@ -20,11 +20,11 @@ L10N_ALL_JS = $(DIST_FOLDER)/l10n-all.js
 L10N_JSON = $(L10N_ALL_JS)
 L10N_ALL_JS_ENTRY = l10n-all.js
 
-$(L10N_ALL_JS) : $(wildcard $(srcdir)/po/ui-*.po) $(wildcard $(srcdir)/po/help-*.po) $(shell find $(srcdir)/l10n -name '*.*') $(srcdir)/util/create-l10n-all-js.pl
+$(L10N_ALL_JS) : $(wildcard $(srcdir)/po/ui-*.po) $(wildcard $(srcdir)/po/help-*.po) $(shell find $(srcdir)/l10n -name '*.*') $(srcdir)/util/create-l10n-all-js.py
 	find $(srcdir)/po -name 'ui-*.po' -exec $(srcdir)/util/po2json.py {} -o {}.json \;
 	find $(srcdir)/po -name 'help-*.po' -exec $(srcdir)/util/po2json.py {} -o {}.json \;
 	@mkdir -p $(dir $@)
-	perl $(srcdir)/util/create-l10n-all-js.pl >$@
+	python3 $(srcdir)/util/create-l10n-all-js.py >$@
 	find $(srcdir)/po -name 'ui-*.po.json' -delete
 	find $(srcdir)/po -name 'help-*.po.json' -delete
 endif
@@ -477,6 +477,7 @@ COOL_JS_LST =\
 	src/control/jsdialog/Util.Dropdown.ts \
 	src/control/jsdialog/Util.GenerateTableIcon.ts \
 	src/control/jsdialog/Util.Events.ts \
+	src/control/jsdialog/Util.KeyCodes.ts \
 	src/control/jsdialog/Util.KeyboardTabNavigation.ts \
 	src/control/jsdialog/Util.KeyboardGridNavigation.ts \
 	src/control/jsdialog/Util.KeyboardListNavigation.ts \
@@ -1356,7 +1357,7 @@ DUPLICATION_TEST_LOG = "`pwd`/duplication.log"
 check-local: $(MOCHA_JS_DIR)/main.js
 	@echo "Running mocha tests..."
 	@echo > ${MOCHA_TEST_LOG}
-	@if npm test 2> ${MOCHA_TEST_LOG} 1>&2; then \
+	@if (cd $(srcdir) && PATH="$(abs_builddir)/node_modules/.bin:$$PATH" NODE_PATH="$(abs_builddir)/node_modules" npm test) 2> ${MOCHA_TEST_LOG} 1>&2; then \
 		echo "Mocha tests finished successfully. Results in ${MOCHA_TEST_LOG}"; \
 	else \
 		cat ${MOCHA_TEST_LOG}; \
@@ -1364,7 +1365,7 @@ check-local: $(MOCHA_JS_DIR)/main.js
 	fi
 
 	@echo > ${DUPLICATION_TEST_LOG}
-	$(QUIET_JSCPCD) if npm run duplication 2> ${DUPLICATION_TEST_LOG} 1>&2; then \
+	$(QUIET_JSCPCD) if (cd $(srcdir) && PATH="$(abs_builddir)/node_modules/.bin:$$PATH" NODE_PATH="$(abs_builddir)/node_modules" npm run duplication) 2> ${DUPLICATION_TEST_LOG} 1>&2; then \
 		echo "Code duplication tests finished successfully."; \
 	else \
 		cat ${DUPLICATION_TEST_LOG}; \

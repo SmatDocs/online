@@ -52,8 +52,8 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			{
 				'id': 'Formula-tab-label',
 				'text': _('Formulas'),
-				'name': 'Formulas',
-				'accessibility': { focusBack: true,	combination: 'Z', de: null }
+				'name': 'Formula',
+				'accessibility': { focusBack: true,	combination: 'M', de: null }
 			},
 			{
 				'id': 'Data-tab-label',
@@ -71,7 +71,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'id': 'Format-tab-label',
 				'text': _('Format'),
 				'name': 'Format',
-				'accessibility': { focusBack: true,	combination: 'M', de: null }
+				'accessibility': { focusBack: true,	combination: 'O', de: null }
 			},
 			{
 				'id': 'Shape-tab-label',
@@ -1131,7 +1131,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 						'type': 'menubutton',
 						'text': _UNO('.uno:PrintRangesMenu', 'spreadsheet'),
 						'enabled': 'true',
-						'accessibility': { focusBack: true,	combination: 'R', de: 'H' }
+						'accessibility': { focusBack: true,	combination: 'PR', de: 'H' }
 					},
 				]
 			},
@@ -1396,7 +1396,6 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 
 	getViewTab: function() {
 		var content = [
-			app.isExperimentalMode() ?
 			{
 				'type': 'overflowgroup',
 				'id': 'view-sheetview',
@@ -1420,7 +1419,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 										'selectedEntries': [
 											'1'
 										],
-										'command': '.uno:CurrentSheetView',
+										'command': '.uno:SelectSheetView',
 										'accessibility': { focusBack: true,	combination: 'FS', de: null }
 									}
 								]
@@ -1462,8 +1461,8 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 						'vertical': 'true'
 					},
 				]
-			} : {},
-			app.isExperimentalMode() ? { type: 'separator', id: 'layout-sheetview-break', orientation: 'vertical' } : {},
+			},
+			{ type: 'separator', id: 'layout-sheetview-break', orientation: 'vertical' },
 			{
 				'type': 'overflowgroup',
 				'id': 'view-freeze',
@@ -1710,6 +1709,13 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 						'accessibility': { focusBack: true,	combination: 'V', de: null }
 					},
 					{
+						'id': 'insert-calculated-field-run',
+						'type': 'bigtoolitem',
+						'text': _UNO('.uno:CalculatedFieldRun', 'spreadsheet'),
+						'command': '.uno:CalculatedFieldRun',
+						'accessibility': { focusBack: true,	combination: 'CF', de: null }
+					},
+					{
 						'id': 'Insert-Section-PivotTable-Ext',
 						'type': 'container',
 						'children': [
@@ -1756,6 +1762,12 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 						'type': 'bigtoolitem',
 						'text': _UNO('.uno:InsertCalcTable', 'spreadsheet'),
 						'command': '.uno:InsertCalcTable',
+						'tooltip': app.LOUtil.isFileODF(this.map)
+							? _('Table styles are only available in .xlsx files')
+							: _('Insert a styled table'),
+						'disabledTooltip': app.LOUtil.isFileODF(this.map)
+							? _('Table styles are only available in .xlsx files')
+							: _('Select a cell range first to insert a styled table'),
 						'accessibility': { focusBack: true,	combination: 'IT', de: null }
 					}
 				]
@@ -2288,7 +2300,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			},
 		];
 
-		return this.getTabPage('Formulas', content);
+		return this.getTabPage('Formula', content);
 	},
 
 	getDataTab: function() {
@@ -2529,7 +2541,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'type': 'menubutton',
 				'text': _UNO('.uno:StatisticsMenu', 'spreadsheet'),
 				'enabled': 'true',
-				'accessibility': { focusBack: true,	combination: 'DS', de: null }
+				'accessibility': { focusBack: true,	combination: 'ST', de: null }
 			},
 		];
 

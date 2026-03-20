@@ -54,6 +54,7 @@ namespace WebDriverThing
 
         static void openFile(string pathname)
         {
+            Thread.Sleep(1000);
             var driver = connectToWebView2();
 
             FindAndClick(driver, OpenQA.Selenium.By.Id("backstage-open"));
@@ -163,11 +164,17 @@ namespace WebDriverThing
 
             var driver = connectToWebView2();
 
-            // At first, click the button to enable editing.
-            FindAndClick(driver, OpenQA.Selenium.By.Id("mobile-edit-button"));
+            // Switch to Editing mode
+            Thread.Sleep(500);
+            FindAndClick(driver, OpenQA.Selenium.By.Id("viewModeDropdownButton"));
+            Thread.Sleep(500);
+            new Actions(driver).SendKeys(Keys.ArrowDown).Perform();
+            Thread.Sleep(500);
+            new Actions(driver).SendKeys(Keys.Enter).Perform();
 
             // Paste text from clipboard with shortcut
             RunOnSTA(() => Clipboard.SetText("hello"));
+            Thread.Sleep(500);
             new Actions(driver).KeyDown(Keys.Control).SendKeys("v").KeyUp(Keys.Control).Perform();
 
             Thread.Sleep(500);
@@ -197,6 +204,10 @@ namespace WebDriverThing
             FindAndClick(driver, OpenQA.Selenium.By.ClassName("backstage-property-button"));
 
             FindAndClick(driver, OpenQA.Selenium.By.Id("cancel-button"));
+
+            FindAndClick(driver, OpenQA.Selenium.By.Id("File-tab-label"));
+            Thread.Sleep(500);
+            FindAndClick(driver, OpenQA.Selenium.By.ClassName("backstage-sidebar-back"));
 
             // Save the document
             Thread.Sleep(500);

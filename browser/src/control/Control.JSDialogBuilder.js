@@ -196,14 +196,17 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (!this._container)
 			return isValid;
 
-		var inputs = this._container.querySelectorAll('input[type="number"]');
+		var inputs = this._container.querySelectorAll('.spinfield');
 		for (var item = 0; item < inputs.length; item++) {
 			if (!inputs[item].checkVisibility())
 				continue;
 
-			isValid = inputs[item].reportValidity();
-			if (!isValid)
+			var value = this._parseSpinFieldValue(inputs[item].value);
+			if (value !== '' && isNaN(parseFloat(value))) {
+				isValid = false;
+				inputs[item].focus();
 				break;
+			}
 		}
 
 		return isValid;
@@ -245,12 +248,15 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		return false;
 	},
 
+	_numericCharPattern: function() {
+		return new RegExp('[0-9\\' + this._decimal + '\\' + this._minusSign + ']');
+	},
+
 	_preventNonNumericalInput: function(e) {
 		e = e || window.event;
 		var charCode = (typeof e.which == 'undefined') ? e.keyCode : e.which;
 		var charStr = String.fromCharCode(charCode);
-		var regex = new RegExp('^[0-9\\' + this._decimal + '\\' + this._minusSign + ']+$');
-		if (!charStr.match(regex) && charCode !== 13)
+		if (!charStr.match(this._numericCharPattern()) && charCode !== 13)
 			return e.preventDefault();
 
 		var value = e.target.value;
@@ -338,7 +344,80 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		}
 	},
 
-	baseSpinField: function(parentContainer, data, builder, customCallback) {
+	_formatSpinFieldValue: function(value, unit) {
+		var str = '' + value;
+		if (this._decimal !== '.')
+			str = str.replace('.', this._decimal);
+		if (unit)
+			return str + unit;
+		return str;
+	},
+
+	_setSpinFieldValue: function(spinfield, displayValue, numericValue) {
+		spinfield.value = displayValue;
+		var num = parseFloat(numericValue != undefined ? numericValue : this._parseSpinFieldValue(displayValue));
+		if (!isNaN(num))
+			spinfield.setAttribute('aria-valuenow', num);
+		if (displayValue && displayValue !== '' + num)
+			spinfield.setAttribute('aria-valuetext', displayValue);
+		else
+			spinfield.removeAttribute('aria-valuetext');
+	},
+
+	_parseSpinFieldValue: function(displayValue) {
+		if (!displayValue) return '';
+		var pattern = this._numericCharPattern();
+		var value = '';
+		for (var i = 0; i < displayValue.length; i++) {
+			if (displayValue[i].match(pattern))
+				value += displayValue[i];
+		}
+		if (this._decimal !== '.')
+			value = value.replace(this._decimal, '.');
+		if (this._minusSign !== '-')
+			value = value.replace(this._minusSign, '-');
+		return value;
+	},
+
+	_clampSpinFieldValue: function(container, displayValue) {
+		var value = this._parseSpinFieldValue(displayValue);
+		var num = parseFloat(value);
+		if (!isNaN(num)) {
+			if (container._min != undefined && num < container._min)
+				num = container._min;
+			if (container._max != undefined && num > container._max)
+				num = container._max;
+			value = '' + num;
+		}
+		return value;
+	},
+
+	_getStepPrecision: function(step) {
+		var str = '' + Math.abs(step);
+		var dot = str.indexOf('.');
+		return dot >= 0 ? str.length - dot - 1 : 0;
+	},
+
+	_spinFieldStep: function(div, spinfield, direction) {
+		var step = div._step || 1;
+		var min = div._min;
+		var max = div._max;
+		var unit = div._unit || '';
+		var current = parseFloat(this._parseSpinFieldValue(spinfield.value));
+		if (isNaN(current)) current = 0;
+
+		var newVal = current + direction * step;
+		var precision = this._getStepPrecision(step);
+		newVal = parseFloat(newVal.toFixed(precision));
+
+		if (min != undefined && newVal < min) newVal = min;
+		if (max != undefined && newVal > max) newVal = max;
+
+		this._setSpinFieldValue(spinfield, this._formatSpinFieldValue(newVal, unit), newVal);
+		spinfield.dispatchEvent(new Event('change'));
+	},
+
+	baseSpinField: function(parentContainer, data, builder) {
 		var controls = {};
 
 		var div = window.L.DomUtil.create('div', builder.options.cssClass + ' spinfieldcontainer', parentContainer);
@@ -347,7 +426,10 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 		var spinfield = window.L.DomUtil.create('input', builder.options.cssClass + ' spinfield', div);
 		spinfield.id = data.id + '-input';
-		spinfield.type = 'number';
+		spinfield.type = 'text';
+		spinfield.inputMode = 'decimal';
+		spinfield.setAttribute('role', 'spinbutton');
+		spinfield.setAttribute('spellcheck', 'false');
 		spinfield.dir = document.documentElement.dir;
 		spinfield.tabIndex = '0';
 		spinfield.setAttribute('autocomplete', 'off');
@@ -361,59 +443,41 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 		controls['spinfield'] = spinfield;
 
+		var unitStr = '';
 		if (data.unit && data.unit !== ':') {
-			var unit = window.L.DomUtil.create('span', builder.options.cssClass + ' spinfieldunit', div);
-			unit.textContent = builder._unitToVisibleString(data.unit);
-		}
-
-		var getPrecision = function (data) {
-			data = Math.abs(data);
-			var str = '' + data;
-			var dot = str.indexOf('.');
-			return dot > 0 ? 1 / Math.pow(10, str.length - dot - 1) : 1;
-		};
-
-		if (data.min != undefined)
-			$(spinfield).attr('min', data.min);
-
-		if (data.max != undefined)
-			$(spinfield).attr('max', data.max);
-
-		if (data.step != undefined) {
-			// we don't want to show error popups due to browser step validation
-			// so be sure all the values will be acceptted, check only precision
-
-			// these are set by core when there is no explicit min/max.
-			const noMin = -2147483648;
-			const noMax =  2147483647;
-			if (data.min === noMin && data.max === noMax && data.step === 1) {
-				// This is to allow decimal points in user input
-				// and the step button will increment/decrement
-				// according to current value's precision.
-				$(spinfield).attr('step', 'any');
-
-			} else {
-				var step = getPrecision(data.step);
-				var value = data.value ? getPrecision(data.value) : 1;
-				var minStep = getPrecision(data.min);
-				var maxStep = getPrecision(data.max);
-
-				step = Math.min(step, value, minStep, maxStep);
-
-				$(spinfield).attr('step', step);
+			unitStr = builder._unitToVisibleString(data.unit);
+		} else if (!data.unit) {
+			var textForUnits = data.text || (data.value != undefined ? '' + data.value : '');
+			if (textForUnits) {
+				var extracted = builder._extractUnits(textForUnits);
+				if (extracted)
+					unitStr = builder._unitToVisibleString(extracted);
 			}
 		}
+		div._unit = unitStr;
+		if (unitStr)
+			div.dataset.unit = unitStr;
+
+		if (data.min != undefined) {
+			div._min = data.min;
+			spinfield.setAttribute('aria-valuemin', data.min);
+		}
+
+		if (data.max != undefined) {
+			div._max = data.max;
+			spinfield.setAttribute('aria-valuemax', data.max);
+		}
+
+		div._step = data.step != undefined ? data.step : 1;
 
 		const isDisabled = data.enabled === false;
 
 		if (isDisabled) {
-			div.disabled = true;
+			div.setAttribute('disabled', 'true');
 			spinfield.setAttribute('disabled', 'true');
 		}
 
 		spinfield.setAttribute('aria-disabled', isDisabled);
-
-		JSDialog.SynchronizeDisabledState(div, [spinfield]);
 
 		if (data.readOnly === true)
 			$(spinfield).attr('readOnly', 'true');
@@ -421,14 +485,58 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (data.hidden)
 			$(spinfield).hide();
 
-		spinfield.addEventListener('change', function() {
-			const isCurrentlyDisabled = div.hasAttribute('disabled');
-			var isValid = this.checkValidity();
-			if (!isCurrentlyDisabled && isValid) {
-				if (customCallback)
-					customCallback('spinfield', 'change', div, this.value, builder);
-				else
-					builder.callback('spinfield', 'change', div, this.value, builder);
+		if (!window.L.Browser.cypressTest)
+			spinfield.onkeypress = window.L.bind(builder._preventNonNumericalInput, builder);
+
+		var cssClass = builder.options.cssClass;
+		var buttons = window.L.DomUtil.create('div', cssClass + ' spinfieldbuttons', div);
+		var up = window.L.DomUtil.create('button', cssClass + ' spinfieldbutton-up', buttons);
+		up.type = 'button';
+		up.tabIndex = -1;
+		up.setAttribute('aria-label', _('Increment value'));
+		var down = window.L.DomUtil.create('button', cssClass + ' spinfieldbutton-down', buttons);
+		down.type = 'button';
+		down.tabIndex = -1;
+		down.setAttribute('aria-label', _('Decrement value'));
+
+		if (isDisabled) {
+			up.setAttribute('disabled', 'true');
+			down.setAttribute('disabled', 'true');
+		}
+
+		// With native <input type="number"> the browser's built-in spin
+		// buttons followed the input's disabled state automatically. Our
+		// custom buttons need explicit synchronization.
+		JSDialog.SynchronizeDisabledState(div, [spinfield, up, down]);
+
+		up.addEventListener('mousedown', function(e) { e.preventDefault(); });
+		down.addEventListener('mousedown', function(e) { e.preventDefault(); });
+
+		up.addEventListener('click', function() {
+			builder._spinFieldStep(div, spinfield, 1);
+		});
+		down.addEventListener('click', function() {
+			builder._spinFieldStep(div, spinfield, -1);
+		});
+
+		spinfield.addEventListener('keydown', function(e) {
+			var ctrlKey = (window.L.Browser.mac || window.ThisIsTheiOSApp) ? e.metaKey : e.ctrlKey;
+			if (e.key === 'ArrowUp') {
+				e.preventDefault();
+				builder._spinFieldStep(div, spinfield, 1);
+			} else if (e.key === 'ArrowDown') {
+				e.preventDefault();
+				builder._spinFieldStep(div, spinfield, -1);
+			} else if (e.key === 'Home' && ctrlKey && div._min != undefined) {
+				e.preventDefault();
+				var unit = div._unit || '';
+				builder._setSpinFieldValue(spinfield, builder._formatSpinFieldValue(div._min, unit), div._min);
+				spinfield.dispatchEvent(new Event('change'));
+			} else if (e.key === 'End' && ctrlKey && div._max != undefined) {
+				e.preventDefault();
+				var unit = div._unit || '';
+				builder._setSpinFieldValue(spinfield, builder._formatSpinFieldValue(div._max, unit), div._max);
+				spinfield.dispatchEvent(new Event('change'));
 			}
 		});
 
@@ -437,13 +545,15 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 	listenNumericChanges: function (data, builder, controls, customCallback) {
 		controls.spinfield.addEventListener('change', function() {
-			if (!this.checkValidity())
+			if (controls.container.hasAttribute('disabled'))
 				return;
-
+			var value = builder._clampSpinFieldValue(controls.container, this.value);
 			if (customCallback)
 				customCallback();
-			else
-				builder.callback('spinfield', 'value', controls.container, this.value, builder);
+			else {
+				builder.callback('spinfield', 'change', controls.container, value, builder);
+				builder.callback('spinfield', 'value', controls.container, value, builder);
+			}
 		});
 	},
 
@@ -766,6 +876,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 				var headingLevel = Math.min(builder._expanderDepth + 2, 6);
 				var heading = window.L.DomUtil.create('h' + headingLevel, 'ui-expander-heading ' + builder.options.cssClass, expander);
 				var expanderBtn = window.L.DomUtil.create('button', 'ui-expander-btn ' + builder.options.cssClass, heading);
+				expanderBtn.id = prefix + '-button';
 				expanderBtn.tabIndex = '0';
 				expanderBtn.setAttribute('aria-controls', prefix + '-children');
 
@@ -1277,14 +1388,18 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			else if (data.children && data.children.length)
 				value = data.children[0].text;
 
-			$(controls.spinfield).val(builder._cleanValueFromUnits(value));
+			var numeric = builder._cleanValueFromUnits(value);
+			builder._setSpinFieldValue(controls.spinfield, builder._formatSpinFieldValue(numeric, controls.container._unit), numeric);
 		};
 
 		controls.spinfield.addEventListener('change', function() {
+			if (controls.container.hasAttribute('disabled'))
+				return;
+			var value = builder._clampSpinFieldValue(controls.container, this.value);
 			if (customCallback)
 				customCallback();
 			else
-				builder.callback('spinfield', 'set', controls.container, this.value, builder);
+				builder.callback('spinfield', 'set', controls.container, value, builder);
 		});
 
 		updateFunction();
@@ -1315,7 +1430,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 		value = parseFloat(data.value);
 
-		$(controls.spinfield).val(value);
+		builder._setSpinFieldValue(controls.spinfield, builder._formatSpinFieldValue(value, controls.container._unit), value);
 
 		return false;
 	},
@@ -1331,7 +1446,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		builder.listenNumericChanges(data, builder, controls, customCallback);
 
 		value = parseFloat(data.value);
-		$(controls.spinfield).val(value);
+		builder._setSpinFieldValue(controls.spinfield, builder._formatSpinFieldValue(value, controls.container._unit), value);
 
 		return false;
 	},
@@ -1809,16 +1924,23 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (data.visible === false)
 			div.classList.add('hidden');
 
+		let enabledTooltip = null;
 		const setDisabled = (disabled) => {
 			if (disabled) {
 				div.setAttribute('disabled', 'true');
 				if (button) {
 					button.setAttribute('aria-disabled', true);
 				}
+				if (data.disabledTooltip) {
+					div.setAttribute('data-cooltip', builder._cleanText(data.disabledTooltip));
+				}
 			} else {
 				div.removeAttribute('disabled');
 				if (button) {
 					button.removeAttribute('aria-disabled');
+				}
+				if (data.disabledTooltip && enabledTooltip) {
+					div.setAttribute('data-cooltip', enabledTooltip);
 				}
 			}
 		};
@@ -1916,6 +2038,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			if (data.command && (!tooltip || !tooltip.includes('('))) // Add shortcut to tooltip based on command
 				tooltip = JSDialog.ShortcutsUtil.getShortcut(tooltip, data.command);
 			div.setAttribute('data-cooltip', tooltip);
+			enabledTooltip = tooltip;
 
 			// Set aria-pressed only if:
 			// 1. A real toggle button
@@ -2422,11 +2545,17 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 			// eg. in mobile wizard input is inside spin button div
 			var innerInput = control.querySelector('input');
+			var isSpinField = innerInput && control.classList.contains('spinfieldcontainer');
 			if (innerInput)
 				control = innerInput;
 
 			var currentText = this._cleanText(data.text);
-			control.value = currentText;
+			if (isSpinField && control.parentElement._unit)
+				currentText = this._formatSpinFieldValue(currentText, control.parentElement._unit);
+			if (isSpinField)
+				this._setSpinFieldValue(control, currentText);
+			else
+				control.value = currentText;
 			if (data.selection) {
 				var selection = data.selection.split(';');
 				if (selection.length === 2) {
@@ -2541,6 +2670,12 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		var focusedId = focusedElementInDialog ? focusedElementInDialog.id : null;
 
 		var temporaryParent = new DocumentFragment();
+
+		// Preserve spinfield unit across rebuilds: if the old element stored
+		// a unit and the incoming data does not carry one, inject it so the
+		// rebuilt widget keeps showing the unit.
+		if (!data.unit && control.dataset && control.dataset.unit)
+			data.unit = control.dataset.unit;
 
 		// Remove the id of the to-be-removed control, so JSDialog.MakeIdUnique() won't rename
 		// data.id to something we can't find later.
