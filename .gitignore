@@ -10,6 +10,7 @@
 .yavide_proj
 .yavide_session
 /.vscode
+.deploy/
 Doxyfile.cpp.cfg
 doc/cpp/**
 **/.clangd

@@ -1,0 +1,111 @@
+name: Collabora Slot Control
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Operation"
+        required: true
+        type: choice
+        options:
+          - status
+          - redeploy_blue
+          - redeploy_green
+          - redeploy_both
+          - rollback_blue
+          - rollback_green
+          - rollback_both
+      deploy_ref:
+        description: "Optional git ref (branch/tag/commit) for redeploy_* operations"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  status:
+    name: Collabora Blue-Green Status
+    if: ${{ github.event.inputs.operation == 'status' || github.event.inputs.operation == 'redeploy_blue' || github.event.inputs.operation == 'redeploy_green' || github.event.inputs.operation == 'redeploy_both' || github.event.inputs.operation == 'rollback_blue' || github.event.inputs.operation == 'rollback_green' || github.event.inputs.operation == 'rollback_both' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Read Collabora deployment status
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.COLLABORA_PRODUCTION_SSH_HOST }}
+          username: ${{ secrets.COLLABORA_PRODUCTION_SSH_USER }}
+          key: ${{ secrets.COLLABORA_PRODUCTION_SSH_KEY }}
+          port: ${{ secrets.COLLABORA_PRODUCTION_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -uo pipefail
+            echo "=== Active Slot ==="
+            cat /home/humphry/online/.deploy/active_slot 2>/dev/null || echo "(none yet)"
+            echo
+            echo "=== Last Deployed Slot ==="
+            cat /home/humphry/online/.deploy/last_deployed_slot 2>/dev/null || echo "(none yet)"
+            echo
+            echo "=== Slot Checkpoints ==="
+            for slot in blue green; do
+              echo "-- ${slot} --"
+              cat "/home/humphry/online/.deploy/${slot}_ref" 2>/dev/null | sed 's/^/current: /' || echo "current: (none)"
+              cat "/home/humphry/online/.deploy/${slot}_prev_ref" 2>/dev/null | sed 's/^/previous: /' || echo "previous: (none)"
+              if [ -f "/home/humphry/online/.deploy/${slot}_history.log" ]; then
+                echo "history (latest 5):"
+                tail -n 5 "/home/humphry/online/.deploy/${slot}_history.log" | sed 's/^/  /'
+              else
+                echo "history: (none)"
+              fi
+            done
+            echo
+            echo "=== PM2 Apps ==="
+            pm2 ls || true
+            echo
+            echo "=== Listening Ports ==="
+            ss -ltnp | grep -E ':9980|:9981' || true
+
+  redeploy:
+    name: Redeploy Collabora Slot(s)
+    if: ${{ github.event.inputs.operation != 'status' }}
+    needs: status
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    steps:
+      - name: Redeploy selected slot(s) in blue-green mode
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_OPERATION: ${{ github.event.inputs.operation }}
+          PRODUCTION_BLUE_HEALTH_URL: ${{ secrets.COLLABORA_PRODUCTION_BLUE_HEALTH_URL }}
+          PRODUCTION_GREEN_HEALTH_URL: ${{ secrets.COLLABORA_PRODUCTION_GREEN_HEALTH_URL }}
+          DEPLOY_REF: ${{ github.event.inputs.deploy_ref }}
+        with:
+          host: ${{ secrets.COLLABORA_PRODUCTION_SSH_HOST }}
+          username: ${{ secrets.COLLABORA_PRODUCTION_SSH_USER }}
+          key: ${{ secrets.COLLABORA_PRODUCTION_SSH_KEY }}
+          port: ${{ secrets.COLLABORA_PRODUCTION_SSH_PORT || 22 }}
+          script_stop: true
+          envs: DEPLOY_OPERATION,PRODUCTION_BLUE_HEALTH_URL,PRODUCTION_GREEN_HEALTH_URL,DEPLOY_REF
+          script: |
+            set -euo pipefail
+            MODE="deploy_only"
+            case "${DEPLOY_OPERATION}" in
+              redeploy_blue) MODE="deploy_blue" ;;
+              redeploy_green) MODE="deploy_green" ;;
+              redeploy_both) MODE="deploy_both" ;;
+              rollback_blue) MODE="rollback_blue" ;;
+              rollback_green) MODE="rollback_green" ;;
+              rollback_both) MODE="rollback_both" ;;
+              *)
+                echo "Invalid DEPLOY_OPERATION: ${DEPLOY_OPERATION}" >&2
+                exit 1
+                ;;
+            esac
+            cd /home/humphry/online
+            echo "[redeploy] Running blue-green deploy with PRODUCTION_MODE=${MODE}"
+            DEPLOY_REF_ARGS=""
+            if [ -n "${DEPLOY_REF}" ] && [ "${MODE}" != "rollback_blue" ] && [ "${MODE}" != "rollback_green" ] && [ "${MODE}" != "rollback_both" ]; then
+              DEPLOY_REF_ARGS="PRODUCTION_DEPLOY_REF=${DEPLOY_REF}"
+              echo "[redeploy] Using PRODUCTION_DEPLOY_REF=${DEPLOY_REF}"
+            fi
+            env PRODUCTION_MODE="${MODE}" ${DEPLOY_REF_ARGS} ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"

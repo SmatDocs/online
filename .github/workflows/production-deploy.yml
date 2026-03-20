@@ -1,0 +1,79 @@
+name: Collabora Deploy
+
+on:
+  push:
+    branches: [prod]
+  workflow_dispatch:
+    inputs:
+      production_action:
+        description: "Production deploy mode"
+        required: false
+        default: deploy_rolling
+        type: choice
+        options:
+          - deploy_rolling
+          - deploy_blue
+          - deploy_green
+          - deploy_both
+          - rollback_blue
+          - rollback_green
+          - rollback_both
+      production_ref:
+        description: "Optional git ref (branch/tag/commit) for deploy_* modes"
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: collabora-deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-production:
+    name: Deploy Collabora Production (Blue-Green)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    steps:
+      - name: Deploy to Collabora host via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          PRODUCTION_BLUE_HEALTH_URL: ${{ secrets.COLLABORA_PRODUCTION_BLUE_HEALTH_URL }}
+          PRODUCTION_GREEN_HEALTH_URL: ${{ secrets.COLLABORA_PRODUCTION_GREEN_HEALTH_URL }}
+          DEPLOY_EVENT_NAME: ${{ github.event_name }}
+          DEPLOY_PRODUCTION_ACTION: ${{ github.event.inputs.production_action }}
+          DEPLOY_PRODUCTION_REF: ${{ github.event.inputs.production_ref }}
+        with:
+          host: ${{ secrets.COLLABORA_PRODUCTION_SSH_HOST }}
+          username: ${{ secrets.COLLABORA_PRODUCTION_SSH_USER }}
+          key: ${{ secrets.COLLABORA_PRODUCTION_SSH_KEY }}
+          port: ${{ secrets.COLLABORA_PRODUCTION_SSH_PORT || 22 }}
+          command_timeout: 60m
+          script_stop: true
+          envs: PRODUCTION_BLUE_HEALTH_URL,PRODUCTION_GREEN_HEALTH_URL,DEPLOY_EVENT_NAME,DEPLOY_PRODUCTION_ACTION,DEPLOY_PRODUCTION_REF
+          script: |
+            set -euo pipefail
+            cd "/home/humphry/online"
+            MODE="deploy_only"
+            EVT="${DEPLOY_EVENT_NAME:-}"
+            ACT="${DEPLOY_PRODUCTION_ACTION:-}"
+            REF="${DEPLOY_PRODUCTION_REF:-}"
+            if [ "$EVT" = "workflow_dispatch" ]; then
+              case "$ACT" in
+                deploy_blue) MODE="deploy_blue" ;;
+                deploy_rolling) MODE="deploy_only" ;;
+                deploy_green) MODE="deploy_green" ;;
+                deploy_both) MODE="deploy_both" ;;
+                rollback_blue) MODE="rollback_blue" ;;
+                rollback_green) MODE="rollback_green" ;;
+                rollback_both) MODE="rollback_both" ;;
+                *) MODE="deploy_only" ;;
+              esac
+            fi
+            echo "[workflow] Deploying Collabora with PRODUCTION_MODE=${MODE}"
+            DEPLOY_REF_ARGS=""
+            if [ -n "$REF" ] && [ "${MODE}" != "rollback_blue" ] && [ "${MODE}" != "rollback_green" ] && [ "${MODE}" != "rollback_both" ]; then
+              DEPLOY_REF_ARGS="PRODUCTION_DEPLOY_REF=${REF}"
+              echo "[workflow] Using PRODUCTION_DEPLOY_REF=${REF}"
+            fi
+            env PRODUCTION_MODE="${MODE}" ${DEPLOY_REF_ARGS} ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"
