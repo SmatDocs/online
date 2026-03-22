@@ -41,6 +41,7 @@ The ecosystem file can still be kept as a reference, but deployment does not rel
 6. Health-checks `/hosting/discovery`.
 7. Switches `docs.overtenai.com` to the selected slot through Nginx.
 8. Validation note: the production workflow is expected to alternate slots after each successful deploy.
+9. After the switch, confirm both local slot discovery URLs still return `200`.
 
 ## First Server Cleanup
 
