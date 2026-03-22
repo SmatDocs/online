@@ -39,7 +39,7 @@ The ecosystem file can still be kept as a reference, but deployment does not rel
    - `make -j${PRODUCTION_MAKE_JOBS:-$(nproc)}`
 5. Starts the slot through PM2 with `coolwsd_prod.xml`.
 6. Health-checks `/hosting/discovery`.
-7. Switches `docs.overten.ai` to the selected slot through Nginx.
+7. Switches `docs.overtenai.com` to the selected slot through Nginx.
 
 ## First Server Cleanup
 

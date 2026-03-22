@@ -16,7 +16,7 @@ case "$SLOT" in
 esac
 
 UPSTREAM_FILE="${UPSTREAM_FILE:-/etc/nginx/conf.d/collabora_backend_overten.conf}"
-SITE_FILE="${SITE_FILE:-/etc/nginx/sites-available/docs.overten.ai}"
+SITE_FILE="${SITE_FILE:-/etc/nginx/sites-available/docs.overtenai.com}"
 
 as_root() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -33,7 +33,7 @@ if ! as_root /usr/bin/grep -q '' /etc/nginx/nginx.conf >/dev/null 2>&1; then
 fi
 
 as_root tee "$UPSTREAM_FILE" >/dev/null <<EOC
-# http-level upstream used by docs.overten.ai
+# http-level upstream used by docs.overtenai.com
 upstream collabora_backend {
     server 127.0.0.1:${SLOT_PORT} max_fails=3 fail_timeout=10s;
     keepalive 16;

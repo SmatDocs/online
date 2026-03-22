@@ -206,7 +206,7 @@ resolve_deploy_ref() {
     requested_ref="$DEFAULT_DEPLOY_REF"
   fi
 
-  echo "[prod] Fetching refs..."
+  echo "[prod] Fetching refs..." >&2
   git -C "$REPO_ROOT" fetch origin --prune --tags
 
   if git -C "$REPO_ROOT" rev-parse --verify --quiet "${requested_ref}^{commit}" >/dev/null; then
