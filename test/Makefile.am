@@ -97,7 +97,6 @@ all_la_unit_tests = \
 	unit-paste.la \
 	unit-wopi-ownertermination.la \
 	unit-wopi-async-upload-modifyclose.la \
-	unit-wopi-saveas-with-encoded-file-name.la \
 	unit-any-input.la \
 	unit-clipboard-close.la \
 	unit-storage.la \
@@ -107,14 +106,11 @@ all_la_unit_tests = \
 	unit-wopi-crash-modified.la \
 	unit-wopi-saveas.la \
 	unit-kit-child-session.la \
-	unit-wopi-httpheaders.la \
+	unit-socket-failure.la \
 	unit-rendering-options.la \
-	unit-proxy-protocol.la \
 	unit-bad-doc-load.la \
 	unit-wopi-httpredirect.la \
 	unit-hosting.la \
-	unit-serversock_accept1.la \
-	unit-streamsock_ctor1.la \
 	unit-proxy.la
 #	unit-admin.la
 #	unit-tilecache.la # Empty test.
@@ -272,10 +268,8 @@ unit_timeout_conn_la_SOURCES = UnitTimeoutConnections.cpp
 unit_timeout_conn_la_LIBADD = $(CPPUNIT_LIBS)
 unit_timeout_none_la_SOURCES = UnitTimeoutNone.cpp
 unit_timeout_none_la_LIBADD = $(CPPUNIT_LIBS)
-unit_serversock_accept1_la_SOURCES = UnitServerSocketAcceptFailure1.cpp
-unit_serversock_accept1_la_LIBADD = $(CPPUNIT_LIBS)
-unit_streamsock_ctor1_la_SOURCES = UnitStreamSocketCtorFailure1.cpp
-unit_streamsock_ctor1_la_LIBADD = $(CPPUNIT_LIBS)
+unit_socket_failure_la_SOURCES = UnitSocketFailure.cpp
+unit_socket_failure_la_LIBADD = $(CPPUNIT_LIBS)
 unit_prefork_la_SOURCES = UnitPrefork.cpp
 unit_prefork_la_LIBADD = $(CPPUNIT_LIBS)
 unit_storage_la_SOURCES = UnitStorage.cpp
@@ -294,8 +288,6 @@ unit_wopi_crash_modified_la_SOURCES = UnitWOPICrashModified.cpp
 unit_wopi_crash_modified_la_LIBADD = $(CPPUNIT_LIBS)
 unit_wopi_saveas_la_SOURCES = UnitWOPISaveAs.cpp
 unit_wopi_saveas_la_LIBADD = $(CPPUNIT_LIBS)
-unit_wopi_saveas_with_encoded_file_name_la_SOURCES = UnitWOPISaveAsWithEncodedFileName.cpp
-unit_wopi_saveas_with_encoded_file_name_la_LIBADD = $(CPPUNIT_LIBS)
 unit_wopi_ownertermination_la_SOURCES = UnitWopiOwnertermination.cpp
 unit_wopi_ownertermination_la_LIBADD = $(CPPUNIT_LIBS)
 unit_wopi_versionrestore_la_SOURCES = UnitWOPIVersionRestore.cpp
@@ -322,8 +314,6 @@ unit_wopi_temp_la_SOURCES = UnitWOPITemplate.cpp
 unit_wopi_temp_la_LIBADD = $(CPPUNIT_LIBS)
 unit_wopi_fileurl_la_SOURCES = UnitWOPIFileUrl.cpp
 unit_wopi_fileurl_la_LIBADD = $(CPPUNIT_LIBS)
-unit_wopi_httpheaders_la_SOURCES = UnitWOPIHttpHeaders.cpp
-unit_wopi_httpheaders_la_LIBADD = $(CPPUNIT_LIBS)
 unit_wopi_httpredirect_la_SOURCES = UnitWOPIHttpRedirect.cpp
 unit_wopi_httpredirect_la_LIBADD = $(CPPUNIT_LIBS)
 unit_tiff_load_la_SOURCES = UnitTiffLoad.cpp
@@ -384,8 +374,6 @@ unit_perf_la_SOURCES = UnitPerf.cpp
 unit_perf_la_LIBADD = $(CPPUNIT_LIBS) $(LIBPFM_LIBS)
 unit_proxy_la_SOURCES = UnitProxy.cpp
 unit_proxy_la_LIBADD = $(CPPUNIT_LIBS) $(LIBPFM_LIBS)
-unit_proxy_protocol_la_SOURCES = UnitProxyProtocol.cpp
-unit_proxy_protocol_la_LIBADD = $(CPPUNIT_LIBS) $(LIBPFM_LIBS)
 
 if HAVE_LO_PATH
 SYSTEM_STAMP = @SYSTEMPLATE_PATH@/system_stamp
