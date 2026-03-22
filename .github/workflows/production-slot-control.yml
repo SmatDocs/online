@@ -38,7 +38,7 @@ jobs:
           port: ${{ secrets.COLLABORA_PRODUCTION_SSH_PORT || 22 }}
           script_stop: true
           script: |
-            set -uo pipefail
+            set -u
             echo "=== Active Slot ==="
             cat /home/humphry/online/.deploy/active_slot 2>/dev/null || echo "(none yet)"
             echo
@@ -87,7 +87,7 @@ jobs:
           script_stop: true
           envs: DEPLOY_OPERATION,PRODUCTION_BLUE_HEALTH_URL,PRODUCTION_GREEN_HEALTH_URL,DEPLOY_REF
           script: |
-            set -euo pipefail
+            set -eu
             MODE="deploy_only"
             case "${DEPLOY_OPERATION}" in
               redeploy_blue) MODE="deploy_blue" ;;

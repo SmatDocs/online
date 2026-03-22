@@ -52,7 +52,7 @@ jobs:
           script_stop: true
           envs: PRODUCTION_BLUE_HEALTH_URL,PRODUCTION_GREEN_HEALTH_URL,DEPLOY_EVENT_NAME,DEPLOY_PRODUCTION_ACTION,DEPLOY_PRODUCTION_REF
           script: |
-            set -euo pipefail
+            set -eu
             cd "/home/humphry/online"
             MODE="deploy_only"
             EVT="${DEPLOY_EVENT_NAME:-}"
