@@ -71,9 +71,9 @@ jobs:
               esac
             fi
             echo "[workflow] Deploying Collabora with PRODUCTION_MODE=${MODE}"
-            DEPLOY_REF_ARGS=""
             if [ -n "$REF" ] && [ "${MODE}" != "rollback_blue" ] && [ "${MODE}" != "rollback_green" ] && [ "${MODE}" != "rollback_both" ]; then
-              DEPLOY_REF_ARGS="PRODUCTION_DEPLOY_REF=${REF}"
               echo "[workflow] Using PRODUCTION_DEPLOY_REF=${REF}"
+              PRODUCTION_MODE="${MODE}" PRODUCTION_DEPLOY_REF="${REF}" ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"
+            else
+              PRODUCTION_MODE="${MODE}" ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"
             fi
-            env PRODUCTION_MODE="${MODE}" ${DEPLOY_REF_ARGS} ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"
