@@ -51,36 +51,5 @@ jobs:
           command_timeout: 60m
           script_stop: true
           envs: PRODUCTION_BLUE_HEALTH_URL,PRODUCTION_GREEN_HEALTH_URL,DEPLOY_EVENT_NAME,DEPLOY_PRODUCTION_ACTION,DEPLOY_PRODUCTION_REF
-          script: |
-            set -eu
-            cd "/home/humphry/online"
-            MODE="deploy_only"
-            EVT="${DEPLOY_EVENT_NAME:-}"
-            ACT="${DEPLOY_PRODUCTION_ACTION:-}"
-            REF="${DEPLOY_PRODUCTION_REF:-}"
-            if [ "$EVT" = "workflow_dispatch" ]; then
-              case "$ACT" in
-                deploy_blue) MODE="deploy_blue" ;;
-                deploy_rolling) MODE="deploy_only" ;;
-                deploy_green) MODE="deploy_green" ;;
-                deploy_both) MODE="deploy_both" ;;
-                rollback_blue) MODE="rollback_blue" ;;
-                rollback_green) MODE="rollback_green" ;;
-                rollback_both) MODE="rollback_both" ;;
-                *) MODE="deploy_only" ;;
-              esac
-            fi
-            echo "[workflow] Deploying Collabora with PRODUCTION_MODE=${MODE}"
-            USE_DEPLOY_REF=0
-            if [ -n "$REF" ]; then
-              case "$MODE" in
-                rollback_blue|rollback_green|rollback_both) ;;
-                *) USE_DEPLOY_REF=1 ;;
-              esac
-            fi
-            if [ "$USE_DEPLOY_REF" = "1" ]; then
-              echo "[workflow] Using PRODUCTION_DEPLOY_REF=${REF}"
-              PRODUCTION_MODE="${MODE}" PRODUCTION_DEPLOY_REF="${REF}" ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"
-            else
-              PRODUCTION_MODE="${MODE}" ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"
-            fi
+          script: >-
+            bash -lc 'set -euo pipefail; cd "/home/humphry/online"; MODE="deploy_only"; EVT="${DEPLOY_EVENT_NAME:-}"; ACT="${DEPLOY_PRODUCTION_ACTION:-}"; REF="${DEPLOY_PRODUCTION_REF:-}"; if [ "$EVT" = "workflow_dispatch" ]; then case "$ACT" in deploy_blue) MODE="deploy_blue" ;; deploy_rolling) MODE="deploy_only" ;; deploy_green) MODE="deploy_green" ;; deploy_both) MODE="deploy_both" ;; rollback_blue) MODE="rollback_blue" ;; rollback_green) MODE="rollback_green" ;; rollback_both) MODE="rollback_both" ;; *) MODE="deploy_only" ;; esac; fi; echo "[workflow] Deploying Collabora with PRODUCTION_MODE=${MODE}"; USE_DEPLOY_REF=0; if [ -n "$REF" ]; then case "$MODE" in rollback_blue|rollback_green|rollback_both) ;; *) USE_DEPLOY_REF=1 ;; esac; fi; if [ "$USE_DEPLOY_REF" = "1" ]; then echo "[workflow] Using PRODUCTION_DEPLOY_REF=${REF}"; PRODUCTION_MODE="${MODE}" PRODUCTION_DEPLOY_REF="${REF}" ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"; else PRODUCTION_MODE="${MODE}" ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"; fi'

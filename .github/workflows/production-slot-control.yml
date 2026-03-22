@@ -37,32 +37,8 @@ jobs:
           key: ${{ secrets.COLLABORA_PRODUCTION_SSH_KEY }}
           port: ${{ secrets.COLLABORA_PRODUCTION_SSH_PORT || 22 }}
           script_stop: true
-          script: |
-            set -u
-            echo "=== Active Slot ==="
-            cat /home/humphry/online/.deploy/active_slot 2>/dev/null || echo "(none yet)"
-            echo
-            echo "=== Last Deployed Slot ==="
-            cat /home/humphry/online/.deploy/last_deployed_slot 2>/dev/null || echo "(none yet)"
-            echo
-            echo "=== Slot Checkpoints ==="
-            for slot in blue green; do
-              echo "-- ${slot} --"
-              cat "/home/humphry/online/.deploy/${slot}_ref" 2>/dev/null | sed 's/^/current: /' || echo "current: (none)"
-              cat "/home/humphry/online/.deploy/${slot}_prev_ref" 2>/dev/null | sed 's/^/previous: /' || echo "previous: (none)"
-              if [ -f "/home/humphry/online/.deploy/${slot}_history.log" ]; then
-                echo "history (latest 5):"
-                tail -n 5 "/home/humphry/online/.deploy/${slot}_history.log" | sed 's/^/  /'
-              else
-                echo "history: (none)"
-              fi
-            done
-            echo
-            echo "=== PM2 Apps ==="
-            pm2 ls || true
-            echo
-            echo "=== Listening Ports ==="
-            ss -ltnp | grep -E ':9980|:9981' || true
+          script: >-
+            bash -lc 'set -u; echo "=== Active Slot ==="; cat /home/humphry/online/.deploy/active_slot 2>/dev/null || echo "(none yet)"; echo; echo "=== Last Deployed Slot ==="; cat /home/humphry/online/.deploy/last_deployed_slot 2>/dev/null || echo "(none yet)"; echo; echo "=== Slot Checkpoints ==="; for slot in blue green; do echo "-- ${slot} --"; cat "/home/humphry/online/.deploy/${slot}_ref" 2>/dev/null | sed "s/^/current: /" || echo "current: (none)"; cat "/home/humphry/online/.deploy/${slot}_prev_ref" 2>/dev/null | sed "s/^/previous: /" || echo "previous: (none)"; if [ -f "/home/humphry/online/.deploy/${slot}_history.log" ]; then echo "history (latest 5):"; tail -n 5 "/home/humphry/online/.deploy/${slot}_history.log" | sed "s/^/  /"; else echo "history: (none)"; fi; done; echo; echo "=== PM2 Apps ==="; pm2 ls || true; echo; echo "=== Listening Ports ==="; ss -ltnp | grep -E ":9980|:9981" || true'
 
   redeploy:
     name: Redeploy Collabora Slot(s)
@@ -86,33 +62,5 @@ jobs:
           port: ${{ secrets.COLLABORA_PRODUCTION_SSH_PORT || 22 }}
           script_stop: true
           envs: DEPLOY_OPERATION,PRODUCTION_BLUE_HEALTH_URL,PRODUCTION_GREEN_HEALTH_URL,DEPLOY_REF
-          script: |
-            set -eu
-            MODE="deploy_only"
-            case "${DEPLOY_OPERATION}" in
-              redeploy_blue) MODE="deploy_blue" ;;
-              redeploy_green) MODE="deploy_green" ;;
-              redeploy_both) MODE="deploy_both" ;;
-              rollback_blue) MODE="rollback_blue" ;;
-              rollback_green) MODE="rollback_green" ;;
-              rollback_both) MODE="rollback_both" ;;
-              *)
-                echo "Invalid DEPLOY_OPERATION: ${DEPLOY_OPERATION}" >&2
-                exit 1
-                ;;
-            esac
-            cd /home/humphry/online
-            echo "[redeploy] Running blue-green deploy with PRODUCTION_MODE=${MODE}"
-            USE_DEPLOY_REF=0
-            if [ -n "${DEPLOY_REF}" ]; then
-              case "${MODE}" in
-                rollback_blue|rollback_green|rollback_both) ;;
-                *) USE_DEPLOY_REF=1 ;;
-              esac
-            fi
-            if [ "${USE_DEPLOY_REF}" = "1" ]; then
-              echo "[redeploy] Using PRODUCTION_DEPLOY_REF=${DEPLOY_REF}"
-              PRODUCTION_MODE="${MODE}" PRODUCTION_DEPLOY_REF="${DEPLOY_REF}" ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"
-            else
-              PRODUCTION_MODE="${MODE}" ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"
-            fi
+          script: >-
+            bash -lc 'set -euo pipefail; MODE="deploy_only"; case "${DEPLOY_OPERATION}" in redeploy_blue) MODE="deploy_blue" ;; redeploy_green) MODE="deploy_green" ;; redeploy_both) MODE="deploy_both" ;; rollback_blue) MODE="rollback_blue" ;; rollback_green) MODE="rollback_green" ;; rollback_both) MODE="rollback_both" ;; *) echo "Invalid DEPLOY_OPERATION: ${DEPLOY_OPERATION}" >&2; exit 1 ;; esac; cd /home/humphry/online; echo "[redeploy] Running blue-green deploy with PRODUCTION_MODE=${MODE}"; USE_DEPLOY_REF=0; if [ -n "${DEPLOY_REF}" ]; then case "${MODE}" in rollback_blue|rollback_green|rollback_both) ;; *) USE_DEPLOY_REF=1 ;; esac; fi; if [ "${USE_DEPLOY_REF}" = "1" ]; then echo "[redeploy] Using PRODUCTION_DEPLOY_REF=${DEPLOY_REF}"; PRODUCTION_MODE="${MODE}" PRODUCTION_DEPLOY_REF="${DEPLOY_REF}" ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"; else PRODUCTION_MODE="${MODE}" ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online"; fi'
