@@ -351,6 +351,33 @@ start_slot() {
   pm2 save >/dev/null
 }
 
+apply_slot_file_caps() {
+  local slot="$1"
+  local setcap_bin=""
+  local coolforkit_bin=""
+  local coolmount_bin=""
+
+  set_slot_context "$slot"
+
+  coolforkit_bin="$SLOT_ROOT/coolforkit-caps"
+  coolmount_bin="$SLOT_ROOT/coolmount"
+  setcap_bin="$(command -v setcap || true)"
+
+  if [[ -z "$setcap_bin" ]]; then
+    echo "[prod] setcap not found; cannot prepare slot $slot file capabilities" >&2
+    exit 1
+  fi
+
+  if [[ ! -x "$coolforkit_bin" || ! -x "$coolmount_bin" ]]; then
+    echo "[prod] Missing runtime binaries for slot $slot; expected $coolforkit_bin and $coolmount_bin" >&2
+    exit 1
+  fi
+
+  echo "[prod] Applying runtime capabilities for slot $slot"
+  sudo -n "$setcap_bin" cap_chown,cap_fowner,cap_sys_chroot=ep "$coolforkit_bin"
+  sudo -n "$setcap_bin" cap_sys_admin=ep "$coolmount_bin"
+}
+
 check_slot_health() {
   local slot="$1"
   local url="$2"
@@ -382,6 +409,7 @@ deploy_slot() {
   sync_slot_runtime_files "$slot"
   configure_slot "$slot"
   build_slot "$slot"
+  apply_slot_file_caps "$slot"
   start_slot "$slot"
 
   set_slot_context "$slot"
