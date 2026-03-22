@@ -209,10 +209,10 @@ resolve_deploy_ref() {
   echo "[prod] Fetching refs..." >&2
   git -C "$REPO_ROOT" fetch origin --prune --tags
 
-  if git -C "$REPO_ROOT" rev-parse --verify --quiet "${requested_ref}^{commit}" >/dev/null; then
-    resolved_ref="$(git -C "$REPO_ROOT" rev-parse "${requested_ref}^{commit}")"
-  elif git -C "$REPO_ROOT" rev-parse --verify --quiet "origin/${requested_ref}^{commit}" >/dev/null; then
+  if git -C "$REPO_ROOT" rev-parse --verify --quiet "origin/${requested_ref}^{commit}" >/dev/null; then
     resolved_ref="$(git -C "$REPO_ROOT" rev-parse "origin/${requested_ref}^{commit}")"
+  elif git -C "$REPO_ROOT" rev-parse --verify --quiet "${requested_ref}^{commit}" >/dev/null; then
+    resolved_ref="$(git -C "$REPO_ROOT" rev-parse "${requested_ref}^{commit}")"
   else
     echo "[prod] Could not resolve deploy ref: ${requested_ref}" >&2
     exit 1
