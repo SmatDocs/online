@@ -27,17 +27,26 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 	constructor() {
 		super();
 
+		app.events.on('resize', this.onResize.bind(this));
 		app.map.on('zoomend', this.onZoomEnd.bind(this));
 
 		this.adjustViewZoomLevel();
 
-		app.layoutingService.appendLayoutingTask(() => this.updateViewData());
+		app.layoutingService.appendLayoutingTask(() => {
+			app.sectionContainer.reNewAllSections();
+			this.updateViewData();
+		});
 	}
 
 	/// Refresh the view after scroll or zoom change.
 	private refreshView(): void {
 		this.updateViewData();
 		app.sectionContainer.requestReDraw();
+	}
+
+	private onResize(): void {
+		this.halfWidth = Math.round(this.getDocumentAnchorSection().size[0] * 0.5);
+		this.refreshView();
 	}
 
 	private onZoomEnd(): void {
@@ -89,14 +98,26 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 	}
 
 	protected refreshVisibleAreaRectangle(): void {
+		Util.ensureValue(app.activeDocument);
+
 		const documentAnchor = this.getDocumentAnchorSection();
 
+		// Both left and right pages need tiles from different X ranges due to
+		// their different screen positions (getDeflectionX). The right page may
+		// need tiles starting from X=0 even when scrolled far right. Cover the
+		// full document width with a small margin for twips rounding.
+		const margin = 15;
+
 		this._viewedRectangle = cool.SimpleRectangle.fromCorePixels([
-			this.scrollProperties.viewX,
+			-margin,
 			this.scrollProperties.viewY - this.yStart,
-			this.halfWidth - this.viewGap,
+			app.activeDocument.fileSize.pX + 2 * margin,
 			documentAnchor.size[1],
 		]);
+
+		// Notify the section container that the document visible area changed, necessary
+		// for comment positions to update.
+		app.sectionContainer.onNewDocumentTopLeft();
 	}
 
 	protected updateViewData() {
@@ -106,8 +127,8 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 
 		this._viewSize = cool.SimplePoint.fromCorePixels([
 			Math.max(
-				this.halfWidth,
-				app.activeDocument.fileSize.pX + 2 * this.viewGap,
+				anchorSection.size[0],
+				2 * app.activeDocument.fileSize.pX + 2 * this.viewGap,
 			),
 			Math.max(
 				anchorSection.size[1],
@@ -132,14 +153,24 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 	private getDeflectionX(mode: TileMode): number {
 		Util.ensureValue(app.activeDocument);
 
+		const canvasWidth = this.getDocumentAnchorSection().size[0];
+		const viewXCenter = Math.max(0, this._viewSize.pX - canvasWidth) * 0.5;
+
 		if (mode === TileMode.LeftSide)
 			return (
 				this.halfWidth -
 				app.activeDocument.fileSize.pX -
 				this.scrollProperties.viewX -
-				this.viewGap
+				this.viewGap +
+				viewXCenter
 			);
-		else return this.halfWidth + this.viewGap - this.scrollProperties.viewX;
+		else
+			return (
+				this.halfWidth +
+				this.viewGap -
+				this.scrollProperties.viewX +
+				viewXCenter
+			);
 	}
 
 	public override documentToViewX(point: cool.SimplePoint): number {
@@ -189,6 +220,15 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 		documentAnchor: CanvasSectionObject,
 	): boolean {
 		return this.viewSize.pX > Math.round(documentAnchor.size[0] * 0.5);
+	}
+
+	public getTotalSideSpace(): number {
+		Util.ensureValue(app.activeDocument);
+
+		const anchorWidth = this.getDocumentAnchorSection().size[0];
+		// Two pages side by side, with a gap in-between.
+		const contentWidth = 2 * app.activeDocument.fileSize.pX + this.viewGap;
+		return anchorWidth - contentWidth;
 	}
 
 	public override scroll(pX: number, pY: number): boolean {

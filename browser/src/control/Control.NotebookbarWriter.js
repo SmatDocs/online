@@ -365,7 +365,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 						'type': 'bigtoolitem',
 						'text': _('Signature'),
 						'command': '.uno:Signature',
-						'accessibility': { focusBack: true, combination: 'SN' }
+						'accessibility': { focusBack: true, combination: 'GN' }
 					}
 				]
 			});
@@ -452,7 +452,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 							'type': 'bigtoolitem',
 							'text': _('Keyboard shortcuts'),
 							'command': '.uno:KeyboardShortcuts',
-							'accessibility': { focusBack: false, combination: 'S', de: null }
+							'accessibility': { focusBack: false, combination: 'SH', de: null }
 						}
 					]
 				},
@@ -636,7 +636,11 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 									'id': 'home-brush',
 									'type': 'toolitem',
 									'text': _UNO('.uno:FormatPaintbrush'),
+									'tooltip': _('Clone Formatting (double click to keep active)'),
+									'activeTooltip': _('Clone Formatting is active (click again or press Esc to exit)'),
 									'command': '.uno:FormatPaintbrush',
+									'doubleClickCommand': '.uno:FormatPaintbrush',
+									'doubleClickCommandArgs': { PersistentCopy: { type: 'boolean', value: true } },
 									'accessibility': { focusBack: true,	combination: 'FP',	de: null }
 								}
 							]
@@ -948,6 +952,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 					{
 						'id': 'stylesview-iconview-list',
 						'type': 'iconviewlist',
+						'accessibility': { focusBack: false, combination: 'SD' },
 						'children': [
 							{
 								'id': 'stylesview',
@@ -1121,7 +1126,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:PageDialog', 'text'),
 				'command': '.uno:PageDialog',
-				'accessibility': { focusBack: false, combination: 'D', de: null }
+				'accessibility': { focusBack: false, combination: 'PD', de: null }
 			},
 			{ type: 'separator', id: 'format-pagedialog-break', orientation: 'vertical' },
 			{
@@ -1136,7 +1141,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:EditRegion', 'text'),
 				'command': '.uno:EditRegion',
-				'accessibility': { focusBack: false, combination: 'F', de: null }
+				'accessibility': { focusBack: false, combination: 'RG', de: null }
 			},
 			{
 				'id': 'format-format-line',
@@ -1265,7 +1270,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 										'noLabel': true,
 										'text': _UNO('.uno:InsertGraphic'),
 										'command': '.uno:InsertGraphic',
-										'accessibility': { focusBack: true,	combination: 'P',	de:	'BI' }
+										'accessibility': { focusBack: true,	combination: 'PI',	de:	'BI' }
 									},
 								]
 							},
@@ -1785,6 +1790,14 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'command': '.uno:Navigator',
 				'accessibility': { focusBack: true, combination: 'K', de: 'V' }
 			},
+			!this.map['wopi'].DisableAISettings ? {
+				'id': 'view-ai-sidebar',
+				'type': 'bigcustomtoolitem',
+				'text': _('AI Assistant'),
+				'icon': 'lc_ai_sidebar.svg',
+				'command': 'aichat',
+				'accessibility': { focusBack: true, combination: 'AI', de: null }
+			} : {},
 		];
 
 		return this.getTabPage(viewTabName, content);
@@ -1821,7 +1834,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 						'type': 'menubutton',
 						'text': _UNO('.uno:Orientation', 'text'),
 						'enabled': 'true',
-						'accessibility': { focusBack: true, combination: 'O', de: '4' }
+						'accessibility': { focusBack: true, combination: 'OI', de: '4' }
 					}
 				]
 			},
@@ -2253,7 +2266,7 @@ window.L.Control.NotebookbarWriter = window.L.Control.Notebookbar.extend({
 				'type': 'bigtoolitem',
 				'text': _UNO('.uno:InsertAnnotation'),
 				'command': '.uno:InsertAnnotation',
-				'accessibility': { focusBack: false, combination: 'C', de: 'N' }
+				'accessibility': { focusBack: false, combination: 'CM', de: 'N' }
 			},
 			{ type: 'separator', id: 'review-comment-break', orientation: 'vertical' },
 			{

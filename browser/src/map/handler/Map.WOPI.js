@@ -37,6 +37,7 @@ window.L.Map.WOPI = window.L.Handler.extend({
 	DisableInsertLocalImage: false,
 	EnableInsertRemoteLink: false,
 	EnableRemoteAIContent: false,
+	DisableAISettings: false,
 	EnableShare: false,
 	HideUserList: null,
 	CallPythonScriptSource: null,
@@ -159,12 +160,14 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		this.DisableInsertLocalImage = !!wopiInfo['DisableInsertLocalImage'];
 		this.EnableRemoteLinkPicker = !!wopiInfo['EnableRemoteLinkPicker'];
 		this.EnableRemoteAIContent = !!wopiInfo['EnableRemoteAIContent'];
+		this.DisableAISettings = !!wopiInfo['DisableAISettings'];
 		this.SupportsRename = !!wopiInfo['SupportsRename'];
 		this.UserCanRename = !!wopiInfo['UserCanRename'];
 		this.EnableShare = !!wopiInfo['EnableShare'];
 		this.UserCanWrite = !!wopiInfo['UserCanWrite'];
 		this.DisablePresentation = wopiInfo['DisablePresentation'];
 		this.PresentationLeader = wopiInfo['PresentationLeader'];
+		this.CommentAvatarUrl = wopiInfo['CommentAvatarUrl'];
 
 		if (this.UserCanWrite && !app.isReadOnly()) // There are 2 places that set the file permissions, WOPI and URI. Don't change permission if URI doesn't allow.
 			app.setPermission('edit');
@@ -747,7 +750,8 @@ window.L.Map.WOPI = window.L.Handler.extend({
 						return;
 					}
 
-					var isExport = format === 'pdf' || format === 'epub';
+					var isExport = format === 'pdf' || format === 'epub' || this._map._saveImageToWopi;
+					this._map._saveImageToWopi = false;
 					if (isExport) {
 						this._map.exportAs(msg.Values.Filename);
 					} else {

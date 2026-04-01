@@ -201,6 +201,16 @@ AC_ARG_ENABLE([qtapp],
                               to work similarly to the iOS app, from the JavaScript and the pseudo WebSocket
                               message plumbing point of view. See qt/README.]))
 
+AC_ARG_ENABLE([qtapp-tests],
+              AS_HELP_STRING([--enable-qtapp-tests],
+                             [Enable the WebdriverIO test suite for the Qt app.
+                              Requires --enable-qtapp and --with-atspi-driver-path.]))
+
+AC_ARG_WITH([atspi-driver-path],
+            AS_HELP_STRING([--with-atspi-driver-path=/path/to/selenium-webdriver-at-spi.py],
+                           [Path to the selenium-webdriver-at-spi.py script
+                            required to run the Qt app tests.]))
+
 AC_ARG_ENABLE(fuzzers,
     AS_HELP_STRING([--enable-fuzzers],
         [Enables building libfuzzer targets for fuzz testing. It is useful to enable this switch
@@ -457,7 +467,7 @@ AC_ARG_WITH([wasm-zetajs],
 
 AC_ARG_ENABLE([wasm-zetajs-example],
               AS_HELP_STRING([--enable-wasm-zetajs-example],
-                             [Inclue a zetajs scripting example in the app. Requires
+                             [Include a zetajs scripting example in the app. Requires
                               --with-wasm-zetajs. Relevant only for a Wasm build.]))
 
 AC_ARG_ENABLE([experimental],
@@ -1157,6 +1167,24 @@ fi
 AC_SUBST(ENABLE_QTAPP)
 AM_CONDITIONAL([ENABLE_QTAPP], [test "$ENABLE_QTAPP" = "true"])
 
+ENABLE_QTAPP_TESTS=false
+AT_SPI_DRIVER_PATH=
+if test "$enable_qtapp_tests" = "yes"; then
+    if test "$ENABLE_QTAPP" != "true"; then
+        AC_MSG_ERROR([--enable-qtapp-tests requires --enable-qtapp])
+    fi
+    if test -z "$with_atspi_driver_path"; then
+        AC_MSG_ERROR([--enable-qtapp-tests requires --with-atspi-driver-path=<path>])
+    fi
+    if test ! -f "$with_atspi_driver_path"; then
+        AC_MSG_ERROR([AT-SPI driver not found: $with_atspi_driver_path])
+    fi
+    AT_SPI_DRIVER_PATH="$with_atspi_driver_path"
+    ENABLE_QTAPP_TESTS=true
+fi
+AC_SUBST(AT_SPI_DRIVER_PATH)
+AM_CONDITIONAL([ENABLE_QTAPP_TESTS], [test "$ENABLE_QTAPP_TESTS" = "true"])
+
 dnl ENABLE_WASM_FALLBACK means we are building an otherwise normal COOL but with the "WASM fallback"
 dnl capability. Compare to ENABLE_WASM.
 
@@ -1406,7 +1434,7 @@ for i in $CC; do
     esac
 done
 if test "$ENABLE_RUNTIME_OPTIMIZATIONS" != no; then
-    AC_DEFINE([ENABLE_RUNTIME_OPTIMIZATIONS],1,[Define to 1 if this is not a santitizers build.])
+    AC_DEFINE([ENABLE_RUNTIME_OPTIMIZATIONS],1,[Define to 1 if this is not a sanitizers build.])
 fi
 
 # Check for C++20 support.

@@ -398,7 +398,7 @@ void DocumentBroker::pollThread()
             break;
         }
 
-        if (_unitWsd && _unitWsd->isFinished())
+        if (UNITWSD_CALL_INSTANCE(_unitWsd, isFinished()))
         {
             stop("UnitTestFinished");
             break;
@@ -738,13 +738,15 @@ void DocumentBroker::pollThread()
                                                             : "not uploaded to storage";
 
             // The test may override (if it was expected).
-            if (_unitWsd && !_unitWsd->onDataLoss("Data-loss detected while exiting [" + _docKey +
-                                                  "]: " + reason))
+            if (_unitWsd &&
+                !UNITWSD_CALL_INSTANCE(_unitWsd, onDataLoss("Data-loss detected while exiting [" +
+                                                            _docKey + "]: " + reason)))
                 reason.clear();
         }
     }
 
-    if (!reason.empty() || (_unitWsd && _unitWsd->isFinished() && _unitWsd->failed()))
+    if (!reason.empty() || (UNITWSD_CALL_INSTANCE(_unitWsd, isFinished()) &&
+                            UNITWSD_CALL_INSTANCE(_unitWsd, failed())))
     {
         std::ostringstream state(Util::makeDumpStateStream());
         state << "DocBroker [" << _docKey << "] stopped "
@@ -963,10 +965,9 @@ bool DocumentBroker::download(
     LOG_INF("Loading [" << _docKey << "] for session [" << sessionId << "] in jail [" << jailId
                         << "] from URI [" << uriPublic.toString() << ']');
 
-    if (_unitWsd)
     {
-        bool result;
-        if (_unitWsd->filterLoad(sessionId, jailId, result))
+        bool result = false;
+        if (UNITWSD_CALL_INSTANCE(_unitWsd, filterLoad(sessionId, jailId, result)))
             return result;
     }
 
@@ -1490,6 +1491,7 @@ DocumentBroker::updateSessionWithWopiInfo(const std::shared_ptr<ClientSession>& 
     wopiInfo->set("DisableInsertLocalImage", wopiFileInfo->getDisableInsertLocalImage());
     wopiInfo->set("EnableRemoteLinkPicker", wopiFileInfo->getEnableRemoteLinkPicker());
     wopiInfo->set("EnableRemoteAIContent", wopiFileInfo->getEnableRemoteAIContent());
+    wopiInfo->set("DisableAISettings", wopiFileInfo->getDisableAISettings());
     wopiInfo->set("EnableShare", wopiFileInfo->getEnableShare());
     wopiInfo->set("HideUserList", wopiFileInfo->getHideUserList());
     wopiInfo->set("SupportsRename", wopiFileInfo->getSupportsRename());
@@ -1508,6 +1510,10 @@ DocumentBroker::updateSessionWithWopiInfo(const std::shared_ptr<ClientSession>& 
     // the new slideshow supports watermarking, anyway it's still an experimental features
     disablePresentation = disablePresentation || (!ConfigUtil::getBool("canvas_slideshow_enabled", true) && !watermarkText.empty());
     wopiInfo->set("DisablePresentation", disablePresentation);
+
+    const std::string commentAvatarUrl = ConfigUtil::getString("comment_avatar", "");
+    if (!commentAvatarUrl.empty())
+        wopiInfo->set("CommentAvatarUrl", commentAvatarUrl);
 
     std::ostringstream ossWopiInfo;
     wopiInfo->stringify(ossWopiInfo);
@@ -1756,7 +1762,8 @@ static std::string extractViewSettings(const std::string& viewSettingsPath,
             }
         }
 
-        std::string zoteroAPIKey, signatureCertificate, signatureKey, signatureCa;
+        std::string zoteroAPIKey, signatureCertificate, signatureKey, signatureCa, aiProviderAPIKey,
+            aiProviderModel, aiProviderURL, aiImageProviderAPIKey, aiImageProviderURL, aiImageModel;
 
         bool viewSettingsNeedUpdate = false;
 
@@ -1794,6 +1801,20 @@ static std::string extractViewSettings(const std::string& viewSettingsPath,
 
         _isViewSettingsUpdated = true;
 
+        JsonUtil::findJSONValue(viewSettings, "aiProviderAPIKey", aiProviderAPIKey);
+        JsonUtil::findJSONValue(viewSettings, "aiProviderModel", aiProviderModel);
+        JsonUtil::findJSONValue(viewSettings, "aiProviderURL", aiProviderURL);
+        JsonUtil::findJSONValue(viewSettings, "aiImageProviderAPIKey", aiImageProviderAPIKey);
+        JsonUtil::findJSONValue(viewSettings, "aiImageProviderURL", aiImageProviderURL);
+        JsonUtil::findJSONValue(viewSettings, "aiImageModel", aiImageModel);
+
+        session->setAIProviderAPIKey(aiProviderAPIKey);
+        session->setAIProviderModel(aiProviderModel);
+        session->setAIProviderURL(aiProviderURL);
+        session->setAIImageProviderAPIKey(aiImageProviderAPIKey);
+        session->setAIImageProviderURL(aiImageProviderURL);
+        session->setAIImageModel(aiImageModel);
+
         if (viewSettingsNeedUpdate)
         {
             LOG_INF("View settings updated with migrated signature fields, uploading to WOPI host");
@@ -1801,6 +1822,21 @@ static std::string extractViewSettings(const std::string& viewSettingsPath,
             session->uploadViewSettingsToWopiHost();
         }
 
+        // remove API key from view settings before sending to client, client doesn't need to know about it
+        // and it will be set in session for later use when calling AI provider,
+        // also it is safer to not expose it to client side
+        viewSettings->remove("aiProviderAPIKey");
+        viewSettings->remove("aiProviderModel");
+        viewSettings->remove("aiProviderURL");
+        viewSettings->remove("aiImageProviderAPIKey");
+        viewSettings->remove("aiImageProviderURL");
+        viewSettings->remove("aiImageModel");
+
+        // Let client know whether AI features are enabled based on the presence of necessary fields,
+        // so client can decide to show/hide AI related UI
+        const bool aiConfigured = !aiProviderAPIKey.empty() && !aiProviderModel.empty() &&
+                                  !aiProviderURL.empty();
+        viewSettings->set("aiConfigured", aiConfigured);
         viewSettingsString = JsonUtil::jsonToString(viewSettings);
     }
     catch (const std::exception& exc)
@@ -3791,7 +3827,7 @@ bool DocumentBroker::sendUnoSave(const std::shared_ptr<ClientSession>& session,
     constexpr std::size_t MaxFailureCountForBackgroundSaving = 2; // Give only 1 extra chance.
 
     // Note: It's odd to capture these here, but this function is used from ClientSession too.
-    const bool autosave = isAutosave || (_unitWsd && _unitWsd->isAutosave());
+    const bool autosave = isAutosave || UNITWSD_CALL_INSTANCE(_unitWsd, isAutosave());
     const bool backgroundConfigured = (autosave && _backgroundAutoSave) || _backgroundManualSave;
     const bool canBackground = forceBackgroundEnv || (!finalWrite && backgroundConfigured);
     const bool background = canBackground && _saveManager.lastSaveSuccessful() &&
@@ -4270,13 +4306,13 @@ void DocumentBroker::alertAllUsers(const std::string& msg)
 {
     ASSERT_CORRECT_THREAD();
 
-    if (_unitWsd && _unitWsd->filterAlertAllusers(msg))
+    if (UNITWSD_CALL_INSTANCE(_unitWsd, filterAlertAllusers(msg)))
         return;
 
     auto payload = std::make_shared<Message>(msg, Message::Dir::Out);
 
     LOG_DBG("Alerting all users of [" << _docKey << "]: " << msg);
-    for (auto& it : _sessions)
+    for (const auto& it : _sessions)
     {
         if (!it.second->inWaitDisconnected())
             it.second->enqueueSendMessage(payload);
@@ -4291,7 +4327,7 @@ void DocumentBroker::syncBrowserSettings(const std::string& userId, const std::s
                                                  << "] for all sessions with userId [" << userId
                                                  << ']');
 
-    for (auto& it : _sessions)
+    for (const auto& it : _sessions)
     {
         if (it.second->getUserId() != userId)
             continue;
@@ -4426,7 +4462,7 @@ bool DocumentBroker::handleInput(const std::shared_ptr<Message>& message)
             COOLWSD::dumpOutgoingTrace(getJailId(), "0", message->abbr());
     }
 
-    if (_unitWsd && _unitWsd->filterLOKitMessage(message))
+    if (UNITWSD_CALL_INSTANCE(_unitWsd, filterLOKitMessage(message)))
         return true;
 
     if (COOLProtocol::getFirstToken(message->forwardToken(), '-') == "client")
@@ -5254,7 +5290,8 @@ bool DocumentBroker::forwardToChild(const std::shared_ptr<ClientSession>& sessio
     std::string viewId = session->getId();
 
     // Should not get through; we have our own save command.
-    assert(!message.starts_with("uno .uno:Save"));
+    // .uno:SaveGraphic is not a document save - it exports an image to a temp file.
+    assert(!message.starts_with("uno .uno:Save") || message.starts_with("uno .uno:SaveGraphic"));
 
     LOG_TRC("Forwarding payload to child [" << viewId << "]: " << getAbbreviatedMessage(message));
 
@@ -5357,7 +5394,7 @@ void DocumentBroker::shutdownClients(const std::string_view closeReason)
     std::map<std::string, std::shared_ptr<ClientSession>> sessions = _sessions;
     for (const auto& pair : sessions)
     {
-        std::shared_ptr<ClientSession> session = pair.second;
+        const std::shared_ptr<ClientSession>& session = pair.second;
         try
         {
             if (session->inWaitDisconnected())
@@ -5644,7 +5681,7 @@ void DocumentBroker::checkFileInfo(const std::shared_ptr<ClientSession>& session
 std::vector<std::shared_ptr<ClientSession>> DocumentBroker::getSessionsTestOnlyUnsafe()
 {
     std::vector<std::shared_ptr<ClientSession>> result;
-    for (auto& it : _sessions)
+    for (const auto& it : _sessions)
         result.push_back(it.second);
     return result;
 }

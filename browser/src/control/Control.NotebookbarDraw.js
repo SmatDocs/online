@@ -162,7 +162,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 							'type': 'bigtoolitem',
 							'text': _('Save'),
 							'command': '.uno:Save',
-							'accessibility': { focusBack: true, combination: 'SF', de: null }
+							'accessibility': { focusBack: true, combination: 'SV', de: null }
 						}
 					]
 				});
@@ -369,7 +369,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 							'type': 'bigtoolitem',
 							'text': _('Signature'),
 							'command': '.uno:Signature',
-							'accessibility': { focusBack: true, combination: 'SN' }
+							'accessibility': { focusBack: true, combination: 'GN' }
 						}
 					]
 				}
@@ -637,7 +637,11 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 										'id': 'home-format-paint-brush',
 										'type': 'toolitem',
 										'text': _UNO('.uno:FormatPaintbrush'),
+										'tooltip': _('Clone Formatting (double click to keep active)'),
+										'activeTooltip': _('Clone Formatting is active (click again or press Esc to exit)'),
 										'command': '.uno:FormatPaintbrush',
+										'doubleClickCommand': '.uno:FormatPaintbrush',
+										'doubleClickCommandArgs': { PersistentCopy: { type: 'boolean', value: true } },
 										'accessibility': { focusBack: true, combination: 'FP', de: null }
 									}
 								]
@@ -1669,7 +1673,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 				'accessibility': { focusBack: true, combination: 'TI', de: null },
 				'children' : [
 					{
-						'id': 'insert-text',
+						'id': 'insert-insert-text',
 						'type': 'bigtoolitem',
 						'text': _UNO('.uno:Text'),
 						'command': '.uno:Text',

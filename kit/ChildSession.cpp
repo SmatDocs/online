@@ -19,11 +19,24 @@
 #include "ChildSession.hpp"
 
 #include <common/Anonymizer.hpp>
+#include <common/Authorization.hpp>
+#include <common/Clipboard.hpp>
+#include <common/CommandControl.hpp>
+#include <common/ConfigUtil.hpp>
+#include <common/FileUtil.hpp>
 #include <common/HexUtil.hpp>
+#include <common/JsonUtil.hpp>
 #include <common/Log.hpp>
 #include <common/NumUtil.hpp>
+#include <common/Png.hpp>
+#include <common/SpookyV2.h>
+#include <common/TraceEvent.hpp>
 #include <common/Unit.hpp>
+#include <common/Uri.hpp>
 #include <common/Util.hpp>
+#include <common/base64.hpp>
+#include <kit/KitHelper.hpp>
+#include <kit/SlideCompressor.hpp>
 
 #define LOK_USE_UNSTABLE_API
 #include <LibreOfficeKit/LibreOfficeKit.hxx>
@@ -43,20 +56,6 @@
 #ifdef __ANDROID__
 #include <androidapp.hpp>
 #endif
-
-#include <common/base64.hpp>
-#include <common/ConfigUtil.hpp>
-#include <common/FileUtil.hpp>
-#include <common/JsonUtil.hpp>
-#include <common/Authorization.hpp>
-#include <common/TraceEvent.hpp>
-#include <common/SpookyV2.h>
-#include <common/Uri.hpp>
-#include <KitHelper.hpp>
-#include <Png.hpp>
-#include <Clipboard.hpp>
-#include <CommandControl.hpp>
-#include <SlideCompressor.hpp>
 
 #ifdef IOS
 #include "DocumentViewController.h"
@@ -545,7 +544,7 @@ bool ChildSession::_handleInput(const char *buffer, int length)
     }
     else if (tokens.equals(0, "blockingcommandstatus"))
     {
-#if ENABLE_FEATURE_LOCK || ENABLE_FEATURE_RESTRICTION
+#if (ENABLE_FEATURE_LOCK || ENABLE_FEATURE_RESTRICTION || ENABLE_DEBUG) && !MOBILEAPP
         return updateBlockingCommandStatus(tokens);
 #endif
     }
@@ -673,6 +672,11 @@ bool ChildSession::_handleInput(const char *buffer, int length)
                 newTokens.push_back(tokens[0]);
                 newTokens.push_back(firstLine.substr(4)); // Copy the remaining part.
                 return unoCommand(newTokens);
+            }
+            else if (tokens[1].find(".uno:SaveGraphic") != std::string::npos)
+            {
+                // SaveGraphic is not a document save - it exports an image
+                return unoCommand(tokens);
             }
             else if (tokens[1].find(".uno:Save") != std::string::npos)
             {
@@ -1198,7 +1202,7 @@ void insertUserNames(const std::map<int, UserInfo>& viewInfo, std::string& json)
     Poco::JSON::Parser parser;
     const Poco::JSON::Object::Ptr root = parser.parse(json).extract<Poco::JSON::Object::Ptr>();
     std::vector<std::string> directions { "Undo", "Redo" };
-    for (auto& directionName : directions)
+    for (const auto& directionName : directions)
     {
         Poco::JSON::Object::Ptr direction = root->get(directionName).extract<Poco::JSON::Object::Ptr>();
         if (direction->get("actions").type() == typeid(Poco::JSON::Array::Ptr))
@@ -3145,20 +3149,21 @@ bool ChildSession::exportAs(const StringVector& tokens)
 
     const bool isPDF = extension == "pdf";
     const bool isEPUB = extension == "epub";
+
+    // We don't have the FileId at this point, just a new filename to save-as.
+    // So here the filename will be obfuscated with some hashing, which later will
+    // get a proper FileId that we will use going forward.
+    LOG_DBG("Calling LOK's exportAs with: [" << anonymizeUrl(wopiFilename) << ']');
+
+    getLOKitDocument()->setView(_viewId);
+
+    std::string encodedWopiFilename;
+    Poco::URI::encode(wopiFilename, "", encodedWopiFilename);
+
+    _exportAsWopiUrl = std::move(encodedWopiFilename);
+
     if (isPDF || isEPUB)
     {
-        // We don't have the FileId at this point, just a new filename to save-as.
-        // So here the filename will be obfuscated with some hashing, which later will
-        // get a proper FileId that we will use going forward.
-        LOG_DBG("Calling LOK's exportAs with: [" << anonymizeUrl(wopiFilename) << ']');
-
-        getLOKitDocument()->setView(_viewId);
-
-        std::string encodedWopiFilename;
-        Poco::URI::encode(wopiFilename, "", encodedWopiFilename);
-
-        _exportAsWopiUrl = std::move(encodedWopiFilename);
-
         const std::string arguments = "{"
             "\"SynchronMode\":{"
                 "\"type\":\"boolean\","
@@ -3173,8 +3178,14 @@ bool ChildSession::exportAs(const StringVector& tokens)
         return true;
     }
 
-    sendTextFrameAndLogError("error: cmd=exportas kind=unsupported");
-    return false;
+    // For image export (triggered from the image context menu).
+    // SaveGraphic writes the image in its native format to /tmp/
+    // and fires LOK_CALLBACK_EXPORT_FILE. If no graphic is selected,
+    // the command is a no-op.
+    // NOTE: new document export formats must be handled above this,
+    // like PDF and EPUB.
+    getLOKitDocument()->postUnoCommand(".uno:SaveGraphic", nullptr, false);
+    return true;
 }
 
 bool ChildSession::setClientPart(const StringVector& tokens)
@@ -3453,7 +3464,7 @@ int ChildSession::getSpeed()
     return _cursorInvalidatedEvent.size();
 }
 
-#if ENABLE_FEATURE_LOCK || ENABLE_FEATURE_RESTRICTION
+#if (ENABLE_FEATURE_LOCK || ENABLE_FEATURE_RESTRICTION || ENABLE_DEBUG) && !MOBILEAPP
 bool ChildSession::updateBlockingCommandStatus(const StringVector& tokens)
 {
     std::string lockStatus, restrictedStatus;
@@ -3469,7 +3480,20 @@ bool ChildSession::updateBlockingCommandStatus(const StringVector& tokens)
     }
     std::string blockedCommands;
     if (restrictedStatus == "true")
+    {
         blockedCommands += CommandControl::RestrictionManager::getRestrictedCommandListString();
+#if ENABLE_DEBUG
+        // Extract restricted commands passed from the wsd process.
+        // Format: blockingcommandstatus isRestrictedUser=true isLockedUser=... test_restrictedCommands=cmd1 cmd2 ...
+        std::string firstCmd;
+        if (tokens.size() > 3 && getTokenString(tokens[3], "test_restrictedCommands", firstCmd))
+        {
+            blockedCommands += firstCmd;
+            for (std::size_t i = 4; i < tokens.size(); ++i)
+                blockedCommands += " " + tokens[i];
+        }
+#endif
+    }
     if (lockStatus == "true")
         blockedCommands += blockedCommands.empty()
                                ? CommandControl::LockManager::getLockedCommandListString()
@@ -3479,7 +3503,7 @@ bool ChildSession::updateBlockingCommandStatus(const StringVector& tokens)
     return true;
 }
 
-std::string ChildSession::getBlockedCommandType(std::string command)
+std::string ChildSession::getBlockedCommandType(const std::string& command)
 {
     if(CommandControl::RestrictionManager::getRestrictedCommandList().find(command)
     != CommandControl::RestrictionManager::getRestrictedCommandList().end())
@@ -3971,10 +3995,11 @@ void ChildSession::loKitCallback(const int type, const std::string& payload)
 
         if (exportWasRequested)
         {
-            std::string encodedURL;
-            Poco::URI::encode(payload, "", encodedURL);
-
-            sendTextFrame("exportas: url=" + encodedURL + " filename=" + _exportAsWopiUrl);
+            // The payload from LOKit is already a properly encoded file:// URL
+            // (e.g., spaces as %20). Pass it through as-is — do NOT re-encode
+            // with Poco::URI::encode(), which would double-encode percent signs
+            // (%20 -> %2520) producing a path that doesn't match the file on disk.
+            sendTextFrame("exportas: url=" + payload + " filename=" + _exportAsWopiUrl);
 
             _exportAsWopiUrl.clear();
             return;
@@ -3988,16 +4013,11 @@ void ChildSession::loKitCallback(const int type, const std::string& payload)
             CODocument *document = DocumentData::get(_docManager->getMobileAppDocId()).coDocument;
             [[document viewController] exportFileURL:payloadURL];
         });
-#elif defined(_WIN32)
-        // We don't need to do any registerdownload thing for CODA-W. When we come here, the PDF has
-        // been exported by core already and the user will continue editing the same document. Some
-        // "registerdownload" with a weird relative URI ../..//foo.pdf is surely a meaningless thing
-        // to do?
-        //
-        // When we eventually turn CODA-W's "Export as" functionality into "Save As" where you
-        // continue editing the saved and differently named copy, the PDF and EPUB cases that
-        // continue to be more like "Export" need to be put into a separate "Export" menu. Or
-        // something.
+#elif defined(_WIN32) || defined(QTAPP)
+        // We don't need the registerdownload approach used by the browser.
+        // Send the exported file URL to JS, which forwards it to the native
+        // message handler for presenting a save dialog to the user.
+        sendTextFrame("exportfile: url=" + payload);
 #else
         // Register download id -> URL mapping in the DocumentBroker
         auto url = std::string("../../") + payload.substr(payload.find_last_of('/'));

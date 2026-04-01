@@ -1773,6 +1773,22 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
         {
             do_paste_or_read(ClipboardOp::READ, data);
         }
+        else if (s.starts_with(L"TEXTCLIPBOARD "))
+        {
+            std::wstring text = s.substr(14);
+            if (OpenClipboard(NULL))
+            {
+                EmptyClipboard();
+                HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, (text.size() + 1) * sizeof(wchar_t));
+                if (hMem)
+                {
+                    memcpy(GlobalLock(hMem), text.c_str(), (text.size() + 1) * sizeof(wchar_t));
+                    GlobalUnlock(hMem);
+                    SetClipboardData(CF_UNICODETEXT, hMem);
+                }
+                CloseClipboard();
+            }
+        }
         else if (s.starts_with(L"CLIPBOARDSET "))
         {
             do_clipboard_set(data.appDocId, Util::wide_string_to_string(s.substr(13)).c_str());
@@ -1843,6 +1859,55 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
 
             if (filenameAndUri.filename != "")
                 DocumentData::get(data.appDocId).loKitDocument->saveAs(filenameAndUri.uri.c_str(), extension.c_str(), nullptr);
+        }
+        else if (s.starts_with(L"exportfile "))
+        {
+            // "exportfile url=file:///C:/Users/.../tmp/image.png"
+            auto const ns = Util::wide_string_to_string(s);
+            auto const tokens = StringVector::tokenize(ns);
+            std::string fileUrl;
+            if (!COOLProtocol::getTokenString(tokens, "url", fileUrl))
+            {
+                LOG_ERR("No url parameter in message '" << ns << "'");
+                return;
+            }
+
+            auto srcPath = Poco::URI(fileUrl).getPath();
+            // The usual hack to get rid of the leading slash in what Poco::URI::getPath() returns,
+            // like "/C:/Users/bob/AppData/Local/Temp/image.jpg".
+            if (srcPath.length() > 4 && srcPath[0] == '/' && srcPath[2] == ':' && srcPath[3] == '/')
+                srcPath = srcPath.substr(1);
+
+            if (!std::filesystem::exists(srcPath))
+            {
+                LOG_ERR("exportfile: source file not found: " << srcPath);
+                return;
+            }
+
+            auto const extension = Poco::Path(srcPath).getExtension();
+            auto filenameAndUri = fileSaveDialog("image." + extension,
+                                                 "",
+                                                 {
+                                                     {
+                                                         Util::string_to_wide_string(extension).c_str(),
+                                                         Util::string_to_wide_string("*." + extension).c_str()
+                                                     }
+                                                 });
+
+            if (filenameAndUri.filename != "")
+            {
+                auto destPath = Poco::URI(filenameAndUri.uri).getPath();
+                // As above
+                if (destPath.length() > 4 && destPath[0] == '/' && destPath[2] == ':' && destPath[3] == '/')
+                    destPath = destPath.substr(1);
+                std::error_code ec;
+                std::filesystem::copy_file(srcPath, destPath,
+                                           std::filesystem::copy_options::overwrite_existing, ec);
+                if (ec)
+                    LOG_ERR("exportfile: failed to copy to '" << destPath << "': " << ec.message());
+                else
+                    LOG_INF("exportfile: saved image to " << destPath);
+            }
         }
         else if (s.starts_with(L"loaddocument "))
         {

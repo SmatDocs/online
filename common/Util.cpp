@@ -17,22 +17,16 @@
 #include <config.h>
 #include <config_version.h>
 
-#include "Util.hpp"
-
 #include <common/Common.hpp>
 #include <common/Log.hpp>
 #include <common/Protocol.hpp>
 #include <common/Rectangle.hpp>
+#include <common/SigUtil.hpp>
 #include <common/TraceEvent.hpp>
+#include <common/Util.hpp>
+#include <common/base64.hpp>
 
-#include <Poco/Base64Decoder.h>
-#include <Poco/Base64Encoder.h>
-#include <Poco/ConsoleChannel.h>
-#include <Poco/Exception.h>
-#include <Poco/Format.h>
 #include <Poco/HexBinaryEncoder.h>
-#include <Poco/LineEndingConverter.h>
-#include <Poco/TemporaryFile.h>
 #include <Poco/URI.h>
 #include <Poco/Util/Application.h>
 
@@ -45,7 +39,6 @@
 #include <ctime>
 #include <iomanip>
 #include <iostream>
-#include <limits>
 #include <mutex>
 #include <random>
 #include <sstream>
@@ -59,7 +52,7 @@
 #endif
 
 #if !MOBILEAPP
-#include <SigHandlerTrap.hpp>
+#include <common/SigHandlerTrap.hpp>
 #endif
 
 #if defined(__GLIBC__)
@@ -167,10 +160,9 @@ namespace Util
         /// Note: May contain '/' characters.
         std::string getB64String(const std::size_t length)
         {
-            std::stringstream ss;
-            Poco::Base64Encoder b64(ss);
-            b64.write(getBytes(length).data(), length);
-            return ss.str().substr(0, length);
+            auto bytes = getBytes(length);
+            return macaron::Base64::Encode(
+                std::string_view(bytes.data(), length)).substr(0, length);
         }
 
         std::string getFilename(const std::size_t length)
@@ -196,7 +188,7 @@ namespace Util
     void setKitInProcess(bool value) { kitInProcess = value; }
     bool isKitInProcess() { return isFuzzing() || isMobileApp() || kitInProcess; }
 
-    std::string replace(std::string result, const std::string& from, const std::string& to)
+    std::string replace(std::string result, const std::string_view from, const std::string_view to)
     {
         const std::size_t fromSize = from.size();
         if (fromSize > 0)
@@ -254,10 +246,10 @@ namespace Util
         return replaceAllOf(filename, mtch, repl);
     }
 
-    std::string formatLinesForLog(const std::string& s)
+    std::string formatLinesForLog(const std::string_view s)
     {
         std::string r;
-        std::string::size_type n = s.size();
+        std::string_view::size_type n = s.size();
         if (n > 0 && s.back() == '\n')
             r = s.substr(0, n-1);
         else
@@ -760,16 +752,16 @@ namespace Util
         else
             LOG_INF("Forced Exit with code: " << code);
 
-        Log::shutdown();
-
-#if CODE_COVERAGE
-        __gcov_dump();
-#endif
-
 #if !MOBILEAPP
         /// Wait for the signal handler, if any,
         /// and prevent _Exit while collecting backtrace.
         SigUtil::SigHandlerTrap::wait();
+#endif
+
+        Log::shutdown();
+
+#if CODE_COVERAGE
+        __gcov_dump();
 #endif
 
         std::_Exit(code);
@@ -1001,32 +993,15 @@ namespace Util
         }
     }
 
-    std::string base64Encode(std::string_view input)
+    std::string base64Encode(const std::string_view input)
     {
-        std::ostringstream oss;
-        Poco::Base64Encoder encoder(oss);
-        encoder << input;
-        encoder.close();
-        return oss.str();
-    }
-
-    std::string base64EncodeRemovingNewLines(const std::string_view input)
-    {
-        std::ostringstream oss;
-        // Use a line ending converter to remove these CRLF.
-        Poco::OutputLineEndingConverter lineEndingConv(oss, "");
-        Poco::Base64Encoder encoder(lineEndingConv);
-        encoder << input;
-        encoder.close();
-        return oss.str();
+        return macaron::Base64::Encode(input);
     }
 
     std::string base64Decode(const std::string& input)
     {
-        std::istringstream istr(input);
         std::string decoded;
-        Poco::Base64Decoder decoder(istr);
-        decoder >> decoded;
+        macaron::Base64::Decode(input, decoded);
         return decoded;
     }
 

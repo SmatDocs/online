@@ -166,7 +166,7 @@ bool KitQueue::elideDuplicateCallback(int view, int type, const std::string &pay
     const auto callbackType = static_cast<LibreOfficeKitCallbackType>(type);
 
     // Nothing to combine in this case:
-    if (_callbacks.size() == 0)
+    if (_callbacks.empty())
         return false;
 
     switch (callbackType)
@@ -830,11 +830,11 @@ void KitQueue::dumpState(std::ostream& oss)
 {
     oss << "\tIncoming Queue size: " << _queue.size() << "\n";
     size_t i = 0;
-    for (Payload &it : _queue)
+    for (const Payload &it : _queue)
         oss << "\t\t" << i++ << ": " << COOLProtocol::getFirstLine(it) << "\n";
 
     oss << "\tTile Queues count: " << _tileQueues.size() << "\n";
-    for (auto& queue : _tileQueues)
+    for (const auto& queue : _tileQueues)
     {
         CanonicalViewId viewId = queue.first;
         const std::vector<TileDesc>& tileQueue = queue.second;
@@ -846,7 +846,7 @@ void KitQueue::dumpState(std::ostream& oss)
 
     oss << "\tCallbacks size: " << _callbacks.size() << "\n";
     i = 0;
-    for (auto &it : _callbacks)
+    for (const auto &it : _callbacks)
         oss << "\t\t" << i++ << ": " << it << "\n";
 }
 

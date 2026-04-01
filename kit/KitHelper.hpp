@@ -11,10 +11,6 @@
 
 #pragma once
 
-#include <string>
-#include <unordered_map>
-#include <cstdlib>
-
 #include <common/JsonUtil.hpp>
 #include <common/Util.hpp>
 
@@ -22,13 +18,17 @@
 #include <LibreOfficeKit/LibreOfficeKit.h>
 #include <LibreOfficeKit/LibreOfficeKitEnums.h>
 
+#include <cstdlib>
+#include <string>
+#include <unordered_map>
+
 namespace LOKitHelper
 {
     constexpr auto tunnelledDialogImageCacheSize = 100;
 
     struct StringDeleter
     {
-        inline void operator()(char* string) { std::free(string); }
+        void operator()(char* string) { std::free(string); }
     };
     using ScopedString = std::unique_ptr<char, StringDeleter>;
 
@@ -184,7 +184,7 @@ namespace LOKitHelper
         {
             Poco::JSON::Parser parser;
             const auto var = parser.parse(values.get());
-            const auto obj = var.extract<Poco::JSON::Object::Ptr>();
+            const auto& obj = var.extract<Poco::JSON::Object::Ptr>();
             if (obj && obj->has("parts"))
             {
                 const auto parts = obj->getArray("parts");

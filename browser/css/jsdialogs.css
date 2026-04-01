@@ -509,7 +509,7 @@ algned to the bottom */
 .ui-tab.selected.jsdialog {
 	background-color: var(--color-background-lighter) !important;
 	color: var(--color-text-darker) !important;
-	box-shadow: 0 0 2px 1px var(--color-box-shadow) !important;
+	box-shadow: 0 0 2px 1px var(--color-box-shadow-dark) !important;
 }
 
 .ui-tab.jsdialog:not(.selected):hover {
@@ -712,9 +712,11 @@ algned to the bottom */
 }
 
 .ui-treeview.disabled,
-.ui-treeview-entry div.disabled {
+.ui-treeview-entry div.disabled,
+.ui-treeview-entry.disabled {
 	background-color: var(--color-background-dark) !important;
 	color: var(--color-text-lighter) !important;
+	pointer-events: none;
 }
 
 #custom_animation_label_parent {
@@ -1271,7 +1273,7 @@ img.context-menu-icon {
 .jsdialog-window .ui-combobox,
 .jsdialog-window .ui-timefield {
 	height: 32px;/* Use the same height as in .jsdialog.ui-edit */
-	min-width: 100px;
+	min-width: 50px;
 	width: 100%;
 }
 
@@ -1893,6 +1895,12 @@ img.context-menu-icon {
 .arrowbackground:hover {
 	border-left-color: transparent;
 	background-color: var(--color-background-darker);
+}
+
+.menubutton:not(.splitbutton) .arrowbackground,
+.menubutton:not(.splitbutton) .arrowbackground:hover {
+	border-left-color: transparent;
+	background-color: transparent;
 }
 
 .unoarrow:not([disabled]):hover, .arrowbackground:not([disabled]):hover .unoarrow {

@@ -334,6 +334,7 @@ class TreeViewControl {
 			th,
 		);
 
+		th.setAttribute('role', 'columnheader');
 		span.innerText = header.text;
 
 		if (header.sortable !== false) {
@@ -367,6 +368,9 @@ class TreeViewControl {
 			parent,
 		);
 		this._rows.set(String(entry.row), tr);
+
+		//id is needed to find the element to regain focus after widget is updated. see updateWidget in Control.JSDialogBuilder.js
+		tr.id = data.id + '_' + entry.row;
 		tr.setAttribute('level', String(level));
 		(tr as any)._row = entry.row;
 		const rowRole =
@@ -1012,6 +1016,11 @@ class TreeViewControl {
 			return;
 		}
 
+		// Remember if the focused element is inside this treeview,
+		// because clearing selections removes tabindex which drops
+		// focus to BODY for non-natively-focusable elements.
+		const hadFocus = this._container.contains(document.activeElement);
+
 		// Clear existing selections
 		this._container
 			.querySelectorAll('.ui-treeview-entry.selected')
@@ -1021,7 +1030,7 @@ class TreeViewControl {
 
 		// Select the target row
 		const checkbox = rowElement.querySelector('input') as HTMLInputElement;
-		this.selectEntry(rowElement, checkbox, shouldFocus);
+		this.selectEntry(rowElement, checkbox, shouldFocus || hadFocus);
 	}
 
 	unselectEntry(item: HTMLElement) {
@@ -1363,7 +1372,17 @@ class TreeViewControl {
 		var nextElement = listElements.at(toIndex);
 		nextElement.tabIndex = 0;
 		nextElement.focus();
+		(builder as any).callback(
+			'treeview',
+			'select',
+			data,
+			(nextElement as any)._row,
+			builder,
+		);
 
+		// Update tabindex so the new entry is in the tab order and the
+		// old one is removed. Selected entries keep their tabindex so
+		// they remain reachable via Tab.
 		var nextInput = Array.from(
 			listElements
 				.at(toIndex)
@@ -1384,14 +1403,6 @@ class TreeViewControl {
 			) as Array<HTMLElement>;
 			if (oldInput && oldInput.length) oldInput.at(0).tabIndex = -1;
 		}
-
-		(builder as any).callback(
-			'treeview',
-			'select',
-			data,
-			(nextElement as any)._row,
-			builder,
-		);
 	}
 
 	getCurrentEntry(listElements: Array<HTMLElement>) {
@@ -1599,6 +1610,8 @@ class TreeViewControl {
 			'ui-treeview-headers',
 			this._container,
 		);
+
+		this._thead.setAttribute('role', 'row');
 
 		let dummyCells = this._columns - headers.length;
 		if (this._hasState) dummyCells++;

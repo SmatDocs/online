@@ -374,14 +374,16 @@ namespace
         switch (linkOrCopyType)
         {
         case LinkOrCopyType::LO:
-            return path != std::string_view("program/wizards") && path == std::string_view("sdk") &&
+            return path != std::string_view("program/wizards") &&
+                   path != std::string_view("sdk") &&
                    path != std::string_view("debugsource") &&
                    path != std::string_view("share/basic") &&
-                   path != std::string_view("share/extentions/dict") &&
+                   !std::string_view(path).starts_with(std::string_view("share/extentions/dict")) &&
                    path != std::string_view("share/Scripts/java") &&
                    path != std::string_view("share/Scripts/javascript") &&
                    path != std::string_view("share/config/wizard") &&
-                   path != std::string_view("readmes") && path == std::string_view("help");
+                   path != std::string_view("readmes") &&
+                   path != std::string_view("help");
         default: // LinkOrCopyType::All
             return true;
         }
@@ -1185,7 +1187,7 @@ void Document::trimAfterInactivity()
     {
         for (auto& it : self->_sessions)
         {
-            std::shared_ptr<ChildSession> session = it.second;
+            const std::shared_ptr<ChildSession>& session = it.second;
             if (!session->isCloseFrame())
                 session->loKitCallback(type, payload);
         }
@@ -1196,7 +1198,7 @@ void Document::trimAfterInactivity()
         if (self->_sessions.size() == 1)
         {
             auto it = self->_sessions.begin();
-            std::shared_ptr<ChildSession> session = it->second;
+            const std::shared_ptr<ChildSession>& session = it->second;
             if (session && !session->isCloseFrame())
             {
                 session->loKitCallback(type, payload);
@@ -1459,6 +1461,23 @@ void Document::handleSaveMessage(const std::string &)
     {
         LOG_TRC("BgSave completed");
 
+        // unregister the view callbacks
+        const int viewCount = getLOKitDocument()->getViewsCount();
+        std::vector<int> viewIds(viewCount);
+        getLOKitDocument()->getViewIds(viewIds.data(), viewCount);
+        for (const auto viewId : viewIds)
+        {
+            _loKitDocument->setView(viewId);
+            _loKitDocument->registerCallback(nullptr, nullptr);
+        }
+
+        // cleanup any lingering file-system pieces
+        _loKitDocument.reset();
+
+        // any further messages are not interesting.
+        if (_queue)
+            _queue->clear();
+
         auto socket = _saveProcessParent.lock();
         if (socket)
         {
@@ -1472,23 +1491,6 @@ void Document::handleSaveMessage(const std::string &)
         }
         else
             LOG_TRC("Shutting down already shutdown bgsv child's socket to parent kit post save");
-
-        // any further messages are not interesting.
-        if (_queue)
-            _queue->clear();
-
-        // unregister the view callbacks
-        const int viewCount = getLOKitDocument()->getViewsCount();
-        std::vector<int> viewIds(viewCount);
-        getLOKitDocument()->getViewIds(viewIds.data(), viewCount);
-        for (const auto viewId : viewIds)
-        {
-            _loKitDocument->setView(viewId);
-            _loKitDocument->registerCallback(nullptr, nullptr);
-        }
-
-        // cleanup any lingering file-system pieces
-        _loKitDocument.reset();
 
         // Next step in the chain is BgSaveChildWebSocketHandler::onDisconnect
     }
@@ -1595,7 +1597,7 @@ bool Document::forkToSave(const std::function<void()>& childSave, int viewId)
         _isBgSaveProcess = true;
 
         SigUtil::addActivity("forked background save process: " +
-                             std::to_string(pid));
+                             std::to_string(getpid()));
 
         threadGuard.clear();
 
@@ -1883,7 +1885,7 @@ void Document::updateEditorSpeeds(int id, int speed)
 
     for (const auto& it : _sessions)
     {
-        const std::shared_ptr<ChildSession> session = it.second;
+        const std::shared_ptr<ChildSession>& session = it.second;
         int sessionId = session->getViewId();
 
         auto duration = (_lastUpdatedAt[id] - now);
@@ -2450,7 +2452,17 @@ TilePrioritizer::Priority Document::getTilePriority(const TileDesc &desc) const
     }
 
     if (maxPrio == TilePrioritizer::Priority::NONE)
-        LOG_WRN("No sessions match this viewId " << canonicalViewId);
+    {
+        // This can be highly noisy when a view is removed
+        // but we have a long back-log of tiles to deliver.
+        static CanonicalViewId lastViewId = CanonicalViewId::Invalid;
+        if (canonicalViewId != lastViewId)
+        {
+            lastViewId = canonicalViewId;
+            LOG_WRN("No sessions match this viewId " << canonicalViewId);
+        }
+    }
+
     // LOG_TRC("Priority for tile " << desc.generateID() << " is " << maxPrio);
     return maxPrio;
 }

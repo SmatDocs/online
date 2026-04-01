@@ -162,7 +162,7 @@ public:
 
     void setDumpTiles(bool dumpTiles) { _isDumpingTiles = dumpTiles; }
 
-    std::string getViewRenderState() { return _viewRenderState; }
+    const std::string& getViewRenderState() const { return _viewRenderState; }
 
     TilePrioritizer::Priority getTilePriority(const TileDesc &desc) const;
 
@@ -218,9 +218,9 @@ private:
     bool askSignatureStatus(const char* buffer, int length, const StringVector& tokens);
     bool renderShapeSelection(const StringVector& tokens);
     bool removeTextContext(const StringVector& tokens);
-#if ENABLE_FEATURE_LOCK || ENABLE_FEATURE_RESTRICTION
+#if ENABLE_FEATURE_LOCK || ENABLE_FEATURE_RESTRICTION || ENABLE_DEBUG
     bool updateBlockingCommandStatus(const StringVector& tokens);
-    std::string getBlockedCommandType(std::string command);
+    std::string getBlockedCommandType(const std::string& command);
 #endif
     bool handleZoteroMessage(const StringVector& tokens);
     bool formFieldEvent(const char* buffer, int length, const StringVector& tokens);

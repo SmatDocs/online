@@ -37,6 +37,7 @@
 #include <QClipboard>
 #include <QDesktopServices>
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMainWindow>
@@ -390,8 +391,9 @@ QVariant Bridge::cool(const QString& messageStr)
         if (FileUtil::getStatOfFile(welcomePath, st) == 0)
         {
             Poco::URI fileURL{Poco::Path(welcomePath)};
-            QTimer::singleShot(0, [fileURL]() {
-                WebView* webViewInstance = new WebView(Application::getProfile(), /*isWelcome*/ true);
+            QMainWindow* window = _window;
+            QTimer::singleShot(0, [fileURL, window]() {
+                WebView* webViewInstance = new WebView(Application::getProfile(), /*isWelcome*/ true, window);
                 webViewInstance->load(fileURL);
             });
             LOG_TRC_NOFILE("Opening welcome slideshow: " << welcomePath);
@@ -516,6 +518,24 @@ QVariant Bridge::cool(const QString& messageStr)
                     topLevel->deleteLater();
                 }
             }
+        });
+    }
+    else if (tokens.equals(0, "EXIT_TEST"))
+    {
+        LOG_INF("EXIT_TEST received -- closing document and quitting");
+        fakeSocketClose(_closeNotificationPipeForForwardingThread[0]);
+        QTimer::singleShot(0, [this]() {
+            if (_webView)
+            {
+                QWidget* topLevel = _webView->window();
+                if (topLevel)
+                {
+                    topLevel->hide();
+                    topLevel->close();
+                    topLevel->deleteLater();
+                }
+            }
+            QApplication::quit();
         });
     }
     else if (tokens.equals(0, "TEXTCLIPBOARD"))
@@ -721,6 +741,50 @@ QVariant Bridge::cool(const QString& messageStr)
             }
 
             LOG_INF("downloadas: exported to " << destPath.toStdString());
+        });
+
+        dialog->open();
+    }
+    else if (tokens.equals(0, "exportfile"))
+    {
+        std::string fileUrl;
+        if (!COOLProtocol::getTokenString(tokens, "url", fileUrl))
+        {
+            LOG_ERR("exportfile: no url= specified");
+            return {};
+        }
+
+        const QUrl srcUrl(QString::fromStdString(fileUrl));
+        const QString srcPath = srcUrl.toLocalFile();
+        if (srcPath.isEmpty() || !QFileInfo::exists(srcPath))
+        {
+            LOG_ERR("exportfile: source file not found: " << fileUrl);
+            return {};
+        }
+
+        const QString ext = QFileInfo(srcPath).suffix();
+        const QString suggestedName =
+            QStringLiteral("image.") + (ext.isEmpty() ? QStringLiteral("png") : ext);
+
+        QFileDialog* dialog = new QFileDialog(
+            _webView,
+            QObject::tr("Save Image"),
+            QDir::home().filePath(suggestedName),
+            QObject::tr("All Files (*)"));
+
+        dialog->setAcceptMode(QFileDialog::AcceptSave);
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+
+        QObject::connect(dialog, &QFileDialog::fileSelected,
+                        [srcPath](const QString& destPath) {
+            if (QFile::exists(destPath))
+                QFile::remove(destPath);
+            if (!QFile::copy(srcPath, destPath))
+            {
+                LOG_ERR("exportfile: failed to copy to '" << destPath.toStdString() << "'");
+                return;
+            }
+            LOG_INF("exportfile: saved image to " << destPath.toStdString());
         });
 
         dialog->open();

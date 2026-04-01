@@ -395,7 +395,7 @@ class HRuler extends Ruler {
 		this._rWrapper.style.visibility = '';
 	}
 
-	public _updateParagraphIndentations() {
+	protected _updateParagraphIndentationsImpl() {
 		var items = this._map['stateChangeHandler'];
 		var state = items.getItemValue('.uno:LeftRightParaMargin');
 		// in impress/draw values are not as per Inch factore we should consider this case
@@ -839,6 +839,14 @@ class HRuler extends Ruler {
 			const newValue = rulerOffset + 'px';
 			if (this._rFace.style.marginInlineStart !== newValue)
 				this._rFace.style.marginInlineStart = newValue;
+		} else if (layout.type === 'ViewLayoutCompareChanges') {
+			let rulerOffset =
+				-layout.viewedRectangle.cX1 + this.options.tileMargin * app.getScale();
+			if (layout.type === 'ViewLayoutCompareChanges')
+				rulerOffset += Math.round(
+					layout.documentToViewX(new cool.SimplePoint(0, 0)) / app.dpiScale,
+				);
+			this._rFace.style.marginInlineStart = rulerOffset + 'px';
 		} else {
 			const rulerOffset =
 				-layout.viewedRectangle.cX1 + this.options.tileMargin * app.getScale();
@@ -1306,7 +1314,7 @@ class HRuler extends Ruler {
 		var pointXTwip = this._map._docLayer._pixelsToTwips({ x: pointX, y: 0 }).x;
 		var tabstop = this._getTabStopHit(tabstopContainer, pointX);
 
-		if (window.mode.isMobile() || window.mode.isTablet()) {
+		if (window.mode.isSmallScreenDevice() || window.mode.isTablet()) {
 			if (tabstop == null) {
 				this.currentPositionInTwips = pointXTwip;
 				this.currentTabStopIndex = null;
@@ -1369,15 +1377,6 @@ class HRuler extends Ruler {
 	}
 
 	_getNavigationSidebarWidth() {
-		// Consider navigations sidebar width to place marker at correct position
-		const presentationControlsWrapper: HTMLDivElement = document.querySelector(
-			'#navigation-sidebar',
-		);
-		let presentationControlsWrapperWidth: number = 0;
-
-		if (presentationControlsWrapper)
-			presentationControlsWrapperWidth =
-				presentationControlsWrapper.getBoundingClientRect().width;
-		return presentationControlsWrapperWidth;
+		return app.map?.navigator ? app.map.navigator.getCurrentWidth() : 0;
 	}
 }

@@ -11,7 +11,16 @@
 
 #pragma once
 
-#include <typeinfo>
+#include <common/Session.hpp>
+#include <common/StateEnum.hpp>
+#include <common/ThreadPool.hpp>
+#include <common/Util.hpp>
+#include <kit/KitQueue.hpp>
+#include <kit/LogUI.hpp>
+#include <net/Socket.hpp>
+#include <wsd/TileDesc.hpp>
+
+#include <LibreOfficeKit/LibreOfficeKitTypes.h>
 
 #include <Poco/Util/XMLConfiguration.h>
 
@@ -36,8 +45,8 @@
 
 #include <future>
 
-#include <ClientSession.hpp>
-#include <DocumentBroker.hpp>
+#include <wsd/ClientSession.hpp>
+#include <wsd/DocumentBroker.hpp>
 
 #endif
 
@@ -304,7 +313,7 @@ public:
     void onUnload(const ChildSession& session);
 
     /// Get a view ID <-> UserInfo map.
-    std::map<int, UserInfo> getViewInfo() { return _sessionUserInfo; }
+    const std::map<int, UserInfo>& getViewInfo() const { return _sessionUserInfo; }
 
     int getEditorId() const { return _editorId; }
 
@@ -312,7 +321,7 @@ public:
 
     bool haveDocPassword() const { return _haveDocPassword; }
 
-    std::string getDocPassword() const { return _docPassword; }
+    const std::string& getDocPassword() const { return _docPassword; }
 
     DocumentPasswordType getDocPasswordType() const { return _docPasswordType; }
 
@@ -424,12 +433,12 @@ public:
     bool isLoaded() const { return !!_loKitDocument; }
 
     /// Return access to the lok::Office instance.
-    std::shared_ptr<lok::Office> getLOKit() { return _loKit; }
+    std::shared_ptr<lok::Office> getLOKit() const { return _loKit; }
 
     /// Return access to the lok::Document instance.
     std::shared_ptr<lok::Document> getLOKitDocument();
 
-    std::string getObfuscatedFileId() { return _obfuscatedFileId; }
+    const std::string& getObfuscatedFileId() const { return _obfuscatedFileId; }
 
     bool isBackgroundSaveProcess() const { return _isBgSaveProcess; }
 
