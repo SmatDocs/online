@@ -37,6 +37,7 @@
 #include <Poco/FileStream.h>
 #include <regex>
 #include <Poco/StreamCopier.h>
+#include <Poco/Util/Application.h>
 #include <Poco/Util/LayeredConfiguration.h>
 
 #include <helpers.hpp>
@@ -81,9 +82,21 @@ bool filterTests(CPPUNIT_NS::TestRunner& runner, CPPUNIT_NS::Test* testRegistry,
 
 static bool IsDebugrun = false;
 
+/// Minimal Poco Application so that code paths using
+/// Poco::Util::Application::instance().config() work in tests.
+class StubApplication : public Poco::Util::Application
+{
+public:
+    int main(const std::vector<std::string>&) override { return EXIT_OK; }
+};
+
 // coverity[root_function] : don't warn about uncaught exceptions
 int main(int argc, char** argv)
 {
+    // Instantiate a minimal Poco Application singleton so that code paths
+    // calling Poco::Util::Application::instance().config() do not throw.
+    StubApplication app;
+
     bool verbose = false;
     std::string cert_path = "/etc/coolwsd/";
     for (int i = 1; i < argc; ++i)
