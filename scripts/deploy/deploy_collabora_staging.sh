@@ -121,6 +121,13 @@ fi
 echo "[staging] Building with make -j${MAKE_JOBS}"
 ( cd "$STAGING_ROOT" && make -j"${MAKE_JOBS}" )
 
+# Overwrite the build-generated coolwsd.xml with our production config
+# so branding, WOPI, SSL termination, etc. are always used.
+if [[ -f "$STAGING_ROOT/coolwsd_prod.xml" ]]; then
+  echo "[staging] Overwriting coolwsd.xml with coolwsd_prod.xml"
+  cp -f "$STAGING_ROOT/coolwsd_prod.xml" "$STAGING_ROOT/coolwsd.xml"
+fi
+
 # --- file capabilities ------------------------------------------------------
 
 setcap_bin="$(command -v setcap || true)"

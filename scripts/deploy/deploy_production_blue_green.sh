@@ -320,6 +320,13 @@ build_slot() {
     cd "$SLOT_ROOT"
     make -j"${MAKE_JOBS}"
   )
+
+  # Overwrite the build-generated coolwsd.xml with our production config
+  # so branding, WOPI, SSL termination, etc. are always used.
+  if [[ -f "$SLOT_ROOT/coolwsd_prod.xml" ]]; then
+    echo "[prod] Overwriting coolwsd.xml with coolwsd_prod.xml in $SLOT_ROOT"
+    cp -f "$SLOT_ROOT/coolwsd_prod.xml" "$SLOT_ROOT/coolwsd.xml"
+  fi
 }
 
 stop_slot_processes() {
