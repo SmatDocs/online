@@ -301,6 +301,14 @@ sync_slot_runtime_files() {
 
   cp -f "$REPO_ROOT/start-coolwsd.sh" "$SLOT_ROOT/start-coolwsd.sh"
   cp -f "$REPO_ROOT/coolwsd_prod.xml" "$SLOT_ROOT/coolwsd_prod.xml"
+
+  # Ensure coolkitconfig.xcu is available in the config dir so release builds
+  # (ENABLE_DEBUG=0) pick up spell-check-off and other LO overrides.
+  local configdir="/usr/local/etc/coolwsd"
+  if [[ -f "$REPO_ROOT/coolkitconfig.xcu" ]]; then
+    sudo -n mkdir -p "$configdir" 2>/dev/null || true
+    sudo -n cp -f "$REPO_ROOT/coolkitconfig.xcu" "$configdir/coolkitconfig.xcu" 2>/dev/null || true
+  fi
 }
 
 build_slot() {
