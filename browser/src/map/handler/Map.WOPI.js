@@ -552,6 +552,13 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		}
 
 		if (msg.MessageId === 'Grab_Focus') {
+			if (app.idleHandler._documentIdle) {
+				// Document was fully idled — reset and reload, same as user click.
+				window.app.console.debug('Grab_Focus: reactivating idle document');
+				app.map.fire('postMessage', {msgId: 'User_Active'});
+				app.idleHandler._documentIdle = false;
+				app.setCursorVisibility(true);
+			}
 			app.idleHandler._activate();
 			app.map.focus();
 			return;
@@ -566,9 +573,11 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		// when user goes idle we have 'this._appLoaded == false'
 		if (msg.MessageId === 'Get_User_State') {
 			var isIdle = app.idleHandler.isDimActive();
+			var isDocIdle = app.idleHandler._documentIdle;
 			this._postMessage({msgId: 'Get_User_State_Resp', args: {
-				State: (isIdle ? 'idle' : 'active'),
-				Elapsed: app.idleHandler.getElapsedFromActivity()
+				State: (isDocIdle ? 'document_idle' : (isIdle ? 'idle' : 'active')),
+				Elapsed: app.idleHandler.getElapsedFromActivity(),
+				Reloading: isDocIdle
 			}});
 		}
 
