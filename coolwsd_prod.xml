@@ -48,7 +48,7 @@
     <fetch_update_check desc="Every number of hours will fetch latest version data. Defaults to 10 hours." type="uint" default="10">10</fetch_update_check>
     <allow_update_popup desc="Allows notification about an update in the editor" type="bool" default="false">false</allow_update_popup>
     <per_document desc="Document-specific settings, including LO Core settings.">
-        <max_concurrency desc="The maximum number of threads to use while processing a document." type="uint" default="4">4</max_concurrency>
+        <max_concurrency desc="The maximum number of threads to use while processing a document." type="uint" default="8">8</max_concurrency>
         <batch_priority desc="A (lower) priority for use by batch eg. convert-to processes to avoid starving interactive ones" type="uint" default="5">5</batch_priority>
         <bgsave_priority desc="A (lower) priority for use by background save processes to free time for interactive ones" type="uint" default="5">5</bgsave_priority>
         <bgsave_timeout_secs desc="The default maximum number of seconds to wait for the background save processes to finish before giving up and reverting to synchronous saving" type="uint" default="120">120</bgsave_timeout_secs>
@@ -80,8 +80,8 @@
     </per_document>
 
     <per_view desc="View-specific settings.">
-        <out_of_focus_timeout_secs desc="The maximum number of seconds before dimming and stopping updates when the browser tab is no longer in focus. Defaults to 300 seconds." type="uint" default="300">3600</out_of_focus_timeout_secs>
-        <idle_timeout_secs desc="The maximum number of seconds before dimming and stopping updates when the user is no longer active (even if the browser is in focus). Defaults to 15 minutes." type="uint" default="900">7200</idle_timeout_secs>
+        <out_of_focus_timeout_secs desc="The maximum number of seconds before dimming and stopping updates when the browser tab is no longer in focus. Defaults to 300 seconds." type="uint" default="300">1800</out_of_focus_timeout_secs>
+        <idle_timeout_secs desc="The maximum number of seconds before dimming and stopping updates when the user is no longer active (even if the browser is in focus). Defaults to 15 minutes." type="uint" default="900">1800</idle_timeout_secs>
         <custom_os_info desc="Custom string shown as OS version in About dialog, get from system if empty." type="string" default=""></custom_os_info>
         <min_saved_message_timeout_secs type="uint" desc="The minimum number of seconds before the last modified message is being displayed." default="6">6</min_saved_message_timeout_secs>
     </per_view>
@@ -204,13 +204,8 @@
         <host desc="App server">app\.overten\.ai</host>
       </lok_allow>
       <content_security_policy desc="Customize the CSP header by specifying one or more policy-directive, separated by semicolons. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy">
-      <!-- example:
-      connect-src 'self' collabora-online-server.local;
-      frame-src 'self' server-to-inject-iframe-from.xyz;
-      connect-src 'self' server-to-inject-js-from.io;
-      frame-ancestors server-embedding-collabora-online-iframe
-      -->
       frame-ancestors *;
+      img-src 'self' data: https://*.googleusercontent.com https://*.googleapis.com;
       </content_security_policy>
       <frame_ancestors desc="OBSOLETE: Use content_security_policy. Specify who is allowed to embed the Collabora Online iframe (coolwsd and WOPI host are always allowed). Separate multiple hosts by space.">*</frame_ancestors>
       <connection_timeout_secs desc="Specifies the connection, send, recv timeout in seconds for connections initiated by coolwsd (such as WOPI connections)." type="int" default="30">60</connection_timeout_secs>
@@ -291,11 +286,11 @@
 
         <alias_groups mode="groups">
             <!-- default mode is 'first' it allows only the first host connecting to coolwsd when groups are not defined. -->
-
+    
             <group>
                 <!-- The main application (e.g., Nextcloud, EGroupware, ownCloud) -->
                 <host desc="hostname to allow or deny." allow="true">https://app\.overten\.ai:443</host>
-
+                
                 <!-- The alias (e.g., external URL or secondary DNS) -->
                 <alias desc="regex pattern of aliasname">https://docs\.overten\.ai:443</alias>
             </group>
@@ -390,9 +385,11 @@
       <server_name desc="server name to show in cluster overview admin panel" type="string" default=""></server_name>
     </indirection_endpoint>
 
+    
 
+    
 
-
+    
 
     <zotero desc="Zotero plugin configuration. For more details about Zotero visit https://www.zotero.org/">
         <enable desc="Enable Zotero plugin." type="bool" default="true">true</enable>
