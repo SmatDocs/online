@@ -23,9 +23,9 @@ on:
           - rollback_green
           - rollback_both
       production_ref:
-        description: "Optional git ref (branch/tag/commit) for deploy_* modes"
+        description: "Git ref (branch/tag/commit) for deploy_* modes. SA tracks prod-sa; override only if you know what you're doing."
         required: false
-        default: ""
+        default: "prod-sa"
         type: string
 
 concurrency:
