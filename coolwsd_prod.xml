@@ -204,7 +204,7 @@
         <host desc="App server">app\.overten\.ai</host>
       </lok_allow>
       <content_security_policy desc="Customize the CSP header by specifying one or more policy-directive, separated by semicolons. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy">
-      frame-ancestors *;
+      frame-ancestors *; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com;
       img-src 'self' data: https://*.googleusercontent.com https://*.googleapis.com;
       </content_security_policy>
       <frame_ancestors desc="OBSOLETE: Use content_security_policy. Specify who is allowed to embed the Collabora Online iframe (coolwsd and WOPI host are always allowed). Separate multiple hosts by space.">*</frame_ancestors>
