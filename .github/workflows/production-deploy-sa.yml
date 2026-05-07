@@ -1,0 +1,120 @@
+name: Collabora Deploy (South Africa)
+
+# South Africa region deploy — kept separate from production-deploy.yml so
+# it never auto-fires on `prod`/`staging` pushes. Trigger from the GitHub
+# Actions UI when ready. Use the `ssh-check` mode first to verify the
+# runner can reach the host before kicking off a real build.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Action to perform on SA host"
+        required: true
+        default: ssh-check
+        type: choice
+        options:
+          - ssh-check
+          - deploy_rolling
+          - deploy_blue
+          - deploy_green
+          - deploy_both
+          - rollback_blue
+          - rollback_green
+          - rollback_both
+      production_ref:
+        description: "Optional git ref (branch/tag/commit) for deploy_* modes"
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: collabora-deploy-sa
+  cancel-in-progress: false
+
+jobs:
+  ssh-check:
+    name: SSH readiness check (SA)
+    if: ${{ github.event.inputs.mode == 'ssh-check' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production-sa
+    steps:
+      - name: Verify SSH + repo + slot health on SA host
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.COLLABORA_SA_SSH_HOST }}
+          username: ${{ secrets.COLLABORA_SA_SSH_USER }}
+          key: ${{ secrets.COLLABORA_SA_SSH_KEY }}
+          port: ${{ secrets.COLLABORA_SA_SSH_PORT || 22 }}
+          command_timeout: 3m
+          script_stop: true
+          script: >-
+            bash -lc 'set -euo pipefail;
+            echo "[sa-check] host=$(hostname -f) user=$(whoami) date=$(date -u +%FT%TZ)";
+            cd "/home/humphry/online";
+            echo "[sa-check] blue HEAD: $(git rev-parse --short HEAD)";
+            if [ -d /home/humphry/online-green ]; then
+              cd /home/humphry/online-green;
+              echo "[sa-check] green HEAD: $(git rev-parse --short HEAD)";
+            else
+              echo "[sa-check] WARNING: /home/humphry/online-green missing";
+            fi;
+            BLUE=$(curl -s -o /dev/null -w "%{http_code}" "${COLLABORA_SA_BLUE_HEALTH_URL:-http://127.0.0.1:9980/hosting/discovery}" || echo 000);
+            GREEN=$(curl -s -o /dev/null -w "%{http_code}" "${COLLABORA_SA_GREEN_HEALTH_URL:-http://127.0.0.1:9981/hosting/discovery}" || echo 000);
+            echo "[sa-check] blue_health=$BLUE green_health=$GREEN";
+            sudo -n true 2>/dev/null && echo "[sa-check] sudo: NOPASSWD ok" || echo "[sa-check] sudo: needs password";
+            command -v docker >/dev/null && echo "[sa-check] docker: $(docker --version)";
+            systemctl is-active nginx >/dev/null && echo "[sa-check] nginx: active" || echo "[sa-check] nginx: not active";
+            echo "[sa-check] OK"'
+
+  deploy:
+    name: Deploy Collabora SA (Blue-Green)
+    if: ${{ github.event.inputs.mode != 'ssh-check' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production-sa
+    steps:
+      - name: Deploy to SA Collabora host via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          PRODUCTION_BLUE_HEALTH_URL: ${{ secrets.COLLABORA_SA_BLUE_HEALTH_URL }}
+          PRODUCTION_GREEN_HEALTH_URL: ${{ secrets.COLLABORA_SA_GREEN_HEALTH_URL }}
+          DEPLOY_PRODUCTION_ACTION: ${{ github.event.inputs.mode }}
+          DEPLOY_PRODUCTION_REF: ${{ github.event.inputs.production_ref }}
+        with:
+          host: ${{ secrets.COLLABORA_SA_SSH_HOST }}
+          username: ${{ secrets.COLLABORA_SA_SSH_USER }}
+          key: ${{ secrets.COLLABORA_SA_SSH_KEY }}
+          port: ${{ secrets.COLLABORA_SA_SSH_PORT || 22 }}
+          command_timeout: 60m
+          script_stop: true
+          envs: PRODUCTION_BLUE_HEALTH_URL,PRODUCTION_GREEN_HEALTH_URL,DEPLOY_PRODUCTION_ACTION,DEPLOY_PRODUCTION_REF
+          script: >-
+            bash -lc 'set -euo pipefail; cd "/home/humphry/online";
+            ACT="${DEPLOY_PRODUCTION_ACTION:-deploy_rolling}";
+            REF="${DEPLOY_PRODUCTION_REF:-}";
+            case "$ACT" in
+              deploy_blue) MODE="deploy_blue" ;;
+              deploy_rolling) MODE="deploy_only" ;;
+              deploy_green) MODE="deploy_green" ;;
+              deploy_both) MODE="deploy_both" ;;
+              rollback_blue) MODE="rollback_blue" ;;
+              rollback_green) MODE="rollback_green" ;;
+              rollback_both) MODE="rollback_both" ;;
+              *) MODE="deploy_only" ;;
+            esac;
+            echo "[workflow-sa] Deploying Collabora SA with PRODUCTION_MODE=${MODE}";
+            USE_DEPLOY_REF=0;
+            if [ -n "$REF" ]; then
+              case "$MODE" in
+                rollback_blue|rollback_green|rollback_both) ;;
+                *) USE_DEPLOY_REF=1 ;;
+              esac;
+            fi;
+            if [ "$USE_DEPLOY_REF" = "1" ]; then
+              echo "[workflow-sa] Using PRODUCTION_DEPLOY_REF=${REF}";
+              PRODUCTION_MODE="${MODE}" PRODUCTION_DEPLOY_REF="${REF}" ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online";
+            else
+              PRODUCTION_MODE="${MODE}" ./scripts/deploy/deploy_production_blue_green.sh "/home/humphry/online";
+            fi'
