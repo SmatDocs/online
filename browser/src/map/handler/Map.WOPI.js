@@ -506,6 +506,15 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			this._map.sendUnoCommand(msg.Values.Command, msg.Values.Args || '');
 			return;
 		}
+		else if (msg.MessageId === 'Send_Dispatcher_Action' && msg.Values && msg.Values.Action) {
+			// Allow the host to invoke COOL dispatcher actions (zoomin, zoomout, etc).
+			// This is what the COOL UI uses internally and affects COOL's map state
+			// directly (unlike Send_UNO_Command which only affects LO's internal state).
+			if (app.dispatcher) {
+				app.dispatcher.dispatch(msg.Values.Action, msg.Values.Data);
+			}
+			return;
+		}
 		else if (msg.MessageId === 'Hint_OnscreenKeyboard') {
 			window.keyboard.hintOnscreenKeyboard(true);
 			return;

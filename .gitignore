@@ -72,6 +72,7 @@ cypress_test/test/data/presets/user/browsersetting.json
 cypress_test/test/data/presets/user/standard.dic
 test/fakesockettest
 test/unithttplib
+test/clienttest
 test/*.csv
 test/data/presets/user/browsersettings.json
 jsstress

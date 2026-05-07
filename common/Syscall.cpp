@@ -28,7 +28,7 @@
 /**
  * Internal helper functions.
  */
-#if !defined(__linux__)
+#if !defined(__linux__) || !HAVE_PIPE2
 namespace {
 
 
@@ -68,6 +68,7 @@ bool unsafe_set_fd_cloexec_nonblock(int fd, bool cloexec, bool nonblock) {
 /**
  * Set FD_CLOEXEC and O_NONBLOCK on one file descriptor.
  */
+#if !defined(__linux__)
 bool set_fd_cloexec_nonblock(int fd, bool cloexec, bool nonblock) {
     bool ret = unsafe_set_fd_cloexec_nonblock(fd, cloexec, nonblock);
     if (!ret) {
@@ -78,6 +79,7 @@ bool set_fd_cloexec_nonblock(int fd, bool cloexec, bool nonblock) {
 
     return ret;
 }
+#endif
 
 /**
  * Set CLOEXEC or NONBLOCK on both sides of the pipe/socket/...
