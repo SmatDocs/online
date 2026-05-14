@@ -239,9 +239,19 @@ window.L.Map.WOPI = window.L.Handler.extend({
 	},
 
 	resetAppLoaded: function() {
+		var wasInitializedUI = this._appLoaded || this._appLoadedConditions.initializedui;
 		this._appLoaded = false;
 		for (var key in this._appLoadedConditions) {
 			this._appLoadedConditions[key] = false;
+		}
+
+		// Socket reconnects after WOPI rename reuse the existing UI. The
+		// specialized UI was already initialized on the first load, so no new
+		// initializedui event is emitted. Treat it as satisfied; otherwise
+		// _appLoaded never becomes true again and postMessage actions that require
+		// a loaded document (Action_Save, CallPythonScript) are ignored.
+		if (wasInitializedUI) {
+			this._appLoadedConditions.initializedui = true;
 		}
 	},
 
