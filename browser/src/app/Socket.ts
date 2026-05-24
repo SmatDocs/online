@@ -47,6 +47,7 @@ class Socket {
 	private _renderEventTimerStart: DOMHighResTimeStamp | undefined;
 	private _slurpTimerDelay: number | undefined;
 	private _slurpTimerLaunchTime: number | undefined;
+	private _zoomBeforeRenameReload: number | undefined;
 	private timer: ReturnType<typeof setInterval> | undefined;
 	private workers: Worker[] = [];
 	private workerMessageHandlers: Map<string, any> = new Map();
@@ -73,6 +74,7 @@ class Socket {
 		this._renderEventTimerStart = undefined;
 		this._slurpTimerDelay = undefined;
 		this._slurpTimerLaunchTime = undefined;
+		this._zoomBeforeRenameReload = undefined;
 		this.timer = undefined;
 		this.socket = undefined;
 		this.traceEvents = new TraceEvents(this);
@@ -1036,6 +1038,14 @@ class Socket {
 			// b) docLayer._onStatusMsg (via _docLayer._onMessage)
 			// has set the viewid
 			this._handleDelayedMessages(this._map._docLayer);
+
+			if (this._zoomBeforeRenameReload !== undefined) {
+				const zoom = this._zoomBeforeRenameReload;
+				this._zoomBeforeRenameReload = undefined;
+
+				if (Number.isFinite(zoom) && this._map.getZoom() !== zoom)
+					this._map.setZoom(zoom, { animate: false }, false);
+			}
 		}
 	}
 
@@ -1966,6 +1976,7 @@ class Socket {
 				showMsgAndReload = true;
 			}
 		} else if (textMsg.startsWith('reloadafterrename')) {
+			this._zoomBeforeRenameReload = this._map.getZoom();
 			showMsgAndReload = true;
 		}
 

@@ -271,6 +271,17 @@ window.L.Map.include({
 		}
 	},
 
+	sendDeleteTableCommand: function(command, json) {
+		if (command !== '.uno:DeleteTable' || json)
+			return false;
+
+		if (this.getDocType && this.getDocType() !== 'text')
+			return false;
+
+		app.socket.sendMessage('uno vnd.sun.star.script:DeleteTableClean.py$deleteCurrentTable?language=Python&location=share');
+		return true;
+	},
+
 	sendUnoCommand: function (command, json, force) {
 		if (command.indexOf('.uno:') < 0 && command.indexOf('vnd.sun.star.script') < 0)
 			console.error('Trying to send uno command without prefix: "' + command + '"');
@@ -347,6 +358,12 @@ window.L.Map.include({
 			console.debug('Cannot execute: ' + command + ' when dialog is opened.');
 			this.dialog.blinkOpenDialog();
 		} else if ((this.isEditMode() || isAllowedInReadOnly) && !this.messageNeedsToBeRedirected(command)) {
+			if (this.sendDeleteTableCommand(command, json)) {
+				if (map.userList && map._docLayer && map._docLayer._viewId)
+					map.userList.followUser(map._docLayer._viewId, /* do instant scroll */ false);
+				return;
+			}
+
 			app.socket.sendMessage('uno ' + command + (json ? ' ' + JSON.stringify(json) : ''));
 			// user interaction turns off the following of other users
 			if (map.userList && map._docLayer && map._docLayer._viewId)
