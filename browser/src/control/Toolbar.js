@@ -272,13 +272,23 @@ window.L.Map.include({
 	},
 
 	sendDeleteTableCommand: function(command, json) {
-		if (command !== '.uno:DeleteTable' || json)
+		if (json)
 			return false;
 
 		if (this.getDocType && this.getDocType() !== 'text')
 			return false;
 
-		app.socket.sendMessage('uno vnd.sun.star.script:DeleteTableClean.py$deleteCurrentTable?language=Python&location=share');
+		var scriptFunction = null;
+		if (command === '.uno:DeleteTable')
+			scriptFunction = 'deleteCurrentTable';
+		else if (command === '.uno:DeleteRows')
+			scriptFunction = 'deleteCurrentRows';
+		else if (command === '.uno:DeleteColumns')
+			scriptFunction = 'deleteCurrentColumns';
+		else
+			return false;
+
+		app.socket.sendMessage('uno vnd.sun.star.script:DeleteTableClean.py$' + scriptFunction + '?language=Python&location=share');
 		return true;
 	},
 
