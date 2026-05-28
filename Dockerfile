@@ -90,5 +90,6 @@ EXPOSE 9980
 # The Makefile's 'run' target already handles switching to cool user internally
 # But if it doesn't, we'll handle it in the command
 
+
 # Default command - runs coolwsd
 CMD ["sh", "-c", "set -e; LO_ROOT=${LO_ROOT:-/srv/apps/libreoffice-mini-25/instdir}; cd /srv/apps/online && make run LO_PATH=$LO_ROOT"]
