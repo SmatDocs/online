@@ -12,7 +12,7 @@
 
 #include <config.h>
 
-#include <Unit.hpp>
+#include "Unit.hpp"
 
 #include <common/JsonUtil.hpp>
 #include <common/Log.hpp>
@@ -184,7 +184,7 @@ bool UnitBase::init([[maybe_unused]] UnitType type, [[maybe_unused]] const std::
                 TimeoutThread = std::thread(
                     [instance]
                     {
-                        Util::setThreadName("unit timeout");
+                        ProcUtil::setThreadName("unit timeout");
 
                         std::unique_lock<std::mutex> lock2(TimeoutThreadMutex);
                         if (TimeoutConditionVariable.wait_for(lock2,

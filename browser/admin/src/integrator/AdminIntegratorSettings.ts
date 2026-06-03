@@ -56,6 +56,8 @@ interface ViewSettings {
 	aiImageProviderAPIKey: string;
 	aiImageProviderURL: string;
 	aiImageModel: string;
+	aiImageSize: string;
+	aiRequestTimeout: string;
 }
 
 interface AIProvider {
@@ -351,6 +353,10 @@ try {
 	isCODesktop = false;
 }
 
+// Keep in sync with the pre-canned provider map in wsd/FileServer.cpp
+// fetchModels. The server ignores the baseUrl from the client for non-custom
+// providers and uses its own copy, so a caller cannot pair a pre-canned id
+// with an arbitrary url.
 const AI_PROVIDERS: Array<AIProvider> = [
 	{
 		id: 'openai',
@@ -416,6 +422,8 @@ class SettingIframe {
 		aiImageProviderAPIKey: _('API Key'),
 		aiImageProviderURL: _('Base URL'),
 		aiImageModel: _('Model'),
+		aiImageSize: _('Image Size'),
+		aiRequestTimeout: _('Request Timeout (seconds)'),
 	};
 	private readonly settingLabels: Record<string, string> = {
 		lockAccessibilityOn: _('In-document Screen Reader'),
@@ -1590,9 +1598,9 @@ class SettingIframe {
 			return;
 		}
 
+		this.generateAISettingsUI(data, settingsContainer);
 		this.generateZoteroUI(data, settingsContainer);
 		this.generateDocSigningUI(data, settingsContainer);
-		this.generateAISettingsUI(data, settingsContainer);
 	}
 
 	private generateZoteroUI(data: ViewSettings, settingsContainer: HTMLElement) {
@@ -1730,7 +1738,7 @@ class SettingIframe {
 		aiContainer.id = 'ai-section';
 		aiContainer.classList.add('section');
 
-		aiContainer.appendChild(this.createHeading(_('AI Settings')));
+		aiContainer.appendChild(this.createHeading(_('AI Assistant')));
 		const aiDesc = document.createElement('p');
 		aiDesc.className = 'view-setting-description';
 		aiDesc.textContent = _(
@@ -1747,7 +1755,7 @@ class SettingIframe {
 		aiContainer.appendChild(
 			this.createSettingsActions(
 				'ai',
-				'AI Settings',
+				'AI Assistant',
 				'viewsetting.json',
 				() => {
 					const defaultSettings = this.getDefaultViewSettings();
@@ -1759,6 +1767,8 @@ class SettingIframe {
 						aiImageProviderURL: defaultSettings.aiImageProviderURL,
 						aiImageProviderAPIKey: defaultSettings.aiImageProviderAPIKey,
 						aiImageModel: defaultSettings.aiImageModel,
+						aiImageSize: defaultSettings.aiImageSize,
+						aiRequestTimeout: defaultSettings.aiRequestTimeout,
 					};
 				},
 				() => this._viewSetting,
@@ -1801,6 +1811,22 @@ class SettingIframe {
 
 		container.appendChild(this.createTextAIGroup(data));
 		container.appendChild(this.createImageAIGroup(data));
+
+		const timeoutBox = this.createViewSettingsTextBox(
+			'aiRequestTimeout',
+			data,
+			false,
+			true,
+		);
+		container.appendChild(timeoutBox);
+		const timeoutInput = timeoutBox.querySelector(
+			'#aiRequestTimeout',
+		) as HTMLInputElement | null;
+		if (timeoutInput) {
+			timeoutInput.placeholder = '120';
+			timeoutInput.type = 'number';
+			timeoutInput.min = '10';
+		}
 
 		this.attachAISettingsAutoFetch(data, container);
 		this.attachAIImageSettingsAutoFetch(data, container);
@@ -2019,6 +2045,30 @@ class SettingIframe {
 		status.className = 'view-setting-description';
 		status.style.display = 'none';
 		group.appendChild(status);
+
+		group.appendChild(
+			this.createViewSettingsTextBox('aiImageSize', data, false, true),
+		);
+		const imageSizeInput = group.querySelector(
+			'#aiImageSize',
+		) as HTMLInputElement | null;
+		if (imageSizeInput) {
+			imageSizeInput.placeholder = '1024x1024';
+			imageSizeInput.addEventListener('input', () => {
+				const val = imageSizeInput.value.trim();
+				if (val === '' || /^\d+x\d+$/.test(val)) {
+					const parts = val ? val.split('x') : [];
+					const valid =
+						val === '' || (Number(parts[0]) > 0 && Number(parts[1]) > 0);
+					imageSizeInput.style.borderColor = valid ? '' : 'red';
+					if (valid) {
+						data.aiImageSize = val;
+					}
+				} else {
+					imageSizeInput.style.borderColor = 'red';
+				}
+			});
+		}
 
 		if (
 			data.aiImageProviderURL &&
@@ -2837,6 +2887,8 @@ class SettingIframe {
 			aiImageProviderAPIKey: '',
 			aiImageProviderURL: '',
 			aiImageModel: '',
+			aiImageSize: '',
+			aiRequestTimeout: '',
 		};
 	}
 
@@ -2977,7 +3029,7 @@ document.addEventListener('DOMContentLoaded', () => {
 						ContentHeight: document.documentElement.offsetHeight + 'px',
 					},
 				},
-				'*',
+				window.origin,
 			);
 		};
 

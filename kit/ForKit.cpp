@@ -21,6 +21,7 @@
 #include <common/FileUtil.hpp>
 #include <common/JailUtil.hpp>
 #include <common/Log.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Seccomp.hpp>
 #include <common/SigUtil.hpp>
 #include <common/Simd.hpp>
@@ -165,7 +166,7 @@ protected:
         }
         else if (tokens.size() == 2 && tokens.equals(0, "spawn"))
         {
-            const int count = std::stoi(tokens[1]);
+            const int count = NumUtil::stoi(tokens[1]);
             if (count > 0)
             {
                 LOG_INF("Setting to spawn " << count << " child" << (count == 1 ? "" : "ren")
@@ -490,7 +491,7 @@ int forkKit(const std::function<void()>& childFunc, const std::string& childProc
 
         // sort out thread local variables to get logging right from
         // as early as possible.
-        Util::setThreadName(childProcessName);
+        ProcUtil::setThreadName(childProcessName);
 
         // Close the pipe from coolwsd
         close(0);
@@ -1049,7 +1050,7 @@ int forkit_main(int argc, char** argv)
         EnableExperimental = ConfigUtil::getBool("experimental_features", false);
     }
 
-    Util::setThreadName("forkit");
+    ProcUtil::setThreadName("forkit");
 
     LOG_INF("Preinit stage OK.");
 
@@ -1078,7 +1079,7 @@ int forkit_main(int argc, char** argv)
     // that otherwise that choice is overwritten
     SigUtil::setUserSignals();
 
-    ForKitPoll.reset(new SocketPoll (Util::getThreadName()));
+    ForKitPoll.reset(new SocketPoll (ProcUtil::getThreadName()));
     ForKitPoll->runOnClientThread(); // We will do the polling on this thread.
 
     // Reap zombies when we get the signal

@@ -28,6 +28,13 @@
         <rest_protocol desc="REST API protocol. For LanguageTool leave it blank, for Duden Korrekturserver use the string 'duden'." type="string" default=""></rest_protocol>
     </languagetool>
 
+    <ai desc="AI assistant configuration. When enabled with credentials, all users on this instance get AI features without needing to configure them individually. Works with any OpenAI-compatible endpoint, including local/self-hosted models (Ollama, vLLM, LM Studio, etc.). No data is sent anywhere unless explicitly configured. Per-user WOPI settings and View Settings override these defaults.">
+        <enabled desc="Master switch for AI features. When false, AI is disabled server-wide regardless of WOPI or per-user settings." type="bool" default="false">false</enabled>
+        <api_url desc="Default AI provider base URL (e.g. http://localhost:11434 for local Ollama, or https://api.openai.com for OpenAI). Must support the /v1/chat/completions endpoint." type="string" default=""></api_url>
+        <api_key desc="Default API key for the AI provider." type="string" default=""></api_key>
+        <model desc="Default AI model name (e.g. llama3, gpt-4, mistral)." type="string" default=""></model>
+    </ai>
+
     <deepl desc="DeepL API settings for translation service">
         <enabled desc="If true, shows translate option as a menu entry in the compact view and as an icon in the tabbed view." type="bool" default="false">false</enabled>
         <api_url desc="URL for the API" type="string" default=""></api_url>
@@ -53,7 +60,6 @@
         <bgsave_priority desc="A (lower) priority for use by background save processes to free time for interactive ones" type="uint" default="5">5</bgsave_priority>
         <bgsave_timeout_secs desc="The default maximum number of seconds to wait for the background save processes to finish before giving up and reverting to synchronous saving" type="uint" default="120">120</bgsave_timeout_secs>
         <redlining_as_comments desc="If true show red-lines as comments" type="bool" default="false">false</redlining_as_comments>
-        <pdf_resolution_dpi desc="The resolution, in DPI, used to render PDF documents as image. Memory consumption grows proportionally. Must be a positive value less than 385. Defaults to 96." type="uint" default="96">96</pdf_resolution_dpi>
         <idle_timeout_secs desc="The maximum number of seconds before unloading an idle document. Defaults to 1 hour." type="uint" default="3600">3600</idle_timeout_secs>
         <idlesave_duration_secs desc="The number of idle seconds after which document, if modified, should be saved. Disabled when 0. Defaults to 30 seconds." type="uint" default="30">30</idlesave_duration_secs>
         <autosave_duration_secs desc="The number of seconds after which document, if modified, should be saved. Disabled when 0. Defaults to 5 minutes." type="uint" default="300">300</autosave_duration_secs>

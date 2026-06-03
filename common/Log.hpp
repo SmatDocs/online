@@ -89,6 +89,9 @@ namespace Log
     /// Cleanup state after forking
     void postFork();
 
+    /// Post renaming a thread.
+    void reset();
+
     void setThreadLocalLogLevel(const std::string& logLevel);
 
     /// Per-thread log prefix that is both safe and efficient.
@@ -96,11 +99,17 @@ namespace Log
     /// |wsd-07272-07298 2020-04-25 17:29:28.928697 -0400 [ websrv_poll ] TRC  |
     class Prefix
     {
+        Prefix(const Prefix&) = delete;
+        Prefix& operator=(const Prefix&) = delete;
+
     public:
         Prefix();
 
         /// Get the log prefix, without updating it.
         std::string_view prefix() const { return _prefix; }
+
+        /// Reset the prefix, re-generating it again.
+        void reset();
 
         /// Update and return the log prefix.
         std::string_view update(std::string_view level,
@@ -163,21 +172,6 @@ namespace Log
 
     /// Getting the logging level as a string
     const std::string& getLevelName();
-
-    /// Dump the invalid id as 0, otherwise dump in hex.
-    /// Note: std::thread::id defines operator<< which
-    /// serializes in decimal. We need this for hex.
-    inline std::string to_string(const std::thread::id& id)
-    {
-        if (id != std::thread::id())
-        {
-            std::ostringstream os;
-            os << std::hex << "0x" << id;
-            return os.str();
-        }
-
-        return "0";
-    }
 
 #ifdef _WIN32
     static bool isDebuggerPresent;

@@ -106,8 +106,6 @@ class MouseControl extends CanvasSectionObject {
 		// We need this to prevent native context menu.
 		e.preventDefault();
 
-		$.contextMenu('destroy', '#canvas-container');
-
 		// We will remove below ones after we remove map HTML element.
 		e.stopPropagation();
 		e.stopImmediatePropagation();
@@ -370,9 +368,36 @@ class MouseControl extends CanvasSectionObject {
 				app.LOButtons.left,
 				modifier,
 			);
+
+			this.showShapeDragPreview(dragDistance);
 		}
 
 		app.idleHandler.notifyActive();
+	}
+
+	// Shows unselected shapes drag preview
+	private showShapeDragPreview(dragDistance: number[]): void {
+		// Do not show in edit mode of inner edit engine
+		if (app.file.textCursor.visible || TextSelections.isActive()) return;
+
+		const handles = GraphicSelection.handlesSection;
+		if (!handles?.sectionProperties?.svg) return;
+		if (!GraphicSelection.extraInfo?.isDraggable) return;
+
+		handles.sectionProperties.svg.style.left =
+			String((handles.myTopLeft[0] + dragDistance[0]) / app.dpiScale) + 'px';
+		handles.sectionProperties.svg.style.top =
+			String((handles.myTopLeft[1] + dragDistance[1]) / app.dpiScale) + 'px';
+		handles.sectionProperties.svg.style.opacity = '0.5';
+		handles.showSVG();
+	}
+
+	private hideShapeDragPreview(): void {
+		const handles = GraphicSelection.handlesSection;
+		if (!handles?.sectionProperties?.svg) return;
+
+		handles.sectionProperties.svg.style.opacity = '1';
+		handles.hideSVG();
 	}
 
 	onMouseDown(point: cool.SimplePoint, e: MouseEvent): void {
@@ -388,6 +413,8 @@ class MouseControl extends CanvasSectionObject {
 
 	onMouseUp(point: cool.SimplePoint, e: MouseEvent): void {
 		this.refreshPosition(point);
+
+		this.hideShapeDragPreview();
 
 		if (this.mouseDownSent) {
 			this.postCoreMouseEvent(

@@ -111,6 +111,13 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 				'accessibility': { focusBack: true, combination: 'G', de: null }
 			},
 			{
+				'id': 'Chart-tab-label',
+				'text': _('Chart'),
+				'name': 'Chart',
+				'context': 'Chart|Series|ErrorBar|Axis|Grid|ChartElements|Trendline|ChartTitle|ChartLegend|ChartLabel',
+				'accessibility': { focusBack: true, combination: 'CH', de: null }
+			},
+			{
 				'id': 'View-tab-label',
 				'text': _('View'),
 				'name': 'View',
@@ -136,6 +143,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 			this.getTableTab(),
 			this.getShapeTab(),
 			this.getPictureTab(),
+			this.getChartTab(),
 			this.getViewTab(),
 			this.getHelpTab()
 		];
@@ -690,7 +698,6 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 									{
 										'id': 'fontnamecombobox',
 										'type': 'combobox',
-										'label': _('Font'),
 										'text': 'Carlito',
 										'entries': [
 											'Carlito'
@@ -705,7 +712,6 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 									{
 										'id': 'fontsizecombobox',
 										'type': 'combobox',
-										'label': _('Size'),
 										'text': '12 pt',
 										'entries': [
 											'12 pt'

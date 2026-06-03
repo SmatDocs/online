@@ -16,29 +16,35 @@
 
 #pragma once
 
-#include <Session.hpp>
-#include <Storage.hpp>
-#include <SenderQueue.hpp>
-#include <ServerURL.hpp>
-#include <DocumentBroker.hpp>
+#include <common/Rectangle.hpp>
+#include <common/Session.hpp>
+#include <common/Uri.hpp>
+#include <common/Util.hpp>
+#include <wsd/DocumentBroker.hpp>
+#include <wsd/SenderQueue.hpp>
+#include <wsd/ServerURL.hpp>
+#include <wsd/Storage.hpp>
 
+#include <Poco/JSON/Array.h>
 #include <Poco/JSON/Object.h>
 #include <Poco/SharedPtr.h>
 #include <Poco/URI.h>
 
-#include <Rectangle.hpp>
 #include <deque>
-#include <utility>
-#include <common/Util.hpp>
-
 #include <optional>
+#include <utility>
 
 class DocumentBroker;
-namespace http { class Session; }
+#if !MOBILEAPP
+class AIChatSession;
+#endif
 
 /// Represents a session to a COOL client, in the WSD process.
 class ClientSession final : public Session
 {
+#if !MOBILEAPP
+    friend class AIChatSession;
+#endif
 public:
     ClientSession(const std::shared_ptr<ProtocolHandlerInterface>& ws, const std::string& id,
                   const std::shared_ptr<DocumentBroker>& docBroker, const Poco::URI& uriPublic,
@@ -196,6 +202,12 @@ public:
     /// Set WOPI fileinfo object
     void setWopiFileInfo(std::unique_ptr<WopiStorage::WOPIFileInfo> wopiFileInfo) { _wopiFileInfo = std::move(wopiFileInfo); }
 
+    /// True if the WOPI host asked for AI UI / features to be disabled for this document.
+    bool isDisableAISettings() const
+    {
+        return _wopiFileInfo && _wopiFileInfo->getDisableAISettings();
+    }
+
     /// Get requested tiles waiting for sending to the client
     std::deque<TileDesc>& getRequestedTiles() { return _requestedTiles; }
 
@@ -206,7 +218,7 @@ public:
     void removeOutdatedTilesOnFly(std::chrono::steady_clock::time_point now);
     void onTileProcessed(TileWireId wireId);
 
-    Util::Rectangle getVisibleArea() const { return _clientVisibleArea; }
+    const Util::Rectangle& getVisibleArea() const { return _clientVisibleArea; }
     /// Visible area can have negative value as position, but we have tiles only in the positive range
     Util::Rectangle getNormalizedVisibleArea() const;
 
@@ -321,6 +333,23 @@ public:
 
     void uploadViewSettingsToWopiHost();
 
+    /// Resolve AI credentials with precedence:
+    ///   viewSettings[aiProviderAPIKey|Model|URL]
+    ///   -> userPrivateInfoObj[AIProviderAPIKey|Model|URL]
+    ///   -> coolwsd.xml ai.api_key / ai.model / ai.api_url
+    /// Applies the resolved values to this session. If viewSettings is non-null
+    /// and a field is filled from userPrivateInfoObj, viewSettings is mutated
+    /// (and viewSettingsMutated set to true) so callers can persist the
+    /// migration. outModel receives the resolved model name when aiConfigured,
+    /// otherwise an empty string.
+    /// Returns aiConfigured: ai.enabled AND all three fields non-empty.
+    bool resolveAndApplyAICredentials(
+        Poco::JSON::Object::Ptr viewSettings,
+        const Poco::JSON::Object::Ptr& userPrivateInfoObj,
+        bool disableAISettings,
+        bool& viewSettingsMutated,
+        std::string& outModel);
+
     /// Override parsedDocOption values we get from browser setting json
     /// Because when client sends `load url` it doesn't have information about browser setting json
     void overrideDocOption();
@@ -339,7 +368,7 @@ private:
     void onDisconnect() override;
 
     /// Does SocketHandler: have messages to send ?
-    bool hasQueuedMessages() const override;
+    bool hasQueuedMessages() const override { return !_senderQueue.empty(); }
 
     /// SocketHandler: send those messages
     void writeQueuedMessages(std::size_t capacity) override;
@@ -348,21 +377,7 @@ private:
 
     bool handleSignatureAction(const StringVector& tokens);
 
-    bool handleAIAction(const StringVector& tokens);
-
-    bool handleAIChatAction(const std::string& firstLine);
-    bool handleAIChatCancel(const std::string& firstLine);
     bool handleUpdateViewSettings(const std::string& firstLine);
-    void sendAIChatResult(bool success, const std::string& text,
-                          const std::string& requestId);
-
-    bool handleAIImageGeneration(const std::string& prompt,
-                                  const std::string& requestId);
-
-    /// Map an HTTP status code from an AI API response to a user-facing error string.
-    static std::string mapAIHttpStatusToError(http::StatusCode statusCode,
-                                              const std::string& reasonPhrase,
-                                              const std::string& context = "");
 
     bool loadDocument(const char* buffer, int length, const StringVector& tokens,
                       const std::shared_ptr<DocumentBroker>& docBroker);
@@ -375,8 +390,6 @@ private:
     bool sendCombinedTiles(const char* buffer, int length, const StringVector& tokens,
                            const std::shared_ptr<DocumentBroker>& docBroker);
 
-    bool sendFontRendering(const char* buffer, int length, const StringVector& tokens,
-                           const std::shared_ptr<DocumentBroker>& docBroker);
     bool handleGetSlideRequest(const StringVector& tokens,
                                const std::shared_ptr<DocumentBroker>& docBroker);
 
@@ -535,8 +548,10 @@ private:
 
     Poco::SharedPtr<Poco::JSON::Object> _viewSettingsJSON;
 
-    /// Active AI chat HTTP session for cancellation support
-    std::shared_ptr<http::Session> _activeAIChatSession;
+#if !MOBILEAPP
+    /// AI chat orchestrator - multi-round LLM tool loop.
+    std::unique_ptr<AIChatSession> _aiChat;
+#endif
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

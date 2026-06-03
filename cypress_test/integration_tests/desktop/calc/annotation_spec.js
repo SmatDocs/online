@@ -103,7 +103,7 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 		cy.cGet('#comment-container-1').trigger('mouseover', {force: true});
 		cy.cGet('#annotation-content-area-1').should('contain','some text');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item','Modify').click();
+		cy.cGet('#comment-menu-1-dropdown').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
 		cy.cGet('#annotation-modify-textarea-1').type(', some other text');
 		cy.cGet('#annotation-save-1').click();
 		cy.cGet('#comment-container-1').then(function (element) {
@@ -127,7 +127,7 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 		cy.cGet('#comment-container-1').trigger('mouseover', {force: true});
 		cy.cGet('#annotation-content-area-1').should('contain','some text');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('.context-menu-list:visible .context-menu-item').should('not.have.text', 'Reply');
+		cy.cGet('#comment-menu-1-dropdown').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').should('not.exist');
 	});
 
 	it('Remove',function() {
@@ -142,7 +142,7 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 		cy.cGet('#comment-container-1').trigger('mouseover', {force: true});
 		cy.cGet('#annotation-content-area-1').should('contain','some text');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item','Remove').click();
+		cy.cGet('#comment-menu-1-dropdown').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Remove').click();
 		cy.cGet('#comment-container-1').should('not.exist');
 	});
 
@@ -257,6 +257,68 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 		cy.cGet(helper.addressInputSelector).should('have.prop', 'value', 'B2');
 	});
 
+	it('Get_Comments postMessage returns note and threaded comments from all sheets', function() {
+		// Insert a legacy Note comment on Sheet 1.
+		calcHelper.enterCellAddressAndConfirm(this.win, 'B2');
+		desktopHelper.insertComment('note comment');
+		cy.cGet('#comment-container-1').should('exist');
+
+		// Avoid notebookbar collapse before the next insertion.
+		cy.cGet('#Home-tab-label').click();
+
+		// Insert a Threaded comment on Sheet 1.
+		calcHelper.enterCellAddressAndConfirm(this.win, 'D4');
+		cy.cGet('#Insert-tab-label').click();
+		cy.cGet('#insert-insert-threaded-comment').click();
+		cy.cGet('#comment-container-new').should('exist');
+		cy.cGet('.cool-annotation').last().find('.modify-annotation .cool-annotation-textarea')
+			.should('not.have.attr', 'disabled');
+		cy.cGet('.cool-annotation').last().find('.modify-annotation .cool-annotation-textarea')
+			.type('threaded comment', {force: true});
+		cy.cGet('.cool-annotation').last().find('[value="Save"]').click({force: true});
+		cy.cGet('#comment-container-2').should('exist');
+		cy.getFrameWindow().then(win => { helper.processToIdle(win); });
+
+		// Create a new sheet and switch to it, so we're not on the sheet with comments.
+		cy.cGet('#spreadsheet-toolbar #insertsheet').click();
+		calcHelper.assertNumberofSheets(2);
+
+		// Stub postMessage to capture the response.
+		cy.getFrameWindow().then(win => {
+			cy.stub(win.parent, 'postMessage').as('postMessage');
+		});
+
+		// Send Get_Comments postMessage from Sheet 2.
+		cy.getFrameWindow().then(win => {
+			const message = { 'MessageId': 'Get_Comments' };
+			win.postMessage(JSON.stringify(message), '*');
+		});
+
+		// Verify the response contains both comments from Sheet 1.
+		cy.get('@postMessage').should(stub => {
+			const calls = stub.getCalls().filter(call => {
+				try {
+					const msg = typeof call.args[0] === 'string' ? JSON.parse(call.args[0]) : call.args[0];
+					return msg.MessageId === 'Get_Comments_Resp';
+				} catch (e) { return false; }
+			});
+			expect(calls.length, 'Get_Comments_Resp was not posted').to.be.greaterThan(0);
+			const resp = typeof calls[0].args[0] === 'string' ? JSON.parse(calls[0].args[0]) : calls[0].args[0];
+			const comments = resp.Values.Comments;
+			expect(comments.length).to.equal(2);
+			// Legacy Note: has Text, Author, DateTime; no Resolved.
+			expect(comments[0].Text).to.equal('note comment');
+			expect(comments[0]).to.have.property('Author');
+			expect(comments[0]).to.have.property('DateTime');
+			expect(comments[0]).to.not.have.property('Resolved');
+			// Threaded comment: has Text, Author, DateTime, Resolved.
+			expect(comments[1].Text).to.equal('threaded comment');
+			expect(comments[1]).to.have.property('Author');
+			expect(comments[1]).to.have.property('DateTime');
+			expect(comments[1].Resolved).to.equal('false');
+		});
+	});
+
 });
 
 describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
@@ -338,7 +400,7 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('#comment-container-1').trigger('mouseover', {force: true});
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item','Modify').click();
+		cy.cGet('#comment-menu-1-dropdown').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
 		cy.cGet('#annotation-modify-textarea-1').type(', some other text');
 		cy.cGet('#map').focus();
 		cy.cGet('.annotation-button-autosaved').should('be.visible');
@@ -367,7 +429,7 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('#comment-container-1').trigger('mouseover', {force: true});
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item','Modify').click();
+		cy.cGet('#comment-menu-1-dropdown').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
 		cy.cGet('#annotation-modify-textarea-1').type(', some other text');
 		cy.cGet('#map').focus();
 		cy.cGet('.annotation-button-autosaved').should('be.visible');
@@ -404,7 +466,7 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('#comment-container-1').trigger('mouseover', {force: true});
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item','Modify').click();
+		cy.cGet('#comment-menu-1-dropdown').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
 		cy.cGet('#annotation-modify-textarea-1').type('some other text, ');
 		cy.cGet('#map').focus();
 		cy.cGet('.annotation-button-autosaved').should('be.visible');

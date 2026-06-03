@@ -88,11 +88,6 @@
 constexpr std::chrono::microseconds SocketPoll::DefaultPollTimeoutMicroS;
 constexpr std::chrono::microseconds WebSocketHandler::InitialPingDelayMicroS;
 
-namespace ThreadChecks
-{
-    std::atomic<bool> Inhibit(false);
-}
-
 #if !MOBILEAPP
 
 std::unique_ptr<Watchdog> SocketPoll::PollWatchdog;
@@ -209,9 +204,11 @@ bool StreamSocket::socketpair(const std::chrono::steady_clock::time_point creati
     child = std::make_shared<StreamSocket>("save-child", pair[0], Socket::Type::Unix, true, HostType::Other, ReadType::NormalRead, creationTime);
     child->setNoShutdown();
     child->setClientAddress("save-child");
+    child->resetThreadOwner(); // The parent will set the owner when it inserts into its poller.
     parent = std::make_shared<StreamSocket>("save-kit-parent", pair[1], Socket::Type::Unix, true, HostType::Other, ReadType::NormalRead, creationTime);
     parent->setNoShutdown();
     parent->setClientAddress("save-parent");
+    parent->resetThreadOwner(); // The child will set the owner when it inserts into its poller.
 
     return true;
 }
@@ -324,16 +321,14 @@ namespace {
     }
 }
 
-
 SocketPoll::SocketPoll(std::string threadName)
     : _name(std::move(threadName))
     , _pollStartIndex(0)
-    , _owner(std::this_thread::get_id())
+    , _owner(ProcUtil::getThreadId())
     , _threadStarted(0)
 #if !MOBILEAPP
     , _watchdogTime(Watchdog::getDisableStamp())
 #endif
-    , _ownerThreadId(Util::getThreadId())
     , _stop(false)
     , _threadFinished(false)
     , _runOnClientThread(false)
@@ -355,7 +350,7 @@ SocketPoll::SocketPoll(std::string threadName)
 
 #if !MOBILEAPP
     if (PollWatchdog)
-        PollWatchdog->addTime(&_watchdogTime, &_ownerThreadId);
+        PollWatchdog->addTime(&_watchdogTime, &_owner);
 #endif
 }
 
@@ -377,13 +372,12 @@ void SocketPoll::checkAndReThread()
 {
     if (ThreadChecks::Inhibit)
         return; // in late shutdown
-    const std::thread::id us = std::this_thread::get_id();
+    const ProcUtil::ThreadId us = ProcUtil::getThreadId();
     if (_owner == us)
         return; // all well
     LOG_DBG("Unusual - SocketPoll used from a new thread");
 
     _owner = us;
-    _ownerThreadId = Util::getThreadId();
     for (const auto& it : _pollSockets)
         SocketThreadOwnerChange::setThreadOwner(*it, us);
     // _newSockets are adapted as they are inserted.
@@ -485,11 +479,9 @@ void SocketPoll::pollingThreadEntry()
 {
     try
     {
-        Util::setThreadName(_name);
-        _owner = std::this_thread::get_id();
-        _ownerThreadId = Util::getThreadId();
-        LOG_INF("Starting polling thread [" << _name << "] with thread affinity set to "
-                                            << Log::to_string(_owner) << '.');
+        ProcUtil::setThreadName(_name);
+        _owner = ProcUtil::getThreadId();
+        LOG_INF("Starting polling thread [" << _name << "] with thread affinity set to " << _owner);
 
         // Invoke the virtual implementation.
         pollingThread();
@@ -622,7 +614,7 @@ int SocketPoll::poll(int64_t timeoutMaxMicroS, bool justPoll)
 
                 // Update thread ownership.
                 for (auto& i : _newSockets)
-                    SocketThreadOwnerChange::setThreadOwner(*i, std::this_thread::get_id());
+                    SocketThreadOwnerChange::setThreadOwner(*i, ProcUtil::getThreadId());
 
                 // Copy the new sockets over and clear.
                 _pollSockets.insert(_pollSockets.end(), _newSockets.begin(), _newSockets.end());
@@ -1075,6 +1067,8 @@ void SocketDisposition::execute()
     ASSERT_CORRECT_SOCKET_THREAD(_socket);
     if (_socketMove)
     {
+        assert(_disposition == Type::TRANSFER);
+
         // Drop pretentions of ownership before _socketMove.
         SocketThreadOwnerChange::resetThreadOwner(*_socket);
 
@@ -1106,6 +1100,10 @@ void SocketDisposition::execute()
                                     << "] is not alive after adding transfer callback");
 
         _toPoll = nullptr;
+    }
+    else
+    {
+        assert(_disposition != Type::TRANSFER);
     }
 }
 
@@ -1560,7 +1558,7 @@ UnxSocketPath LocalServerSocket::bind()
     return std::string();
 }
 
-bool LocalServerSocket::linkTo([[maybe_unused]] std::string toPath)
+bool LocalServerSocket::linkTo([[maybe_unused]] const std::string& toPath)
 {
 #ifndef HAVE_ABSTRACT_UNIX_SOCKETS
     _linkName = toPath + "/" + _id.getName();

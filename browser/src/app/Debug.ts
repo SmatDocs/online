@@ -101,6 +101,10 @@ class DebugManager {
 	private _automatedUserQueue: string[];
 	private _automatedUserPhase: number;
 
+	// DOM touching in LayoutingTask check
+	private _domObserver: MutationObserver;
+	private _stopOnDomTouching: boolean;
+
 	constructor(map: MapInterface) {
 		this._map = map;
 		this._docLayer = null;
@@ -194,6 +198,32 @@ class DebugManager {
 
 		const servedBy = document.getElementById('served-by-cloned');
 		if (servedBy) servedBy.style.display = 'none';
+	}
+
+	private setupObserver() {
+		this._domObserver = new MutationObserver(() => {
+			app.console.error('DOM Modification outside LayoutingTask or RAF');
+			if (this._stopOnDomTouching) {
+				// eslint-disable-next-line
+				debugger;
+			}
+		});
+	}
+
+	public enterRAF() {
+		if (this._domObserver) this._domObserver.disconnect();
+	}
+
+	public exitRAF() {
+		if (this._domObserver) {
+			const config = {
+				attributes: true,
+				childList: true,
+				subtree: true,
+			};
+
+			this._domObserver.observe(app.map.getContainer(), config);
+		}
 	}
 
 	private _addDebugTool(tool: DebugTool) {
@@ -495,6 +525,18 @@ class DebugManager {
 		});
 
 		this._addDebugTool({
+			name: 'Verbose JSDialog log',
+			category: 'Logging',
+			startsOn: false,
+			onAdd: function () {
+				JSDialog.verbose = true;
+			},
+			onRemove: function () {
+				JSDialog.verbose = false;
+			},
+		});
+
+		this._addDebugTool({
 			name: 'Tile Dumping',
 			category: 'Logging',
 			startsOn: false,
@@ -541,6 +583,32 @@ class DebugManager {
 		});
 
 		this._addDebugTool({
+			name: 'DOM touching outside task',
+			category: 'Logging',
+			startsOn: true,
+			onAdd: function () {
+				self.setupObserver();
+				self.exitRAF();
+			},
+			onRemove: function () {
+				self._domObserver.disconnect();
+				delete self._domObserver;
+			},
+		});
+
+		this._addDebugTool({
+			name: 'DOM touching - breakpoint',
+			category: 'Logging',
+			startsOn: false,
+			onAdd: function () {
+				self._stopOnDomTouching = true;
+			},
+			onRemove: function () {
+				self._stopOnDomTouching = false;
+			},
+		});
+
+		this._addDebugTool({
 			name: 'Typer',
 			category: 'Functionality',
 			startsOn: false,
@@ -552,6 +620,18 @@ class DebugManager {
 			},
 			onRemove: function () {
 				clearTimeout(self._typerTimeoutId);
+			},
+		});
+
+		this._addDebugTool({
+			name: 'Test refetching tiles',
+			category: 'Functionality',
+			startsOn: false,
+			onAdd: function () {
+				BitmapTileManager.setLimitedCacheSize();
+			},
+			onRemove: function () {
+				BitmapTileManager.setDefaultCacheSize();
 			},
 		});
 

@@ -52,8 +52,6 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 	_menuItemHandlers: null,
 	_menus: null,
 	_colorPickers: null,
-	_decimal: '.',
-	_minusSign: '-',
 
 	// Responses are included in a parent container. While buttons are created, responses need to be checked.
 	// So we save the button ids and responses to check them later.
@@ -97,11 +95,11 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		this._controlHandlers['newslidelayoutentry'] = JSDialog.slideLayoutEntry;
 		this._controlHandlers['pagesizeentry'] = JSDialog.pageSizeEntry;
 		this._controlHandlers['checkbox'] = JSDialog.Checkbox;
-		this._controlHandlers['basespinfield'] = this.baseSpinField;
-		this._controlHandlers['spinfield'] = this._spinfieldControl;
-		this._controlHandlers['metricfield'] = this._metricfieldControl;
+		this._controlHandlers['basespinfield'] = JSDialog.baseSpinField;
+		this._controlHandlers['spinfield'] = JSDialog.spinfieldControl;
+		this._controlHandlers['metricfield'] = JSDialog.metricfieldControl;
 		this._controlHandlers['time'] = JSDialog.timeField;
-		this._controlHandlers['formattedfield'] = this._formattedfieldControl;
+		this._controlHandlers['formattedfield'] = JSDialog.formattedfieldControl;
 		this._controlHandlers['edit'] = JSDialog.edit;
 		this._controlHandlers['searchedit'] = JSDialog.searchEdit;
 		this._controlHandlers['formulabaredit'] = JSDialog.formulabarEdit;
@@ -114,7 +112,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		this._controlHandlers['comboboxentry'] = JSDialog.comboboxEntry;
 		this._controlHandlers['listbox'] = JSDialog.listbox;
 		this._controlHandlers['valueset'] = this._valuesetControl;
-		this._controlHandlers['fixedtext'] = this._fixedtextControl;
+		this._controlHandlers['fixedtext'] = JSDialog.fixedtextControl;
 		this._controlHandlers['linkbutton'] = this._linkButtonControl;
 		this._controlHandlers['htmlcontrol'] = this._htmlControl;
 		this._controlHandlers['expander'] = this._expanderHandler;
@@ -145,9 +143,9 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		this._controlHandlers['iconview'] = JSDialog.iconView;
 		this._controlHandlers['iconviewlist'] = JSDialog.notebookbarIconViewList;
 		this._controlHandlers['drawingarea'] = JSDialog.drawingArea;
-		this._controlHandlers['rootcomment'] = this._rootCommentControl;
-		this._controlHandlers['comment'] = this._commentControl;
-		this._controlHandlers['emptyCommentWizard'] = this._rootCommentControl;
+		this._controlHandlers['rootcomment'] = JSDialog.rootCommentControl;
+		this._controlHandlers['comment'] = JSDialog.commentControl;
+		this._controlHandlers['emptyCommentWizard'] = JSDialog.rootCommentControl;
 		this._controlHandlers['separator'] = this._separatorControl;
 		this._controlHandlers['menubutton'] = JSDialog.menubuttonControl;
 		this._controlHandlers['spinner'] = this._spinnerControl;
@@ -187,8 +185,6 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		this._expanderDepth = 0;
 
 		app.localeService.initializeNumberFormatting();
-		this._decimal = app.localeService.getDecimalSeparator();
-		this._minusSign = app.localeService.getMinusSign();
 	},
 
 	reportValidity: function() {
@@ -201,7 +197,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			if (!inputs[item].checkVisibility())
 				continue;
 
-			var value = this._parseSpinFieldValue(inputs[item].value);
+			var value = JSDialog._parseSpinFieldValue(inputs[item].value);
 			if (value !== '' && isNaN(parseFloat(value))) {
 				isValid = false;
 				inputs[item].focus();
@@ -246,28 +242,6 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		builder.postProcess(parentContainer, data);
 
 		return false;
-	},
-
-	_numericCharPattern: function() {
-		return new RegExp('[0-9\\' + this._decimal + '\\' + this._minusSign + ']');
-	},
-
-	_preventNonNumericalInput: function(e) {
-		e = e || window.event;
-		var charCode = (typeof e.which == 'undefined') ? e.keyCode : e.which;
-		var charStr = String.fromCharCode(charCode);
-		if (!charStr.match(this._numericCharPattern()) && charCode !== 13)
-			return e.preventDefault();
-
-		var value = e.target.value;
-		if (!value)
-			return;
-
-		// no dup
-		if (this._decimal === charStr || this._minusSign === charStr) {
-			if (value.indexOf(charStr) > -1)
-				return e.preventDefault();
-		}
 	},
 
 	_defaultCallbackHandlerSendMessage: function(objectType, eventType, object, data, builder) {
@@ -344,221 +318,6 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		}
 	},
 
-	_formatSpinFieldValue: function(value, unit) {
-		var str = '' + value;
-		if (this._decimal !== '.')
-			str = str.replace('.', this._decimal);
-		if (unit) {
-			var noSpace = (unit === '°' || unit === '"' || unit === '\u2033' || unit === '%');
-			return noSpace ? str + unit : str + ' ' + unit;
-		}
-		return str;
-	},
-
-	_setSpinFieldValue: function(spinfield, displayValue, numericValue) {
-		spinfield.value = displayValue;
-		var num = parseFloat(numericValue != undefined ? numericValue : this._parseSpinFieldValue(displayValue));
-		if (!isNaN(num))
-			spinfield.setAttribute('aria-valuenow', num);
-		if (displayValue && displayValue !== '' + num)
-			spinfield.setAttribute('aria-valuetext', displayValue);
-		else
-			spinfield.removeAttribute('aria-valuetext');
-	},
-
-	_parseSpinFieldValue: function(displayValue) {
-		if (!displayValue) return '';
-		var pattern = this._numericCharPattern();
-		var value = '';
-		for (var i = 0; i < displayValue.length; i++) {
-			if (displayValue[i].match(pattern))
-				value += displayValue[i];
-		}
-		if (this._decimal !== '.')
-			value = value.replace(this._decimal, '.');
-		if (this._minusSign !== '-')
-			value = value.replace(this._minusSign, '-');
-		return value;
-	},
-
-	_clampSpinFieldValue: function(container, displayValue) {
-		var value = this._parseSpinFieldValue(displayValue);
-		var num = parseFloat(value);
-		if (!isNaN(num)) {
-			if (container._min != undefined && num < container._min)
-				num = container._min;
-			if (container._max != undefined && num > container._max)
-				num = container._max;
-			value = '' + num;
-		}
-		return value;
-	},
-
-	_getStepPrecision: function(step) {
-		var str = '' + Math.abs(step);
-		var dot = str.indexOf('.');
-		return dot >= 0 ? str.length - dot - 1 : 0;
-	},
-
-	_spinFieldStep: function(div, spinfield, direction) {
-		var step = div._step || 1;
-		var min = div._min;
-		var max = div._max;
-		var unit = div._unit || '';
-		var current = parseFloat(this._parseSpinFieldValue(spinfield.value));
-		if (isNaN(current)) current = 0;
-
-		var newVal = current + direction * step;
-		var precision = this._getStepPrecision(step);
-		newVal = parseFloat(newVal.toFixed(precision));
-
-		if (min != undefined && newVal < min) newVal = min;
-		if (max != undefined && newVal > max) newVal = max;
-
-		this._setSpinFieldValue(spinfield, this._formatSpinFieldValue(newVal, unit), newVal);
-		spinfield.dispatchEvent(new Event('change'));
-	},
-
-	baseSpinField: function(parentContainer, data, builder) {
-		var controls = {};
-
-		var div = window.L.DomUtil.create('div', builder.options.cssClass + ' spinfieldcontainer', parentContainer);
-		div.id = data.id;
-		controls['container'] = div;
-
-		var spinfield = window.L.DomUtil.create('input', builder.options.cssClass + ' spinfield', div);
-		spinfield.id = data.id + '-input';
-		spinfield.type = 'text';
-		spinfield.inputMode = 'decimal';
-		spinfield.setAttribute('role', 'spinbutton');
-		spinfield.setAttribute('spellcheck', 'false');
-		spinfield.dir = document.documentElement.dir;
-		spinfield.tabIndex = '0';
-		spinfield.setAttribute('autocomplete', 'off');
-
-		if (data.label) {
-			var fixedTextData = { text: data.label, labelFor: data.id };
-			builder._fixedtextControl(parentContainer, fixedTextData, builder);
-		} else {
-			JSDialog.SetupA11yLabelForLabelableElement(parentContainer, spinfield, data, builder);
-		}
-
-		controls['spinfield'] = spinfield;
-
-		var unitStr = '';
-		if (data.unit && data.unit !== ':') {
-			unitStr = builder._unitToVisibleString(data.unit);
-		} else if (!data.unit) {
-			var textForUnits = data.text || (data.value != undefined ? '' + data.value : '');
-			if (textForUnits) {
-				var extracted = builder._extractUnits(textForUnits);
-				if (extracted)
-					unitStr = builder._unitToVisibleString(extracted);
-			}
-		}
-		div._unit = unitStr;
-		if (unitStr)
-			div.dataset.unit = unitStr;
-
-		if (data.min != undefined) {
-			div._min = data.min;
-			spinfield.setAttribute('aria-valuemin', data.min);
-		}
-
-		if (data.max != undefined) {
-			div._max = data.max;
-			spinfield.setAttribute('aria-valuemax', data.max);
-		}
-
-		div._step = data.step != undefined ? data.step : 1;
-
-		const isDisabled = data.enabled === false;
-
-		if (isDisabled) {
-			div.setAttribute('disabled', 'true');
-			spinfield.setAttribute('disabled', 'true');
-		}
-
-		spinfield.setAttribute('aria-disabled', isDisabled);
-
-		if (data.readOnly === true)
-			$(spinfield).attr('readOnly', 'true');
-
-		if (data.hidden)
-			$(spinfield).hide();
-
-		if (!window.L.Browser.cypressTest)
-			spinfield.onkeypress = window.L.bind(builder._preventNonNumericalInput, builder);
-
-		var cssClass = builder.options.cssClass;
-		var buttons = window.L.DomUtil.create('div', cssClass + ' spinfieldbuttons', div);
-		var up = window.L.DomUtil.create('button', cssClass + ' spinfieldbutton-up', buttons);
-		up.type = 'button';
-		up.tabIndex = -1;
-		up.setAttribute('aria-label', _('Increment value'));
-		var down = window.L.DomUtil.create('button', cssClass + ' spinfieldbutton-down', buttons);
-		down.type = 'button';
-		down.tabIndex = -1;
-		down.setAttribute('aria-label', _('Decrement value'));
-
-		if (isDisabled) {
-			up.setAttribute('disabled', 'true');
-			down.setAttribute('disabled', 'true');
-		}
-
-		// With native <input type="number"> the browser's built-in spin
-		// buttons followed the input's disabled state automatically. Our
-		// custom buttons need explicit synchronization.
-		JSDialog.SynchronizeDisabledState(div, [spinfield, up, down]);
-
-		up.addEventListener('mousedown', function(e) { e.preventDefault(); });
-		down.addEventListener('mousedown', function(e) { e.preventDefault(); });
-
-		up.addEventListener('click', function() {
-			builder._spinFieldStep(div, spinfield, 1);
-		});
-		down.addEventListener('click', function() {
-			builder._spinFieldStep(div, spinfield, -1);
-		});
-
-		spinfield.addEventListener('keydown', function(e) {
-			var ctrlKey = (window.L.Browser.mac || window.ThisIsTheiOSApp) ? e.metaKey : e.ctrlKey;
-			if (e.key === 'ArrowUp') {
-				e.preventDefault();
-				builder._spinFieldStep(div, spinfield, 1);
-			} else if (e.key === 'ArrowDown') {
-				e.preventDefault();
-				builder._spinFieldStep(div, spinfield, -1);
-			} else if (e.key === 'Home' && ctrlKey && div._min != undefined) {
-				e.preventDefault();
-				var unit = div._unit || '';
-				builder._setSpinFieldValue(spinfield, builder._formatSpinFieldValue(div._min, unit), div._min);
-				spinfield.dispatchEvent(new Event('change'));
-			} else if (e.key === 'End' && ctrlKey && div._max != undefined) {
-				e.preventDefault();
-				var unit = div._unit || '';
-				builder._setSpinFieldValue(spinfield, builder._formatSpinFieldValue(div._max, unit), div._max);
-				spinfield.dispatchEvent(new Event('change'));
-			}
-		});
-
-		return controls;
-	},
-
-	listenNumericChanges: function (data, builder, controls, customCallback) {
-		controls.spinfield.addEventListener('change', function() {
-			if (controls.container.hasAttribute('disabled'))
-				return;
-			var value = builder._clampSpinFieldValue(controls.container, this.value);
-			if (customCallback)
-				customCallback();
-			else {
-				builder.callback('spinfield', 'change', controls.container, value, builder);
-				builder.callback('spinfield', 'value', controls.container, value, builder);
-			}
-		});
-	},
-
 	_setupHandlers: function (controlElement, handlers) {
 		if (handlers) {
 			for (var i = 0; i < handlers.length; ++i) {
@@ -617,20 +376,6 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (text.endsWith('…'))
 			text = text.slice(0, -1);
 		return text.replace('~', '');
-	},
-
-	_extractUnits: function(text) {
-		if (!text)
-			return '';
-
-		return text.replace(/[\d.-]/g, '').trim();
-	},
-
-	_cleanValueFromUnits: function(text) {
-		if (!text)
-			return '';
-
-		return text.replace(/[^\d.-]/g, '').trim();
 	},
 
 	_gradientStyleToLabel: function(state) {
@@ -845,12 +590,13 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (builder.wizard) {
 			var that = this;
 			var functionName = data.functionName;
-			$(rightDiv).click(() => {
+			$(rightDiv).click(e => {
+				e.stopPropagation();
 				builder.wizard.goLevelDown(mainContainer);
 				if (contentNode.onshow)
 					contentNode.onshow();
 			});
-			$(leftDiv).click(() => {
+			$(sectionTitle).click(() => {
 				if (functionName !== '') {
 					app.socket.sendMessage('completefunction name=' + functionName);
 					that.map.fire('closemobilewizard');
@@ -1389,78 +1135,6 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		return null;
 	},
 
-	_spinfieldControl: function(parentContainer, data, builder, customCallback) {
-		var controls = builder._controlHandlers['basespinfield'](parentContainer, data, builder, customCallback);
-
-		var updateFunction = function() {
-			if (data.text != undefined)
-				var value = data.text;
-			else if (data.children && data.children.length)
-				value = data.children[0].text;
-
-			var numeric = builder._cleanValueFromUnits(value);
-			builder._setSpinFieldValue(controls.spinfield, builder._formatSpinFieldValue(numeric, controls.container._unit), numeric);
-		};
-
-		controls.spinfield.addEventListener('change', function() {
-			if (controls.container.hasAttribute('disabled'))
-				return;
-			var value = builder._clampSpinFieldValue(controls.container, this.value);
-			if (customCallback)
-				customCallback();
-			else
-				builder.callback('spinfield', 'set', controls.container, value, builder);
-		});
-
-		updateFunction();
-
-		return false;
-	},
-
-	_formattedfieldControl: function(parentContainer, data, builder, customCallback) {
-		var value, units, controls;
-
-		if (!data.unit && data.text) {
-			var units = data.text.split(' ');
-			if (units.length == 2) {
-				data.unit = units[1];
-			}
-		}
-
-		if (!data.unit && data.text) {
-			data.unit = builder._extractUnits(data.text.toString());
-		}
-
-		controls = builder._controlHandlers['basespinfield'](parentContainer, data, builder, customCallback);
-		if (!window.L.Browser.cypressTest && !window.L.Browser.chrome) {
-			controls.spinfield.onkeypress = window.L.bind(builder._preventNonNumericalInput, builder);
-		}
-
-		builder.listenNumericChanges(data, builder, controls, customCallback);
-
-		value = parseFloat(data.value);
-
-		builder._setSpinFieldValue(controls.spinfield, builder._formatSpinFieldValue(value, controls.container._unit), value);
-
-		return false;
-	},
-
-
-	_metricfieldControl: function(parentContainer, data, builder, customCallback) {
-		var value;
-		var controls = builder._controlHandlers['basespinfield'](parentContainer, data, builder, customCallback);
-		if (!window.L.Browser.cypressTest && !window.L.Browser.chrome) {
-			controls.spinfield.onkeypress = window.L.bind(builder._preventNonNumericalInput, builder);
-		}
-
-		builder.listenNumericChanges(data, builder, controls, customCallback);
-
-		value = parseFloat(data.value);
-		builder._setSpinFieldValue(controls.spinfield, builder._formatSpinFieldValue(value, controls.container._unit), value);
-
-		return false;
-	},
-
 	_linkButtonControl: function(parentContainer, data, builder) {
 		var buttonLink = window.L.DomUtil.create('button', builder.options.cssClass + " ui-linkbutton", parentContainer);
 
@@ -1533,83 +1207,6 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		return false;
 	},
 
-	_fixedtextControl: function(parentContainer, data, builder) {
-		// Check if this label should render as static content(i.e. span) instead of interactive label
-		if (!data.labelFor || !JSDialog.GetFormControlTypesInLO().has(data.labelForType))
-			return JSDialog.StaticText(parentContainer, data, builder);
-
-		var fixedtext = window.L.DomUtil.create('label', builder.options.cssClass, parentContainer);
-
-		fixedtext.htmlFor = data.labelFor + '-input';
-
-		if (data.text)
-			fixedtext.textContent = builder._cleanText(data.text);
-		else if (data.html)
-			fixedtext.innerHTML = data.html;
-
-		var accKey = builder._getAccessKeyFromText(data.text);
-		builder._stressAccessKey(fixedtext, accKey);
-
-		const updateLabelForAttribute = function(label, labelledControl) {
-			const isLabelable = JSDialog.GetFormControlTypesInCO().has(labelledControl.nodeName);
-			const isHiddenInput = labelledControl.nodeName === 'INPUT' && labelledControl.type === 'hidden';
-
-			// For labelable element always use htmlFor
-			if (isLabelable && !isHiddenInput) {
-				labelledControl.removeAttribute('aria-labelledby');
-				labelledControl.removeAttribute('aria-label');
-				label.htmlFor = labelledControl.id;
-				return;
-			}
-
-			// For non-labelable element or hidden input always use aria-labelledby
-			labelledControl.setAttribute('aria-labelledby', label.id);
-			label.removeAttribute('for');
-		};
-
-		app.layoutingService.appendLayoutingTask(function () {
-			if (!data.labelFor)
-				return;
-
-			var labelledControl = document.getElementById(data.labelFor);
-			if (labelledControl) {
-				var target = labelledControl;
-				var input = labelledControl.querySelector('input');
-				if (input)
-					target = input;
-				var select = labelledControl.querySelector('select');
-				if (select)
-					target = select;
-
-				builder._setAccessKey(target, accKey);
-			}
-
-			// we need to schedule it again as some elements are not yet available
-			// i.e. pop-ups: Double click on Chart->Sidebar->Colors
-			app.layoutingService.appendLayoutingTask(function () {
-				var targetElement = document.getElementById(data.labelFor + '-input-' + builder.options.suffix)
-					|| document.getElementById(data.labelFor + '-input')
-					|| document.getElementById(data.labelFor);
-
-				// Reference label to target element correctly
-				if (targetElement)
-					updateLabelForAttribute(fixedtext, targetElement);
-			});
-		});
-
-		fixedtext.id = data.id;
-		if (data.style && data.style.length) {
-			window.L.DomUtil.addClass(fixedtext, data.style);
-		} else {
-			window.L.DomUtil.addClass(fixedtext, 'ui-text');
-		}
-
-		if (data.hidden)
-			$(fixedtext).hide();
-
-		return false;
-	},
-
 	_separatorControl: function(parentContainer, data, builder) {
 		if (data.orientation && data.orientation === 'vertical') {
 			var separator = window.L.DomUtil.create('div', builder.options.cssClass + ' ui-separator vertical', parentContainer);
@@ -1666,133 +1263,6 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			$(container).hide();
 
 		return false;
-	},
-
-	_createComment: function(container, data) {
-		// Create annotation copy and add it into the container.
-		container.appendChild(data.annotation.sectionProperties.container);
-
-		data.annotation.show();
-		data.annotation.update();
-		data.annotation.setExpanded();
-	},
-
-	_rootCommentControl: function(parentContainer, data, builder) {
-
-		if (data.type === 'emptyCommentWizard') {
-			builder._emptyCommentWizard(parentContainer, data, builder);
-			return;
-		}
-
-		var mainContainer = document.getElementById('explorable-entry level-' + builder._currentDepth + ' ' + data.id);
-		if (!mainContainer)
-			mainContainer = window.L.DomUtil.create('div', 'ui-explorable-entry level-' + builder._currentDepth + ' ' + builder.options.cssClass, parentContainer);
-
-		mainContainer.id = 'explorable-entry level-' + builder._currentDepth + ' ' + data.id;
-
-		var container = document.getElementById(data.id);
-		if (!container)
-			container = window.L.DomUtil.create('div',  'ui-header cool-annotation-header level-' + builder._currentDepth + ' ' + builder.options.cssClass + ' ui-widget', mainContainer);
-
-		container.annotation = data.annotation;
-		container.id = data.id;
-		builder._createComment(container, data);
-		if (data.children.length > 1 && mainContainer.id !== 'comment-thread' + data.id)
-		{
-			var numberOfReplies = data.children.length - 1;
-			if (numberOfReplies > 0)
-			{
-				var replyCountNode = document.getElementById('reply-count-node-' + data.id);
-
-				if (!replyCountNode)
-					replyCountNode = window.L.DomUtil.create('div','cool-annotation-reply-count cool-annotation-content', $(container).find('.cool-annotation-content-wrapper')[0]);
-
-				replyCountNode.id = 'reply-count-node-' + data.id;
-				replyCountNode.style.display = 'block';
-
-				var replyCountText;
-				if (numberOfReplies === 1) {
-					replyCountText = numberOfReplies + ' ' + _('reply');
-				}
-				else {
-					replyCountText = numberOfReplies + ' ' + _('replies');
-				}
-				$(replyCountNode).text(replyCountText);
-			}
-
-			var childContainer = document.getElementById('comment-thread' + data.id);
-
-			if (!childContainer)
-				childContainer = window.L.DomUtil.create('div', 'ui-content level-' + builder._currentDepth + ' ' + builder.options.cssClass, mainContainer);
-
-			childContainer.id = 'comment-thread' + data.id;
-			childContainer.title = _('Comment');
-
-			$(childContainer).hide();
-
-			if (builder.wizard) {
-				if ($(container).find('.cool-annotation-menubar').length > 0)
-					$(container).find('.cool-annotation-menubar')[0].style.display = 'none';
-
-				var arrowSpan = container.querySelector('[id=\'arrow span ' + data.id + '\']');
-
-				if (!arrowSpan)
-					arrowSpan = window.L.DomUtil.create('span','sub-menu-arrow', $(container).find('.cool-annotation-content-wrapper')[0]);
-
-				arrowSpan.style.display = 'block';
-				arrowSpan.textContent = '>';
-				arrowSpan.style.padding = '0px';
-				arrowSpan.id = 'arrow span ' + data.id;
-
-				$(container).find('.cool-annotation')[0].onclick = function() {
-					builder.wizard.goLevelDown(mainContainer);
-					childContainer.style.display = 'block';
-					if (!childContainer.childNodes.length)
-						builder.build(childContainer, data.children);
-				};
-
-				var backButton = document.getElementById('mobile-wizard-back');
-
-				backButton.onclick = function () {
-					if (backButton.className !== 'close-button') {
-						if (!mainContainer.childNodes.length)
-							builder.build(mainContainer, data);
-						if (data.type === 'rootcomment') {
-							var temp = document.getElementById('comment-thread' + data.id);
-							if (temp)
-								temp.style.display = 'block';
-						}
-					}
-				};
-			}
-		}
-
-		$(container).find('.cool-annotation')[0].addEventListener('click', function() {
-			app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).highlightComment(data.annotation);
-		});
-		return false;
-	},
-
-	_commentControl: function(parentContainer, data, builder) {
-		builder._createComment(parentContainer, data, false);
-		return false;
-	},
-
-	_emptyCommentWizard: function(parentContainer, data, builder) {
-		window.L.DomUtil.addClass(parentContainer, 'content-has-no-comments');
-		var emptyCommentWizard = window.L.DomUtil.create('figure', 'empty-comment-wizard-container', parentContainer);
-		var imgNode = window.L.DomUtil.create('img', 'empty-comment-wizard-img', emptyCommentWizard);
-		app.LOUtil.setImage(imgNode, 'lc_showannotations.svg', builder.map);
-		imgNode.alt = data.text;
-
-		var textNode = window.L.DomUtil.create('figcaption', 'empty-comment-wizard', emptyCommentWizard);
-		textNode.innerText = data.text;
-		window.L.DomUtil.create('br', 'empty-comment-wizard', textNode);
-		if (app.isCommentEditingAllowed()) {
-			var linkNode = window.L.DomUtil.create('div', 'empty-comment-wizard-link', textNode);
-			linkNode.innerText = _('Insert Comment');
-			linkNode.onclick = builder.map.insertComment.bind(builder.map);
-		}
 	},
 
 	// Create a DOM node with an identifiable parent class
@@ -1915,7 +1385,21 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			else if (hasImage !== false){
 				if (data.icon) {
 					buttonImage = window.L.DomUtil.create('img', '', button);
-					this._isStringCloseToURL(data.icon) ? buttonImage.src = data.icon : app.LOUtil.setImage(buttonImage, data.icon, builder.map);
+					if (this._isStringCloseToURL(data.icon)) {
+						buttonImage.src = data.icon;
+					} else {
+						app.LOUtil.setImage(buttonImage, data.icon, builder.map);
+						// Fall back to base64 PNG if the SVG is not available.
+						// checkIfImageExists sets display:none on error, so
+						// restore it when substituting the fallback image.
+						if (data.image) {
+							buttonImage.onerror = function() {
+								buttonImage.onerror = null;
+								buttonImage.src = data.image;
+								buttonImage.style.display = '';
+							};
+						}
+					}
 				}
 				else if (data.image) {
 					buttonImage = window.L.DomUtil.create('img', '', button);
@@ -2041,14 +1525,16 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			controls['label'] = span;
 		}
 
-		const hasPopUp = hasPopupRole || JSDialog.IsDialogButton(id, data.command) || JSDialog.IsDropdownButton(id, data.command);
+		const isDialogButton = JSDialog.IsDialogButton(id, data.command);
+		const hasPopUp = hasPopupRole || isDialogButton || JSDialog.IsDropdownButton(id, data.command);
 
 		if (hasPopUp) {
-			button.setAttribute('aria-expanded', false);
-			if (JSDialog.IsDialogButton(id, data.command))
+			if (isDialogButton) {
 				button.setAttribute('aria-haspopup', 'dialog');
-			else
+			} else {
 				button.setAttribute('aria-haspopup', true);
+				button.setAttribute('aria-expanded', false);
+			}
 		}
 
 		JSDialog.SetupA11yLabelForNonLabelableElement(button, data, builder);
@@ -2125,8 +1611,11 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 					}
 				});
 
+				const closemenuParentId = parentContainer.id;
 				div.closeDropdown = function() {
-					builder.callback('toolbox', 'closemenu', parentContainer, data.command, builder);
+					builder.callback('toolbox', 'closemenu',
+						closemenuParentId ? {id: closemenuParentId} : parentContainer,
+						data.command, builder);
 
 					if (shouldArrowbackgroundButton) {
 						arrowbackground.setAttribute('aria-expanded', 'false');
@@ -2400,8 +1889,8 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			}
 		};
 
-		builder._spinfieldControl(content, rowsData, builder, callbackFunction);
-		builder._spinfieldControl(content, colsData, builder, callbackFunction);
+		JSDialog.spinfieldControl(content, rowsData, builder, callbackFunction);
+		JSDialog.spinfieldControl(content, colsData, builder, callbackFunction);
 
 		var buttonData = { text: _('Insert Table') };
 		JSDialog.pushButton(content, buttonData, builder, function() {
@@ -2494,9 +1983,9 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 
 			var currentText = this._cleanText(data.text);
 			if (isSpinField && control.parentElement._unit)
-				currentText = this._formatSpinFieldValue(currentText, control.parentElement._unit);
+				currentText = JSDialog._formatSpinFieldValue(currentText, control.parentElement._unit);
 			if (isSpinField)
-				this._setSpinFieldValue(control, currentText);
+				JSDialog._setSpinFieldValue(control, currentText);
 			else
 				control.value = currentText;
 			if (data.selection) {
@@ -2605,6 +2094,11 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		if (!parent)
 			return;
 
+		// Don't rebuild a tree view while inline cell editing is active;
+		// the backend will send an up-to-date state after editend.
+		if (control.querySelector('.ui-treeview-inline-edit'))
+			return;
+
 		// Restore expander depth so heading levels are correct when
 		// rebuilding a nested expander on-demand (see _expanderHandler).
 		var savedExpanderDepth = this._expanderDepth;
@@ -2613,6 +2107,7 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 		}
 
 		var scrollTop = control.scrollTop;
+		var userHidden = control.classList.contains('user-hidden');
 		var focusedElement = document.activeElement;
 		var focusedElementInDialog = focusedElement ? container.querySelector('[id=\'' + focusedElement.id + '\']') : null;
 		var focusedId = focusedElementInDialog ? focusedElementInDialog.id : null;
@@ -2641,6 +2136,8 @@ window.L.Control.JSDialogBuilder = window.L.Control.extend({
 			newControl.scrollTop = scrollTop;
 			newControl.style.gridColumn = backupGridColSpan;
 			newControl.style.gridRow = backupGridRowSpan;
+			if (userHidden)
+				window.L.DomUtil.addClass(newControl, 'user-hidden');
 
 			// todo: is that needed? should be in widget impl?
 			if (data.has_default === true && (data.type === 'pushbutton' || data.type === 'okbutton')) {

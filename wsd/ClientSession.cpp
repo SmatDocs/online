@@ -36,7 +36,12 @@
 #include <wsd/COOLWSD.hpp>
 #include <wsd/DocumentBroker.hpp>
 #include <wsd/FileServer.hpp>
+#if !MOBILEAPP
+#include <wsd/AIChatSession.hpp>
+#endif
 #include <wsd/TileDesc.hpp>
+
+#include <common/base64.hpp>
 
 #include <Poco/JSON/Array.h>
 #include <Poco/JSON/Parser.h>
@@ -127,12 +132,16 @@ ClientSession::ClientSession(const std::shared_ptr<ProtocolHandlerInterface>& ws
     // client's cool, and for its dummy thread.
     TraceEvent::emitOneRecordingIfEnabled(
         R"({"name":"process_name","ph":"M","args":{"name":"cool-)" + id + R"("},"pid":)" +
-        std::to_string(Util::getProcessId() + SYNTHETIC_COOL_PID_OFFSET) + ",\"tid\":1},\n");
+        std::to_string(ProcUtil::getProcessId() + SYNTHETIC_COOL_PID_OFFSET) + ",\"tid\":1},\n");
     TraceEvent::emitOneRecordingIfEnabled(
         R"({"name":"thread_name","ph":"M","args":{"name":"JS"},"pid":)" +
-        std::to_string(Util::getProcessId() + SYNTHETIC_COOL_PID_OFFSET) + ",\"tid\":1},\n");
+        std::to_string(ProcUtil::getProcessId() + SYNTHETIC_COOL_PID_OFFSET) + ",\"tid\":1},\n");
 
     _browserSettingsJSON = new Poco::JSON::Object();
+
+#if !MOBILEAPP
+    _aiChat = std::make_unique<AIChatSession>(*this);
+#endif
 }
 
 // Can't take a reference in the constructor.
@@ -567,531 +576,6 @@ makeSignatureActionSession(std::shared_ptr<ClientSession> clientSession,
 }
 } // namespace
 
-void ClientSession::sendAIChatResult(bool success, const std::string& text,
-                                     const std::string& requestId)
-{
-    Poco::JSON::Object::Ptr result = new Poco::JSON::Object();
-    result->set("success", success);
-    if (success)
-        result->set("content", text);
-    else
-        result->set("error", text);
-    result->set("requestId", requestId);
-
-    std::ostringstream oss;
-    result->stringify(oss);
-    sendTextFrame("aichatresult: " + oss.str());
-}
-
-std::string ClientSession::mapAIHttpStatusToError(
-    http::StatusCode statusCode, const std::string& reasonPhrase,
-    const std::string& context)
-{
-    switch (statusCode)
-    {
-        case http::StatusCode::BadRequest:
-            return context.empty() ? "Invalid request"
-                                   : "Invalid " + context + " request";
-        case http::StatusCode::Unauthorized:     return "Invalid API key";
-        case http::StatusCode::Forbidden:        return "API key lacks permissions";
-        case http::StatusCode::TooManyRequests:  return "Rate limited - please wait a moment and retry";
-        case http::StatusCode::InternalServerError: return "API server error - try again later";
-        case http::StatusCode::ServiceUnavailable:  return "Service temporarily unavailable";
-        default:
-        {
-            std::string err = "API error (";
-            err.append(std::to_string(static_cast<int>(statusCode)));
-            err.append("): ");
-            err.append(reasonPhrase);
-            return err;
-        }
-    }
-}
-
-static const std::string AI_SYSTEM_PROMPT =
-    "You are a helpful assistant for Collabora Online. "
-    "Help users with their documents — answering questions, suggesting edits, "
-    "rewriting text, and more. When the user shares selected text from their document, "
-    "provide relevant help with that text. When no selected text is provided, answer "
-    "general questions about documents, formatting, writing, and the application. "
-    "When providing rewritten or edited text, return it in markdown format preserving "
-    "the original formatting structure. IMPORTANT: Return the markdown text directly "
-    "without wrapping it in code fences (do NOT use ```markdown or ``` blocks). "
-    "Just return the raw markdown content. Be concise and helpful.";
-
-bool ClientSession::handleAIChatAction(const std::string& firstLine)
-{
-    static constexpr size_t MAX_AI_PAYLOAD_SIZE = 5 * 1024 * 1024; // 5MB
-    static constexpr size_t MAX_AI_MESSAGE_LENGTH = 100 * 1024; // 100KB per message
-    static constexpr unsigned MAX_AI_MESSAGES = 50;
-
-    // Extract JSON payload after "aichat: "
-    const std::string jsonPayload = firstLine.substr(strlen("aichat: "));
-
-    if (jsonPayload.size() > MAX_AI_PAYLOAD_SIZE)
-    {
-        sendAIChatResult(false, "Request too large", "");
-        return true;
-    }
-
-    Poco::JSON::Object::Ptr requestObj = new Poco::JSON::Object();
-    if (!JsonUtil::parseJSON(jsonPayload, requestObj))
-    {
-        sendAIChatResult(false, "Invalid request format", "");
-        return true;
-    }
-
-    std::string requestId;
-    JsonUtil::findJSONValue(requestObj, "requestId", requestId);
-
-    std::string docType;
-    JsonUtil::findJSONValue(requestObj, "docType", docType);
-
-    if (docType != "text" && docType != "spreadsheet" && docType != "presentation" && docType != "drawing")
-        docType.clear();
-
-    Poco::JSON::Array::Ptr messages = requestObj->getArray("messages");
-    if (!messages || messages->size() == 0)
-    {
-        sendAIChatResult(false, "No messages provided", requestId);
-        return true;
-    }
-
-    // Build system prompt with document-type context
-    std::string systemPrompt = AI_SYSTEM_PROMPT;
-    if (!docType.empty())
-        systemPrompt += " You are currently working with a " + docType + " document.";
-
-    if (docType == "spreadsheet")
-        systemPrompt +=
-            " When referencing specific spreadsheet cells in your responses, "
-            "format them as clickable links using this pattern: [B2](cell://B2), "
-            "where the column letters come from the header row and the row number from the Row column.";
-
-    Poco::JSON::Array::Ptr sanitizedMessages = new Poco::JSON::Array();
-    Poco::JSON::Object::Ptr systemMsg = new Poco::JSON::Object();
-    systemMsg->set("role", "system");
-    systemMsg->set("content", systemPrompt);
-    sanitizedMessages->add(systemMsg);
-
-    for (unsigned i = 0; i < messages->size(); ++i)
-    {
-        auto msg = messages->getObject(i);
-        if (!msg)
-            continue;
-
-        std::string role;
-        JsonUtil::findJSONValue(msg, "role", role);
-
-        // Only allow user and assistant roles
-        if (role != "user" && role != "assistant")
-            continue;
-
-        std::string content;
-        JsonUtil::findJSONValue(msg, "content", content);
-        if (content.size() > MAX_AI_MESSAGE_LENGTH)
-        {
-            sendAIChatResult(false, "Message too long", requestId);
-            return true;
-        }
-
-        sanitizedMessages->add(msg);
-    }
-
-    // Trim to most recent messages if over limit (keep system prompt at index 0)
-    while (sanitizedMessages->size() > MAX_AI_MESSAGES + 1)
-        sanitizedMessages->remove(1);
-
-    // Get AI provider settings
-    const std::string apiKey = getAIProviderAPIKey();
-    const std::string model = getAIProviderModel();
-    std::string baseUrl = getAIProviderURL();
-
-    if (apiKey.empty() || model.empty() || baseUrl.empty())
-    {
-        sendAIChatResult(false, "AI settings not configured", requestId);
-        return true;
-    }
-
-    if (!baseUrl.empty() && baseUrl.back() == '/')
-        baseUrl.pop_back();
-
-    LOG_DBG("AIChatAction: request [" << requestId << "] with "
-            << sanitizedMessages->size() << " messages, model: " << model);
-
-    std::string requestUrl = baseUrl;
-    requestUrl.append("/v1/chat/completions");
-
-    // Build HTTP payload with model and messages
-    Poco::JSON::Object::Ptr payload = new Poco::JSON::Object();
-    payload->set("model", model);
-    payload->set("messages", sanitizedMessages);
-
-    Poco::JSON::Object::Ptr promptProp = new Poco::JSON::Object();
-    promptProp->set("type", "string");
-    promptProp->set("description", "A detailed description of the image to generate");
-
-    Poco::JSON::Object::Ptr properties = new Poco::JSON::Object();
-    properties->set("prompt", promptProp);
-
-    Poco::JSON::Array::Ptr required = new Poco::JSON::Array();
-    required->add("prompt");
-
-    Poco::JSON::Object::Ptr parameters = new Poco::JSON::Object();
-    parameters->set("type", "object");
-    parameters->set("properties", properties);
-    parameters->set("required", required);
-
-    Poco::JSON::Object::Ptr function = new Poco::JSON::Object();
-    function->set("name", "generate_image");
-    function->set("description",
-                    "Generate an image based on the user's description. Call this when the "
-                    "user asks to create, draw, generate, sketch, or make an image or picture.");
-    function->set("parameters", parameters);
-
-    Poco::JSON::Object::Ptr tool = new Poco::JSON::Object();
-    tool->set("type", "function");
-    tool->set("function", function);
-
-    Poco::JSON::Array::Ptr tools = new Poco::JSON::Array();
-    tools->add(tool);
-
-    payload->set("tools", tools);
-
-    std::ostringstream payloadStream;
-    payload->stringify(payloadStream);
-    std::string payloadStr = payloadStream.str();
-
-    std::shared_ptr<http::Session> httpSession = http::Session::create(requestUrl);
-    if (!httpSession)
-    {
-        LOG_WRN("AIChatAction: failed to create HTTP session");
-        sendAIChatResult(false, "Failed to create HTTP session", requestId);
-        return true;
-    }
-
-    httpSession->setTimeout(std::chrono::seconds(60));
-
-    auto clientSessionPtr = client_from_this();
-
-    auto sendResult = [clientSessionPtr, requestId](bool success, const std::string& resultText)
-    { clientSessionPtr->sendAIChatResult(success, resultText, requestId); };
-
-    http::Session::FinishedCallback finishedCallback =
-        [clientSessionPtr, requestId, sendResult](const std::shared_ptr<http::Session>& session)
-    {
-        clientSessionPtr->_activeAIChatSession.reset();
-
-        const std::shared_ptr<const http::Response> httpResponse = session->response();
-        const http::StatusCode statusCode = httpResponse->statusLine().statusCode();
-
-        if (statusCode == http::StatusCode::None)
-        {
-            sendResult(false, "Request timeout");
-            return;
-        }
-
-        if (statusCode != http::StatusCode::OK)
-        {
-            const std::string errorMessage = mapAIHttpStatusToError(
-                statusCode, httpResponse->statusLine().reasonPhrase());
-            sendResult(false, errorMessage);
-            return;
-        }
-
-        const std::string& responseBody = httpResponse->getBody();
-        Poco::JSON::Object::Ptr responseObject = new Poco::JSON::Object();
-        if (!JsonUtil::parseJSON(responseBody, responseObject))
-        {
-            sendResult(false, "No response from AI");
-            return;
-        }
-
-        Poco::JSON::Array::Ptr choices = responseObject->getArray("choices");
-        if (!choices || choices->size() == 0)
-        {
-            sendResult(false, "No response from AI");
-            return;
-        }
-
-        Poco::JSON::Object::Ptr choice = choices->getObject(0);
-        if (!choice)
-        {
-            sendResult(false, "No response from AI");
-            return;
-        }
-
-        std::string finishReason;
-        JsonUtil::findJSONValue(choice, "finish_reason", finishReason);
-
-        Poco::JSON::Object::Ptr message = choice->getObject("message");
-        if (!message)
-        {
-            sendResult(false, "No response from AI");
-            return;
-        }
-
-        // Check for tool calls (LLM decided to generate an image)
-        Poco::JSON::Array::Ptr toolCalls = message->getArray("tool_calls");
-        if (toolCalls && toolCalls->size() > 0)
-        {
-            Poco::JSON::Object::Ptr call = toolCalls->getObject(0);
-            if (call)
-            {
-                Poco::JSON::Object::Ptr fn = call->getObject("function");
-                if (fn)
-                {
-                    std::string fnName;
-                    JsonUtil::findJSONValue(fn, "name", fnName);
-                    if (fnName == "generate_image")
-                    {
-                        std::string argsStr;
-                        JsonUtil::findJSONValue(fn, "arguments", argsStr);
-
-                        std::string imagePrompt;
-                        Poco::JSON::Object::Ptr argsObj = new Poco::JSON::Object();
-                        if (JsonUtil::parseJSON(argsStr, argsObj))
-                        {
-                            JsonUtil::findJSONValue(argsObj, "prompt", imagePrompt);
-                        }
-
-                        if (imagePrompt.empty())
-                        {
-                            sendResult(false, "Image generation failed: no prompt from model");
-                            return;
-                        }
-
-                        clientSessionPtr->handleAIImageGeneration(imagePrompt, requestId);
-                        return;
-                    }
-                }
-            }
-        }
-
-        std::string result;
-        std::string reasoning;
-        JsonUtil::findJSONValue(message, "content", result);
-        JsonUtil::findJSONValue(message, "reasoning", reasoning);
-
-        if (result.empty())
-        {
-            if (!reasoning.empty())
-            {
-                sendResult(false,
-                           "This model returned only internal reasoning and no output. Try a "
-                           "different model or shorter input.");
-                return;
-            }
-            if (finishReason == "length")
-            {
-                sendResult(false, "The model ran out of tokens before producing output. Try a "
-                                  "shorter input or a model with a larger output budget.");
-                return;
-            }
-
-            sendResult(false, "No response from AI");
-            return;
-        }
-
-        sendResult(true, result);
-    };
-
-    httpSession->setFinishedHandler(std::move(finishedCallback));
-
-    http::Session::ConnectFailCallback connectFailCallback =
-        [clientSessionPtr, sendResult](const std::shared_ptr<http::Session>& /*session*/)
-    {
-        clientSessionPtr->_activeAIChatSession.reset();
-        sendResult(false, "Network error - please check your connection");
-    };
-    httpSession->setConnectFailHandler(std::move(connectFailCallback));
-
-    http::Request httpRequest(Poco::URI(requestUrl).getPathAndQuery());
-    httpRequest.setVerb(http::Request::VERB_POST);
-    httpRequest.set("Content-Type", "application/json");
-    std::string authHeader = "Bearer ";
-    authHeader.append(apiKey);
-    httpRequest.set("Authorization", std::move(authHeader));
-    httpRequest.setBody(payloadStr, "application/json");
-
-    LOG_DBG("AIChatAction: sending request [" << requestId << "] to " << requestUrl);
-
-    _activeAIChatSession = httpSession;
-    std::shared_ptr<DocumentBroker> docBroker = getDocumentBroker();
-    httpSession->asyncRequest(httpRequest, docBroker->getPoll());
-    return true;
-}
-
-bool ClientSession::handleAIChatCancel(const std::string& firstLine)
-{
-    const std::string cancelRequestId = firstLine.substr(strlen("aichatcancel: "));
-    LOG_DBG("AIChatCancel: cancelling request [" << cancelRequestId << ']');
-
-    if (_activeAIChatSession)
-    {
-        _activeAIChatSession->asyncShutdown();
-        _activeAIChatSession.reset();
-    }
-    return true;
-}
-
-bool ClientSession::handleAIImageGeneration(const std::string& prompt,
-                                             const std::string& requestId)
-{
-    LOG_DBG("AIImageGeneration: request [" << requestId
-            << "], prompt: " << prompt);
-
-    // Get AI image provider settings (fall back to chat provider)
-    std::string apiKey = getAIImageProviderAPIKey();
-    if (apiKey.empty())
-        apiKey = getAIProviderAPIKey();
-    std::string baseUrl = getAIImageProviderURL();
-    if (baseUrl.empty())
-        baseUrl = getAIProviderURL();
-
-    if (apiKey.empty() || baseUrl.empty())
-    {
-        sendAIChatResult(false, "AI settings not configured", requestId);
-        return true;
-    }
-
-    if (!baseUrl.empty() && baseUrl.back() == '/')
-        baseUrl.pop_back();
-
-    std::string requestUrl = baseUrl;
-    requestUrl.append("/v1/images/generations");
-
-    // Build HTTP payload
-    Poco::JSON::Object::Ptr payload = new Poco::JSON::Object();
-    payload->set("prompt", prompt);
-    payload->set("size", "1024x1024");
-    payload->set("n", 1);
-    payload->set("response_format", "b64_json");
-
-    const std::string imageModel = getAIImageModel();
-    if (imageModel.empty())
-    {
-        sendAIChatResult(false, "Image model not configured", requestId);
-        return true;
-    }
-    payload->set("model", imageModel);
-
-    std::ostringstream payloadStream;
-    payload->stringify(payloadStream);
-    std::string payloadStr = payloadStream.str();
-
-    std::shared_ptr<http::Session> httpSession = http::Session::create(requestUrl);
-    if (!httpSession)
-    {
-        LOG_WRN("AIImageGeneration: failed to create HTTP session");
-        sendAIChatResult(false, "Failed to create HTTP session", requestId);
-        return true;
-    }
-
-    httpSession->setTimeout(std::chrono::seconds(60));
-
-    // Send image result via aichatresult with imageData field
-    auto clientSessionPtr = client_from_this();
-    auto sendImageResult = [clientSession = clientSessionPtr, requestId](
-                               bool success, const std::string& imageData,
-                               const std::string& error)
-    {
-        Poco::JSON::Object::Ptr result = new Poco::JSON::Object();
-        result->set("success", success);
-        if (success)
-            result->set("imageData", imageData);
-        else
-            result->set("error", error);
-        result->set("requestId", requestId);
-
-        std::ostringstream oss;
-        result->stringify(oss);
-        clientSession->sendTextFrame("aichatresult: " + oss.str());
-    };
-
-    http::Session::FinishedCallback finishedCallback =
-        [clientSessionPtr, sendImageResult](const std::shared_ptr<http::Session>& session)
-    {
-        clientSessionPtr->_activeAIChatSession.reset();
-
-        const std::shared_ptr<const http::Response> httpResponse = session->response();
-        const http::StatusCode statusCode = httpResponse->statusLine().statusCode();
-
-        if (statusCode == http::StatusCode::None)
-        {
-            sendImageResult(false, "", "Request timeout");
-            return;
-        }
-
-        if (statusCode != http::StatusCode::OK)
-        {
-            const std::string errorMessage = mapAIHttpStatusToError(
-                statusCode, httpResponse->statusLine().reasonPhrase(), "image");
-            sendImageResult(false, "", errorMessage);
-            return;
-        }
-
-        const std::string& responseBody = httpResponse->getBody();
-        Poco::JSON::Object::Ptr responseObject = new Poco::JSON::Object();
-        if (!JsonUtil::parseJSON(responseBody, responseObject))
-        {
-            sendImageResult(false, "", "Failed to parse image generation response");
-            return;
-        }
-
-        Poco::JSON::Array::Ptr dataArray = responseObject->getArray("data");
-        if (!dataArray || dataArray->size() == 0)
-        {
-            sendImageResult(false, "", "No image generated");
-            return;
-        }
-
-        Poco::JSON::Object::Ptr firstItem = dataArray->getObject(0);
-        if (!firstItem)
-        {
-            sendImageResult(false, "", "No image generated");
-            return;
-        }
-
-        std::string b64Json;
-        JsonUtil::findJSONValue(firstItem, "b64_json", b64Json);
-
-        if (b64Json.empty())
-        {
-            sendImageResult(false, "", "No image data in response");
-            return;
-        }
-
-        sendImageResult(true, b64Json, "");
-    };
-
-    httpSession->setFinishedHandler(std::move(finishedCallback));
-
-    http::Session::ConnectFailCallback connectFailCallback =
-        [clientSessionPtr, sendImageResult](const std::shared_ptr<http::Session>& /*session*/)
-    {
-        clientSessionPtr->_activeAIChatSession.reset();
-        sendImageResult(false, "", "Network error - please check your connection");
-    };
-    httpSession->setConnectFailHandler(std::move(connectFailCallback));
-
-    http::Request httpRequest(Poco::URI(requestUrl).getPathAndQuery());
-    httpRequest.setVerb(http::Request::VERB_POST);
-    httpRequest.set("Content-Type", "application/json");
-    std::string authHeader = "Bearer ";
-    authHeader.append(apiKey);
-    httpRequest.set("Authorization", std::move(authHeader));
-    httpRequest.setBody(payloadStr, "application/json");
-
-    LOG_DBG("AIImageGeneration: sending request [" << requestId << "] to "
-            << requestUrl << ", model: " << imageModel);
-
-    _activeAIChatSession = httpSession;
-    std::shared_ptr<DocumentBroker> docBroker = getDocumentBroker();
-    httpSession->asyncRequest(httpRequest, docBroker->getPoll());
-    return true;
-}
-
 bool ClientSession::handleSignatureAction(const StringVector& tokens)
 {
     // Make the HTTP session: this requires an URL
@@ -1224,15 +708,11 @@ bool ClientSession::_handleInput(const char *buffer, int length)
                     uint64_t dur;
                     if (ph == "i")
                     {
-                        COOLWSD::writeTraceEventRecording("{\"name\":"
-                                                          + name
-                                                          + R"(,"ph":"i")"
-                                                          + args
-                                                          + ",\"ts\":"
-                                                          + std::to_string(ts + _performanceCounterEpoch)
-                                                          + ",\"pid\":"
-                                                          + std::to_string(Util::getProcessId() + SYNTHETIC_COOL_PID_OFFSET)
-                                                          + ",\"tid\":1},\n");
+                        COOLWSD::writeTraceEventRecording(
+                            "{\"name\":" + name + R"(,"ph":"i")" + args + ",\"ts\":" +
+                            std::to_string(ts + _performanceCounterEpoch) + ",\"pid\":" +
+                            std::to_string(ProcUtil::getProcessId() + SYNTHETIC_COOL_PID_OFFSET) +
+                            ",\"tid\":1},\n");
                     }
                     // Should the first getTokenUInt64()'s return value really
                     // be ignored?
@@ -1240,37 +720,23 @@ bool ClientSession::_handleInput(const char *buffer, int length)
                              (static_cast<void>(getTokenUInt64(tokens[4], "id", id)),
                              getTokenUInt64(tokens[5], "tid", tid)))
                     {
-                        COOLWSD::writeTraceEventRecording("{\"name\":"
-                                                          + name
-                                                          + R"(,"ph":")"
-                                                          + ph
-                                                          + "\""
-                                                          + args
-                                                          + ",\"ts\":"
-                                                          + std::to_string(ts + _performanceCounterEpoch)
-                                                          + ",\"pid\":"
-                                                          + std::to_string(Util::getProcessId() + SYNTHETIC_COOL_PID_OFFSET)
-                                                          + ",\"tid\":"
-                                                          + std::to_string(tid)
-                                                          + ",\"id\":"
-                                                          + std::to_string(id)
-                                                          + "},\n");
+                        COOLWSD::writeTraceEventRecording(
+                            "{\"name\":" + name + R"(,"ph":")" + ph + "\"" + args + ",\"ts\":" +
+                            std::to_string(ts + _performanceCounterEpoch) + ",\"pid\":" +
+                            std::to_string(ProcUtil::getProcessId() + SYNTHETIC_COOL_PID_OFFSET) +
+                            ",\"tid\":" + std::to_string(tid) + ",\"id\":" + std::to_string(id) +
+                            "},\n");
                     }
                     else if (ph == "X" &&
                              getTokenUInt64(tokens[4], "dur", dur))
                     {
-                        COOLWSD::writeTraceEventRecording("{\"name\":"
-                                                          + name
-                                                          + R"(,"ph":"X")"
-                                                          + args
-                                                          + ",\"ts\":"
-                                                          + std::to_string(ts + _performanceCounterEpoch)
-                                                          + ",\"pid\":"
-                                                          + std::to_string(Util::getProcessId() + SYNTHETIC_COOL_PID_OFFSET)
-                                                          + ",\"tid\":1"
-                                                            ",\"dur\":"
-                                                          + std::to_string(dur)
-                                                          + "},\n");
+                        COOLWSD::writeTraceEventRecording(
+                            "{\"name\":" + name + R"(,"ph":"X")" + args + ",\"ts\":" +
+                            std::to_string(ts + _performanceCounterEpoch) + ",\"pid\":" +
+                            std::to_string(ProcUtil::getProcessId() + SYNTHETIC_COOL_PID_OFFSET) +
+                            ",\"tid\":1"
+                            ",\"dur\":" +
+                            std::to_string(dur) + "},\n");
                     }
                     else
                     {
@@ -1479,10 +945,6 @@ bool ClientSession::_handleInput(const char *buffer, int length)
         std::string count = std::to_string(docBroker->getRenderedTileCount());
         sendTextFrame("pong rendercount=" + count);
         return true;
-    }
-    else if (tokens.equals(0, "renderfont"))
-    {
-        return sendFontRendering(buffer, length, tokens, docBroker);
     }
     else if (tokens.equals(0, "status") || tokens.equals(0, "statusupdate"))
     {
@@ -1874,11 +1336,15 @@ bool ClientSession::_handleInput(const char *buffer, int length)
 #if !MOBILEAPP
     else if (tokens.equals(0, "aichat:"))
     {
-        return handleAIChatAction(firstLine);
+        return _aiChat->handleAction(firstLine);
     }
     else if (tokens.equals(0, "aichatcancel:"))
     {
-        return handleAIChatCancel(firstLine);
+        return _aiChat->handleCancel(firstLine);
+    }
+    else if (tokens.equals(0, "aichatapprove:"))
+    {
+        return _aiChat->handleApprove(firstLine);
     }
 #endif
     else if (tokens.equals(0, "resetaccesstoken"))
@@ -2147,6 +1613,46 @@ void ClientSession::uploadViewSettingsToWopiHost()
     }
 }
 
+bool ClientSession::resolveAndApplyAICredentials(Poco::JSON::Object::Ptr viewSettings,
+                                                 const Poco::JSON::Object::Ptr& userPrivateInfoObj,
+                                                 bool disableAISettings, bool& viewSettingsMutated,
+                                                 std::string& outModel)
+{
+    auto resolveField = [&](const std::string& vsKey, const std::string& upiKey,
+                            const std::string& cfgKey) -> std::string
+    {
+        std::string value;
+        if (viewSettings)
+            JsonUtil::findJSONValue(viewSettings, vsKey, value);
+        if (value.empty() && userPrivateInfoObj)
+        {
+            JsonUtil::findJSONValue(userPrivateInfoObj, upiKey, value);
+            if (!value.empty() && viewSettings)
+            {
+                LOG_INF("Migrating field [" << vsKey << "] from user private info");
+                viewSettings->set(vsKey, value);
+                viewSettingsMutated = true;
+            }
+        }
+        if (value.empty())
+            value = ConfigUtil::getConfigValue<std::string>(cfgKey, "");
+        return value;
+    };
+
+    const std::string apiKey = resolveField("aiProviderAPIKey", "AIProviderAPIKey", "ai.api_key");
+    const std::string model = resolveField("aiProviderModel", "AIProviderModel", "ai.model");
+    const std::string url = resolveField("aiProviderURL", "AIProviderURL", "ai.api_url");
+
+    setAIProviderAPIKey(apiKey);
+    setAIProviderModel(model);
+    setAIProviderURL(url);
+
+    const bool configured = ConfigUtil::getConfigValue<bool>("ai.enabled", false) &&
+                            !disableAISettings && !apiKey.empty() && !model.empty() && !url.empty();
+    outModel = configured ? model : std::string{};
+    return configured;
+}
+
 bool ClientSession::handleUpdateViewSettings(const std::string& firstLine)
 {
     const std::string jsonPayload = firstLine.substr(strlen("updateviewsettings "));
@@ -2158,22 +1664,24 @@ bool ClientSession::handleUpdateViewSettings(const std::string& firstLine)
         return true;
     }
 
-    std::string aiProviderAPIKey, aiProviderModel, aiProviderURL;
-    std::string aiImageProviderAPIKey, aiImageProviderURL, aiImageModel;
+    bool viewSettingsMutated = false;
+    std::string resolvedModel;
+    const bool aiConfigured =
+        resolveAndApplyAICredentials(viewSettings, /*userPrivateInfoObj=*/nullptr,
+                                     isDisableAISettings(), viewSettingsMutated, resolvedModel);
 
-    JsonUtil::findJSONValue(viewSettings, "aiProviderAPIKey", aiProviderAPIKey);
-    JsonUtil::findJSONValue(viewSettings, "aiProviderModel", aiProviderModel);
-    JsonUtil::findJSONValue(viewSettings, "aiProviderURL", aiProviderURL);
+    std::string aiImageProviderAPIKey, aiImageProviderURL, aiImageModel, aiImageSize;
+    std::string aiRequestTimeout;
     JsonUtil::findJSONValue(viewSettings, "aiImageProviderAPIKey", aiImageProviderAPIKey);
     JsonUtil::findJSONValue(viewSettings, "aiImageProviderURL", aiImageProviderURL);
     JsonUtil::findJSONValue(viewSettings, "aiImageModel", aiImageModel);
-
-    setAIProviderAPIKey(aiProviderAPIKey);
-    setAIProviderModel(aiProviderModel);
-    setAIProviderURL(aiProviderURL);
+    JsonUtil::findJSONValue(viewSettings, "aiImageSize", aiImageSize);
+    JsonUtil::findJSONValue(viewSettings, "aiRequestTimeout", aiRequestTimeout);
     setAIImageProviderAPIKey(aiImageProviderAPIKey);
     setAIImageProviderURL(aiImageProviderURL);
     setAIImageModel(aiImageModel);
+    setAIImageSize(aiImageSize);
+    setAIRequestTimeout(aiRequestTimeout);
 
     std::string zoteroAPIKey, signatureCert, signatureKey, signatureCa;
     JsonUtil::findJSONValue(viewSettings, "zoteroAPIKey", zoteroAPIKey);
@@ -2193,15 +1701,13 @@ bool ClientSession::handleUpdateViewSettings(const std::string& firstLine)
     viewSettings->remove("aiImageProviderURL");
     viewSettings->remove("aiImageModel");
 
-    const bool aiConfigured = !aiProviderAPIKey.empty() &&
-                              !aiProviderModel.empty() &&
-                              !aiProviderURL.empty();
     viewSettings->set("aiConfigured", aiConfigured);
+    if (aiConfigured)
+        viewSettings->set("aiModelName", resolvedModel);
 
     sendTextFrame("viewsetting: " + JsonUtil::jsonToString(viewSettings));
 
-    LOG_DBG("Updated view settings for session [" << getId()
-            << "], aiConfigured=" << aiConfigured);
+    LOG_DBG("Updated view settings for session [" << getId() << "], aiConfigured=" << aiConfigured);
     return true;
 }
 
@@ -2569,31 +2075,6 @@ bool ClientSession::getCommandValues(const char *buffer, int length, const Strin
     return forwardToChild(std::string(buffer, length), docBroker);
 }
 
-bool ClientSession::sendFontRendering(const char *buffer, int length, const StringVector& tokens,
-                                      const std::shared_ptr<DocumentBroker>& docBroker)
-{
-    std::string font, text;
-    if (tokens.size() < 2 ||
-        !getTokenString(tokens[1], "font", font))
-    {
-        return sendTextFrameAndLogError("error: cmd=renderfont kind=syntax");
-    }
-
-    getTokenString(tokens[2], "char", text);
-
-    if (docBroker->hasTileCache())
-    {
-        Blob cachedStream = docBroker->tileCache().lookupCachedStream(TileCache::StreamType::Font, font+text);
-        if (cachedStream)
-        {
-            const std::string response = "renderfont: " + tokens.cat(' ', 1) + '\n';
-            return sendBlob(response, cachedStream);
-        }
-    }
-
-    return forwardToChild(std::string(buffer, length), docBroker);
-}
-
 bool ClientSession::sendTile(const char * /*buffer*/, int /*length*/, const StringVector& tokens,
                              const std::shared_ptr<DocumentBroker>& docBroker)
 {
@@ -2758,11 +2239,6 @@ bool ClientSession::attemptLock(const std::shared_ptr<DocumentBroker>& docBroker
         sendTextFrame("lockfailed:" + failReason);
 
     return result;
-}
-
-bool ClientSession::hasQueuedMessages() const
-{
-    return _senderQueue.size() > 0;
 }
 
 void ClientSession::writeQueuedMessages(std::size_t capacity)
@@ -3081,7 +2557,13 @@ bool ClientSession::handleKitToClientMessage(const std::shared_ptr<Message>& pay
                 abortConversion(docBroker, saveAsSocket, std::move(errorKind));
                 return false;
             }
+#if !MOBILEAPP
+            else if (_aiChat->tryConsumeKitError(errorCommand, errorKind))
+            {
+                return true;
+            }
             else
+#endif
             {
                 LOG_ERR(errorCommand << " error failure: " << errorKind);
             }
@@ -3499,6 +2981,11 @@ ClientSession::handleOpenDocKitToClientMessage(const std::shared_ptr<Message>& p
     }
     else if (tokens.equals(0, "commandvalues:"))
     {
+#if !MOBILEAPP
+        if (_aiChat->tryConsumeCommandValues(payload))
+            return true;
+#endif
+
         const std::string stringJSON = payload->jsonString();
         if (!stringJSON.empty())
         {
@@ -3625,24 +3112,13 @@ ClientSession::handleOpenDocKitToClientMessage(const std::shared_ptr<Message>& p
         return status;
     }
 #endif
-    else if (tokens.equals(0, "renderfont:"))
-    {
-        std::string font, text;
-        if (tokens.size() < 3 || !getTokenString(tokens[1], "font", font))
-        {
-            LOG_ERR("Bad syntax for: " << firstLine);
-            return false;
-        }
-
-        getTokenString(tokens[2], "char", text);
-        assert(firstLine.size() < payload->size() && "Missing multiline data in renderfont");
-        docBroker->tileCache().saveStream(TileCache::StreamType::Font, font + text,
-                                          payload->data().data() + firstLine.size() + 1,
-                                          payload->data().size() - firstLine.size() - 1);
-        return forwardToClient(payload);
-    }
     else if (tokens.equals(0, "extractedlinktargets:"))
     {
+#if !MOBILEAPP
+        if (_aiChat->tryConsumeExtractedLinkTargets(payload))
+            return true;
+#endif
+
         LOG_TRC("Sending extracted link targets response.");
         if (!saveAsSocket)
             LOG_ERR("Error in extractedlinktargets: not in isConvertTo mode");
@@ -3662,6 +3138,11 @@ ClientSession::handleOpenDocKitToClientMessage(const std::shared_ptr<Message>& p
     }
     else if (tokens.equals(0, "extracteddocumentstructure:"))
     {
+#if !MOBILEAPP
+        if (_aiChat->tryConsumeExtractedDocumentStructure(payload))
+            return true;
+#endif
+
         LOG_TRC("Sending extracted document structure response.");
         if (!saveAsSocket)
             LOG_ERR("Error in extracteddocumentstructure: not in isConvertTo mode");
@@ -3681,6 +3162,11 @@ ClientSession::handleOpenDocKitToClientMessage(const std::shared_ptr<Message>& p
     }
     else if (tokens.equals(0, "transformeddocumentstructure:"))
     {
+#if !MOBILEAPP
+        if (_aiChat->tryConsumeTransformedDocumentStructure(payload))
+            return true;
+#endif
+
         LOG_TRC("Sending transformed document structure response.");
         if (!saveAsSocket)
             LOG_ERR("Error in transformeddocumentstructure: not in isConvertTo mode");
@@ -3979,11 +3465,10 @@ void ClientSession::enqueueSendMessage(const std::shared_ptr<Message>& data)
     }
 
     LOG_TRC("Enqueueing client message " << data->id());
-    const std::size_t sizeBefore = _senderQueue.size();
-    const std::size_t newSize = _senderQueue.enqueue(data);
+    const bool enqueued = _senderQueue.enqueue(data);
 
     // Track sent tile
-    if (haveWireId && sizeBefore != newSize)
+    if (haveWireId && enqueued)
         addTileOnFly(wireId);
 }
 

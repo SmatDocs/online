@@ -27,7 +27,7 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		return (twips * 127 + 36) / 72;
 	},
 
-	newAnnotation: function (comment) {
+	newAnnotation: function (commentData) {
 		var commentList = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).sectionProperties.commentList;
 		var comment = null;
 
@@ -52,7 +52,8 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 				id: 'new',
 				tab: this._selectedPart,
 				dateTime: new Date().toISOString(),
-				author: this._map.getViewName(this._viewId)
+				author: this._map.getViewName(this._viewId),
+				threaded: commentData ? commentData.threaded : undefined,
 			};
 
 			if (app.sectionContainer.doesSectionExist('new comment')) // If adding a new comment has failed, we need to remove the leftover.
@@ -181,7 +182,9 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 				TileManager.tileSize);
 		}
 		this._restrictDocumentSize();
+		this.dontSendSplitPosToCore = true;
 		this.setSplitPosFromCell();
+		this.dontSendSplitPosToCore = false;
 		this._map.fire('zoomchanged');
 		this.refreshViewData();
 		this._replayPrintTwipsMsgs(false);
@@ -952,6 +955,9 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		}
 		else if (e.commandName === 'TableAutoFillInfo') {
 			this._onTableAutoFillStateChanged(e.state.rectangle);
+		}
+		else if (e.commandName === 'CellFormulaError') {
+			this._onCellFormulaError(e.state);
 		}
 	},
 

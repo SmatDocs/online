@@ -70,7 +70,7 @@ MOCHA_JS_DIR = $(MOCHA_DIR)/workdir
 # tsc can report a failure, but still create a .js and a second make attempt will succeed,
 # so if this returns an error then delete the target
 $(MOCHA_JS_DIR)/main.js: $(MOCHA_DIR)/main.ts
-	$(QUIET_TSC) $(builddir)/node_modules/typescript/bin/tsc $< --outfile $@ --module none --moduleResolution node --lib dom,es2016 --target ES5 --downlevelIteration || (rm -f $@ && false)
+	$(QUIET_TSC) $(builddir)/node_modules/typescript/bin/tsc $< --outfile $@ --module none --moduleResolution node --lib dom,es2016 --target ES5 --downlevelIteration --allowJs || (rm -f $@ && false)
 
 JQUERY_LIGHTNESS_IMAGE_PATH = $(srcdir)/images/jquery-ui-lightness
 JQUERY_LIGHTNESS_IMAGES = $(wildcard $(JQUERY_LIGHTNESS_IMAGE_PATH)/*.png)
@@ -207,7 +207,6 @@ COOL_CSS =\
 	$(srcdir)/css/writer-mobile.css \
 	$(srcdir)/css/writer.css \
 	$(srcdir)/css/iframedialog.css \
-	$(builddir)/node_modules/jquery-contextmenu/dist/jquery.contextMenu.css \
 	$(builddir)/node_modules/smartmenus/dist/css/sm-core-css.css \
 	$(builddir)/node_modules/smartmenus/dist/css/sm-simple/sm-simple.css \
 	$(srcdir)/css/welcome.css \
@@ -253,7 +252,6 @@ NODE_MODULES_JS =\
 	$(if $(IS_SEPARATE),node_modules/hammerjs/hammer.js,node_modules/hammerjs/hammer.min.js) \
 	node_modules/dompurify/dist/purify.min.js \
 	node_modules/jquery/dist/jquery.js \
-	node_modules/jquery-contextmenu/dist/jquery.contextMenu.js \
 	node_modules/jquery-ui/dist/jquery-ui.js \
 	$(shell find node_modules/jquery-ui/ui/i18n -name '*.js' 2>/dev/null) \
 	node_modules/smartmenus/dist/jquery.smartmenus.js \
@@ -284,11 +282,11 @@ COOL_JS_LST =\
 	src/app/LocaleService.ts \
 	src/app/LayoutingService.ts \
 	src/app/ServerConnectionService.ts \
+	src/app/DocEvents.ts \
 	src/docstate.ts \
 	src/docstatefunctions.js \
 	src/docdispatcher.ts \
 	src/app/TableStylesService.ts \
-	src/app/DocEvents.ts \
 	src/core/geometry.ts \
 	src/core/TimerRegistry.ts \
 	src/app/GraphicSelectionMiddleware.ts \
@@ -306,6 +304,7 @@ COOL_JS_LST =\
 	src/app/TileCoordData.ts \
 	src/app/PaneBorder.ts \
 	src/app/Tile.ts \
+	src/app/BitmapTileManager.ts \
 	src/app/TilesMiddleware.ts \
 	src/app/SearchService.ts \
 	src/app/BaseClass.ts \
@@ -333,7 +332,8 @@ COOL_JS_LST =\
 	src/geometry/Point.ts \
 	src/geometry/Bounds.ts \
 	src/geometry/Transformation.ts \
-	src/dom/DomUtil.js src/geo/LatLng.js \
+	src/app/dom/DomUtil.ts \
+	src/geo/LatLng.js \
 	src/geo/LatLngBounds.js \
 	src/geo/projection/Projection.LonLat.js \
 	src/geo/crs/CRS.js \
@@ -460,7 +460,6 @@ COOL_JS_LST =\
 	src/control/Control.RowHeader.ts \
 	src/control/Control.DocumentRepair.js \
 	src/control/Control.DownloadProgress.js \
-	src/control/Control.ContextMenu.js \
 	src/control/Control.Menubar.ts \
 	src/control/Control.Tabs.js \
 	src/control/Control.Permission.js \
@@ -527,6 +526,9 @@ COOL_JS_LST =\
 	src/control/jsdialog/Widget.Progressbar.js \
 	src/control/jsdialog/Widget.RadioButton.ts \
 	src/control/jsdialog/Widget.PushButton.ts \
+	src/control/jsdialog/Widget.Comment.ts \
+	src/control/jsdialog/Widget.SpinField.ts \
+	src/control/jsdialog/Widget.FixedTextControl.ts \
 	src/control/jsdialog/Widget.ScrolledWindow.js \
 	src/control/jsdialog/Widget.SearchEdit.ts \
 	src/control/jsdialog/Widget.SidebarContainers.ts \
@@ -1212,7 +1214,6 @@ pot:
 		src/control/Control.AlertDialog.js \
 		src/control/Control.BackstageView.ts \
 		src/control/Control.Command.js \
-		src/control/Control.ContextMenu.js \
 		src/control/Control.DocumentNameInput.js \
 		src/control/Control.DocumentRepair.js \
 		src/control/Control.DownloadProgress.js \
@@ -1273,6 +1274,9 @@ pot:
 		src/control/jsdialog/Widget.NewSlideLayoutEntry.ts \
 		src/control/jsdialog/Widget.RadioButton.ts \
 		src/control/jsdialog/Widget.PushButton.ts \
+		src/control/jsdialog/Widget.Comment.ts \
+		src/control/jsdialog/Widget.SpinField.ts \
+		src/control/jsdialog/Widget.FixedTextControl.ts \
 		src/control/jsdialog/Widget.SidebarContainers.ts \
 		src/control/jsdialog/Widget.TreeView.ts \
 		src/app/Socket.ts \

@@ -885,9 +885,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		else if (textMsg.startsWith('mousepointer:')) {
 			this._onMousePointerMsg(textMsg);
 		}
-		else if (textMsg.startsWith('renderfont:')) {
-			this._onRenderFontMsg(textMsg, img);
-		}
 		else if (textMsg.startsWith('searchnotfound:')) {
 			this._onSearchNotFoundMsg(textMsg);
 		}
@@ -1005,6 +1002,22 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 				this._map.fire('aichatresult', json);
 			} catch (e) {
 				window.app.console.error('Failed to parse aichatresult: ' + e);
+			}
+		}
+		else if (textMsg.startsWith('aichatprogress:')) {
+			try {
+				var json = JSON.parse(textMsg.substring('aichatprogress:'.length));
+				this._map.fire('aichatprogress', json);
+			} catch (e) {
+				window.app.console.error('Failed to parse aichatprogress: ' + e);
+			}
+		}
+		else if (textMsg.startsWith('aichatapproval:')) {
+			try {
+				var json = JSON.parse(textMsg.substring('aichatapproval:'.length));
+				this._map.fire('aichatapproval', json);
+			} catch (e) {
+				window.app.console.error('Failed to parse aichatapproval: ' + e);
 			}
 		}
 		else if (textMsg.startsWith('hrulerupdate:')) {
@@ -1460,54 +1473,27 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		this._lastFormula = newFormula;
 		this._map.fire('cellformula', {formula: newFormula});
 
-		if (this.isCalc()) {
-			this._checkForFormulaError(newFormula);
+		// Clear pending error; statechanged CellFormulaError will set it
+		// if the new cell has one.
+		this._pendingCellError = null;
+	},
+
+	_onCellFormulaError: function (state) {
+		if (state && typeof state === 'object' && state.error) {
+			this._pendingCellError = state;
+		} else {
+			this._pendingCellError = null;
+			app.definitions.formulaErrorHelpSection.hide();
 		}
+		this._showPendingCellError();
 	},
 
-	_checkForFormulaError: function (formula) {
-		app.definitions.formulaErrorHelpSection.hide();
-
-		if (!app.map.isAIConfigured || !formula || !formula.startsWith('='))
+	_showPendingCellError: function () {
+		if (!this._pendingCellError || !app.calc.cellCursorVisible)
 			return;
-
-		if (this._formulaErrorCheckTimer)
-			clearTimeout(this._formulaErrorCheckTimer);
-
-		this._formulaErrorCheckTimer = setTimeout(
-			this._doFormulaErrorCheck.bind(this),
-			300,
-		);
-	},
-
-	_doFormulaErrorCheck: function () {
-		this._formulaErrorCheckTimer = null;
-
-		var handleResponse = function (e) {
-			if (e.commandName === '.uno:FormulaDepChain') {
-				clearTimeout(timeout);
-				app.map.off('commandvalues', handleResponse);
-				if (
-					e.commandValues &&
-					e.commandValues.hasError &&
-					app.calc.cellCursorVisible
-				) {
-					var rect = app.calc.cellCursorRectangle;
-					var pos = new cool.SimplePoint(
-						rect.x2,
-						rect.y1,
-					);
-					app.definitions.formulaErrorHelpSection.show(pos);
-				}
-			}
-		};
-
-		var timeout = setTimeout(function () {
-			app.map.off('commandvalues', handleResponse);
-		}, 3000);
-
-		app.map.on('commandvalues', handleResponse);
-		app.socket.sendMessage('commandvalues command=.uno:FormulaDepChain');
+		var rect = app.calc.cellCursorRectangle;
+		var pos = new cool.SimplePoint(rect.x1, rect.y2);
+		app.definitions.formulaErrorHelpSection.show(pos, this._pendingCellError);
 	},
 
 	_onCalcFunctionUsageMsg: function (textMsg) {
@@ -1768,8 +1754,9 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		// Remove input help if there is any:
 		app.definitions.validityInputHelpSection.removeValidityInputHelp();
 
-		// Hide formula error help button when cell cursor changes.
+		// Reposition formula error button with the updated cursor rect.
 		app.definitions.formulaErrorHelpSection.hide();
+		this._showPendingCellError();
 	},
 
 	_onDocumentRepair: function (textMsg) {
@@ -2041,7 +2028,9 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		if (section) {
 			const showCursor = obj.visible === 'true';
 			section.sectionProperties.showCursor = showCursor;
-			section.setShowSection(showCursor);
+			section.setShowSection(section.checkMyVisibility());
+			if (!section.showSection)
+				CursorHeaderSection.deletePopUpNow(viewId);
 		}
 	},
 
@@ -2094,15 +2083,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		// Sending postMessage about View_Added / View_Removed is
 		// deprecated, going forward we prefer sending the entire information.
 		this._map.fire('updateviewslist');
-	},
-
-	_onRenderFontMsg: function (textMsg, img) {
-		var command = app.socket.parseServerCmd(textMsg);
-		this._map.fire('renderfont', {
-			font: command.font,
-			char: command.char,
-			img: img
-		});
 	},
 
 	_onSearchNotFoundMsg: function (textMsg) {
@@ -3011,7 +2991,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			return;
 		}
 
-		if (!app.file.textCursor.visible) {
+		if (!app.file.textCursor.visible && !GraphicSelection.hasActiveSelection()) {
 			this._updateCursorAndOverlay();
 			TextCursorSection.updateVisibilities(true);
 			return;
@@ -3078,7 +3058,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 	// enable or disable blinking cursor and the cursor overlay depending on
 	// the state of the document (if the flags are set)
 	_updateCursorAndOverlay: function (/*update*/) {
-		if (app.file.textCursor.visible   // only when LOK has told us it is ok
+		if (app.file.textCursor.visible   // only when COKit has told us it is ok
 			&& this._map.editorHasFocus()   // not when document is not focused
 			&& !this._map.isSearching()  	// not when searching within the doc
 			&& !this._isZooming             // not when zooming
@@ -3116,6 +3096,9 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 				&& !JSDialog.IsAnyInputFocused() && (this._map._docLayer._preview && !this._map._docLayer._preview.partsFocused))
 				this._map.focus(false);
 		}
+
+		if (app.map._textInput && app.activeDocument)
+			app.map._textInput.update();
 
 		// when first time we updated the cursor - document is loaded
 		// let's move cursor to the target
@@ -3883,7 +3866,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			map.on('resize', this._fitWidthZoom, this);
 		}
 		this._map.on('resize', this._syncTileContainerSize, this);
-		// Retrieve the initial cell cursor position (as LOK only sends us an
+		// Retrieve the initial cell cursor position (as COKit only sends us an
 		// updated cell cursor when the selected cell is changed and not the initial
 		// cell).
 		map.on('statusindicator',
@@ -3899,6 +3882,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			if (e.detail.perm !== 'edit') {
 				this._clearSelections();
 			}
+			TileManager.update();
 		}.bind(this));
 
 		map.setPermission(app.file.permission);
@@ -4189,6 +4173,11 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			if (this._selectedPart !== partToSelect) {
 				this._selectedPart = partToSelect;
 				app.socket.sendMessage('setclientpart part=' + this._selectedPart);
+				this._map.fire('setpart', {
+					selectedPart: this._selectedPart,
+					parts: this._parts,
+					docType: this._docType
+				});
 			}
 			this._preview._scrollToPart();
 			this.highlightCurrentPart(partToSelect);

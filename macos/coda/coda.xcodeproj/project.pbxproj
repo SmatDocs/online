@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5C02902E606BD6410CA7B24A /* ProcUtil.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EC95AFDE75BD0C4A66FE4558 /* ProcUtil.cpp */; };
 		BE16C9F02CD51F58005E5960 /* hello.odt in Resources */ = {isa = PBXBuildFile; fileRef = BE16C9EF2CD51F58005E5960 /* hello.odt */; };
 		BE178EEA2E5C756000A1FCBF /* Log-common.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BE178EE92E5C756000A1FCBF /* Log-common.cpp */; };
 		BE22492C2CC79AD700385A9C /* cool.html in Resources */ = {isa = PBXBuildFile; fileRef = BE22492B2CC79AD700385A9C /* cool.html */; };
@@ -58,7 +59,6 @@
 		BEA264B02CBE99340007435A /* ClientSession.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BEA264A52CBE99340007435A /* ClientSession.cpp */; };
 		BEA264B12CBE99340007435A /* RequestDetails.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BEA264A92CBE99340007435A /* RequestDetails.cpp */; };
 		BEA264B32CBE99340007435A /* DocumentBroker.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BEA264A72CBE99340007435A /* DocumentBroker.cpp */; };
-		BEA82C9D2EC2116E00CDC5A6 /* font in Resources */ = {isa = PBXBuildFile; fileRef = BEA82C9C2EC2116A00CDC5A6 /* font */; };
 		BEB7CC182F332BF8006FCAE9 /* TestPlan.xctestplan in Resources */ = {isa = PBXBuildFile; fileRef = BEB7CC172F332BF8006FCAE9 /* TestPlan.xctestplan */; };
 		BEDAD86B2F5EF7BA00E82F00 /* WSDGlobals.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BEDAD86A2F5EF7BA00E82F00 /* WSDGlobals.cpp */; };
 		BEEF3F862CE2139E00ABE785 /* coolkitconfig.xcu in Resources */ = {isa = PBXBuildFile; fileRef = BEEF3F852CE2139E00ABE785 /* coolkitconfig.xcu */; };
@@ -85,6 +85,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		6EC5603A58ED809E2702789D /* ProcUtil.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = ProcUtil.hpp; path = ../../../../common/ProcUtil.hpp; sourceTree = "<group>"; };
 		BE16C9EF2CD51F58005E5960 /* hello.odt */ = {isa = PBXFileReference; lastKnownFileType = file; name = hello.odt; path = ../../../test/data/hello.odt; sourceTree = "<group>"; };
 		BE178EE92E5C756000A1FCBF /* Log-common.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = "Log-common.cpp"; path = "../../../../common/Log-common.cpp"; sourceTree = "<group>"; };
 		BE22492B2CC79AD700385A9C /* cool.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = cool.html; path = ../../../browser/dist/cool.html; sourceTree = "<group>"; };
@@ -171,7 +172,6 @@
 		BEA264AB2CBE99340007435A /* Storage.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = Storage.cpp; path = ../../../../wsd/Storage.cpp; sourceTree = "<group>"; };
 		BEA264AC2CBE99340007435A /* TileCache.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = TileCache.cpp; path = ../../../../wsd/TileCache.cpp; sourceTree = "<group>"; };
 		BEA264B52CBE9BEF0007435A /* Storage.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = Storage.hpp; path = ../../../../wsd/Storage.hpp; sourceTree = "<group>"; };
-		BEA82C9C2EC2116A00CDC5A6 /* font */ = {isa = PBXFileReference; lastKnownFileType = folder; name = font; path = "../../../browser/node_modules/jquery-contextmenu/dist/font"; sourceTree = "<group>"; };
 		BEB7CC172F332BF8006FCAE9 /* TestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = TestPlan.xctestplan; sourceTree = "<group>"; };
 		BECC4BAB2CBD3FA300A120B3 /* Collabora Office.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Collabora Office.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BECC4BBC2CBD3FA400A120B3 /* codaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = codaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -185,6 +185,7 @@
 		BEF6F02C2DD1EC0200EA06BF /* RegexUtil.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RegexUtil.cpp; path = ../../../../common/RegexUtil.cpp; sourceTree = "<group>"; };
 		BEF881382EA62DBF0080A631 /* dumpWsdState.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = dumpWsdState.cpp; path = ../../../../wsd/dumpWsdState.cpp; sourceTree = "<group>"; };
 		BEFC03182D64986E009FF7B8 /* Kit.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = Kit.hpp; path = ../../../../kit/Kit.hpp; sourceTree = "<group>"; };
+		EC95AFDE75BD0C4A66FE4558 /* ProcUtil.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ProcUtil.cpp; path = ../../../../common/ProcUtil.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -286,7 +287,6 @@
 		BE22492A2CC79AAC00385A9C /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				BEA82C9C2EC2116A00CDC5A6 /* font */,
 				BE22AA9B2CC7AE7400385A9C /* images */,
 				BE862C4C2EB9066E0061664E /* templates */,
 				BE22492D2CC79BAE00385A9C /* bundle.css */,
@@ -346,6 +346,8 @@
 				BE44ACD02D7F073000BFA3B2 /* Unit-mobile.cpp */,
 				BEA263692CBE38E20007435A /* Uri.hpp */,
 				BEA2636A2CBE38E20007435A /* Uri.cpp */,
+				6EC5603A58ED809E2702789D /* ProcUtil.hpp */,
+				EC95AFDE75BD0C4A66FE4558 /* ProcUtil.cpp */,
 				BEA2636B2CBE38E20007435A /* Util.hpp */,
 				BEA2636C2CBE38E20007435A /* Util.cpp */,
 				BE4C620C2D59E85500047DF2 /* Util-macos.cpp */,
@@ -624,7 +626,6 @@
 				BE2253F32CC79BAE00385A9C /* device-desktop.css in Resources */,
 				BE22557E2CC79BAE00385A9C /* global.js in Resources */,
 				BE16C9F02CD51F58005E5960 /* hello.odt in Resources */,
-				BEA82C9D2EC2116E00CDC5A6 /* font in Resources */,
 				BE2257AD2CC79BAE00385A9C /* bundle.css in Resources */,
 				BE22492C2CC79AD700385A9C /* cool.html in Resources */,
 				BEEF3F862CE2139E00ABE785 /* coolkitconfig.xcu in Resources */,
@@ -743,6 +744,7 @@
 				BEF881392EA62DBF0080A631 /* dumpWsdState.cpp in Sources */,
 				BEA264A12CBE98CD0007435A /* Socket.cpp in Sources */,
 				BE9115B02CECBECF00C597B2 /* Util-unix.cpp in Sources */,
+				5C02902E606BD6410CA7B24A /* ProcUtil.cpp in Sources */,
 				BE4C620E2D59E85500047DF2 /* MobileApp.cpp in Sources */,
 				BE4C620F2D59E85500047DF2 /* Util-macos.cpp in Sources */,
 				BE44ACCF2D7F067500BFA3B2 /* Crypto-stub.cpp in Sources */,

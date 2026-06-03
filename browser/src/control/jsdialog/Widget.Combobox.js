@@ -24,7 +24,7 @@
  * customEntryRenderer - specifies if entries have custom content which is rendered by the core
  */
 
-/* global JSDialog app _ $ _UNO */
+/* global JSDialog app _ $ */
 
 JSDialog.comboboxEntry = function (parentContainer, data, builder) {
 	var entry = window.L.DomUtil.create('div', 'ui-combobox-entry ' + builder.options.cssClass, parentContainer);
@@ -44,7 +44,10 @@ JSDialog.comboboxEntry = function (parentContainer, data, builder) {
 	if (data.icon) {
 		var icon = window.L.DomUtil.create('img', 'ui-combobox-icon', entry);
 		icon.alt = '';
-		builder._isStringCloseToURL(data.icon) ? icon.src = data.icon : app.LOUtil.setImage(icon,  app.LOUtil.getIconNameOfCommand(data.icon), builder.map);
+		builder._isStringCloseToURL(data.icon) ? icon.src = data.icon : app.LOUtil.setImage(icon,  app.LOUtil.getIconNameOfCommand(data.icon), builder.map, true);
+		if (data.hasSubMenu) {
+			window.L.DomUtil.addClass(entry, 'ui-has-img');
+		}
 	}
 
 	if (data.hint) {
@@ -203,18 +206,9 @@ function _extractText(selectCommandData) {
 JSDialog.combobox = function (parentContainer, data, builder) {
 	var container = window.L.DomUtil.create('div', 'ui-combobox ' + builder.options.cssClass, parentContainer);
 	container.id = data.id;
-	var inputId = data.id + '-input-' + builder.options.suffix;
 
-	var labelText = data.label ? data.label : (data.command ? _UNO(data.command, 'label', true) : null);
-	if (labelText) {
-		var label = L.DomUtil.create('label', 'ui-combobox-label ' + builder.options.cssClass, container);
-		label.textContent = labelText;
-		label.htmlFor = inputId;
-	}
-
-	var wrapper = window.L.DomUtil.create('div', 'ui-combobox-wrapper ' + builder.options.cssClass, container);
-	var content = window.L.DomUtil.create('input', 'ui-combobox-content ' + builder.options.cssClass, wrapper);
-	content.id = inputId;
+	var content = window.L.DomUtil.create('input', 'ui-combobox-content ' + builder.options.cssClass, container);
+	content.id = data.id + '-input-' + builder.options.suffix;
 	content.value = data.text;
 	content.role = 'combobox';
 	content.setAttribute('autocomplete', 'off');
@@ -225,7 +219,7 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 	var dropDownId = JSDialog.CreateDropdownEntriesId(data.id);
 	content.setAttribute('aria-expanded', false);
 
-	var button = window.L.DomUtil.create('button', 'ui-combobox-button ' + builder.options.cssClass, wrapper);
+	var button = window.L.DomUtil.create('button', 'ui-combobox-button ' + builder.options.cssClass, container);
 	button.setAttribute('aria-expanded', false);
 
 	const dataAriaLabel = data.aria && data.aria.label ? data.aria.label : '';

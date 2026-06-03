@@ -33,6 +33,7 @@ JSDialog.OpenDropdown = function (
 	popupAnchor: string,
 	isSubmenu: boolean,
 	earlyCallbackCall?: boolean,
+	noDefaultSelection?: boolean,
 ) {
 	const json = {
 		id: _createDropdownId(id),
@@ -87,7 +88,7 @@ JSDialog.OpenDropdown = function (
 	}
 
 	const shouldSelectFirstEntry =
-		entries.length > 0
+		!noDefaultSelection && entries.length > 0
 			? !entries.some((entry) => entry.selected === true)
 			: false;
 	let initialSelectedId;
@@ -223,6 +224,7 @@ JSDialog.OpenDropdown = function (
 						'top-end',
 						true,
 						earlyCallbackCall,
+						noDefaultSelection,
 					);
 					lastSubMenuOpened = subMenuId;
 
@@ -241,13 +243,7 @@ JSDialog.OpenDropdown = function (
 					return;
 				} else if (eventType === 'selected' && entry && entry.uno) {
 					if (earlyCallbackCall && innerCallback) {
-						innerCallback(
-							objectType,
-							eventType,
-							object,
-							data,
-							entry || builder,
-						);
+						innerCallback(objectType, eventType, object, data, entry);
 					} else {
 						const uno =
 							entry.uno.indexOf('.uno:') === 0

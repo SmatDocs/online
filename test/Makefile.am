@@ -14,9 +14,14 @@ AUTOMAKE_OPTION = serial-tests
 DIST_FOLDER ?= $(abs_top_builddir)/browser/dist
 
 # unittest: tests that run a captive coolwsd as part of themselves.
+if ENABLE_LIBFUZZER
+check_PROGRAMS =
+noinst_PROGRAMS =
+else
 check_PROGRAMS = fakesockettest
-
-noinst_PROGRAMS = fakesockettest unittest unithttplib clienttest
+noinst_PROGRAMS = fakesockettest
+endif
+noinst_PROGRAMS += unittest unithttplib clienttest
 
 include_paths = ${ZLIB_CFLAGS} ${ZSTD_CFLAGS} ${PNG_CFLAGS}
 if ENABLE_SSL
@@ -34,6 +39,7 @@ AM_CXXFLAGS = $(CPPUNIT_CFLAGS) -DTDOC=\"$(abs_top_srcdir)/test/data\" -DTDIST=\
 	-I${top_srcdir} -I${top_srcdir}/test \
 	${include_paths}
 
+if !ENABLE_LIBFUZZER
 # These are ordered by how long each takes to run.
 # The longest-running tests are put first, the
 # fastest tests are last. This reduces the
@@ -106,11 +112,9 @@ all_la_unit_tests = \
 	unit-convert-to-password-protected.la \
 	unit-bad-doc-load.la \
 	unit-hosting.la
+# 	unit-fuzz.la
 #	unit-admin.la
 #	unit-tilecache.la # Empty test.
-
-if ENABLE_LIBFUZZER
-all_la_unit_tests += unit-fuzz.la
 endif
 
 check_LTLIBRARIES = ${all_la_unit_tests}
@@ -143,6 +147,7 @@ wsd_sources = \
 	../common/Crypto.cpp \
 	../wsd/Admin.cpp \
 	../wsd/AdminModel.cpp \
+	../wsd/AIChatSession.cpp \
 	../wsd/Auth.cpp \
 	../wsd/COOLWSD.cpp \
 	../wsd/CacheUtil.cpp \
@@ -201,6 +206,7 @@ common_sources = \
 	../common/Log-common.cpp \
 	../common/Log-poco.cpp \
 	../common/MobileApp.cpp \
+	../common/ProcUtil.cpp \
 	../common/Protocol.cpp \
 	../common/RegexUtil.cpp \
 	../common/Seccomp.cpp \
@@ -269,9 +275,13 @@ unittest_LDADD += -lssl -lcrypto
 unithttplib_LDADD += -lssl -lcrypto
 clienttest_LDADD += -lssl -lcrypto
 endif
+if ENABLE_LIBFUZZER
+unit_fuzz_la_SOURCES = UnitFuzz.cpp
+unit_fuzz_la_LIBADD = $(CPPUNIT_LIBS)
+else
 
 fakesockettest_CPPFLAGS = -g
-fakesockettest_SOURCES = fakesockettest.cpp  ../net/FakeSocket.cpp ../common/DummyTraceEventEmitter.cpp ../common/Log-common.cpp ../common/Log-poco.cpp ../common/Util.cpp ../common/Util-server.cpp $(util_platform_cpp) ../common/Util-unix.cpp ../common/Globals.cpp
+fakesockettest_SOURCES = fakesockettest.cpp  ../net/FakeSocket.cpp ../common/DummyTraceEventEmitter.cpp ../common/Log-common.cpp ../common/Log-poco.cpp ../common/ProcUtil.cpp ../common/Util.cpp ../common/Util-server.cpp $(util_platform_cpp) ../common/Util-unix.cpp ../common/Globals.cpp
 fakesockettest_LDADD = $(CPPUNIT_LIBS)
 
 # old-style unit tests - bootstrapped via UnitClient
@@ -287,9 +297,6 @@ unit_crash_la_LIBADD = $(CPPUNIT_LIBS)
 # unit test modules:
 unit_http_la_SOURCES = UnitHTTP.cpp
 unit_http_la_LIBADD = $(CPPUNIT_LIBS)
-if ENABLE_LIBFUZZER
-unit_fuzz_la_SOURCES = UnitFuzz.cpp
-endif
 #unit_admin_la_SOURCES = UnitAdmin.cpp
 #unit_admin_la_LIBADD = $(CPPUNIT_LIBS)
 unit_typing_la_SOURCES = UnitTyping.cpp
@@ -409,6 +416,7 @@ unit_perf_la_SOURCES = UnitPerf.cpp
 unit_perf_la_LIBADD = $(CPPUNIT_LIBS) $(LIBPFM_LIBS)
 unit_proxy_la_SOURCES = UnitProxy.cpp
 unit_proxy_la_LIBADD = $(CPPUNIT_LIBS) $(LIBPFM_LIBS)
+endif
 
 if HAVE_LO_PATH
 SYSTEM_STAMP = @SYSTEMPLATE_PATH@/system_stamp
@@ -419,6 +427,7 @@ endif
 CLEANUP_COMMAND=if test -s ../coolwsd; then echo "Cleaning up..." && ../coolwsd --disable-cool-user-checking --cleanup --o:logging.level=trace; fi
 
 if HAVE_LO_PATH
+if !ENABLE_LIBFUZZER
 check-local:
 	@$(CLEANUP_COMMAND)
 	@UNITTEST=1 ./fakesockettest 2> test.log || (cat test.log && /bin/false)
@@ -429,6 +438,7 @@ check-local:
 TESTS = \
 	${all_la_unit_tests}
 
+endif
 endif
 
 TEST_EXTENSIONS = .la

@@ -196,8 +196,8 @@ function hideSelectedRows() {
 			var posX = (rect.right + rect.left) / 2.0;
 			var posY = (rect.top + rect.bottom) / 2.0;
 			cy.cGet('body').rightclick(posX, posY);
-			cy.cGet('body').contains('.context-menu-item', 'Hide Rows').click();
-			cy.cGet('.context-menu-list').should('not.be.visible');
+			cy.cGet('body').contains('.ui-combobox-entry', 'Hide Rows').click();
+			cy.cGet('.jsdialog-overlay').should('not.be.visible');
 		});
 
 	cy.log('<< hideSelectedRows - end');
@@ -342,7 +342,7 @@ function selectOptionFromContextMenu(contextMenu) {
 
 	cy.wait(1000);
 	cy.cGet('.spreadsheet-tab.spreadsheet-tab-selected').rightclick();
-	cy.cGet('body').contains('.context-menu-link', contextMenu).click();
+	cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', contextMenu).click();
 
 	cy.log('>> selectOptionFromContextMenu - end');
 }

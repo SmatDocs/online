@@ -33,6 +33,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.documentController.presentStartupBackstage(calledFromStartup: true)
         }
+
         // Now remove the Share menu item, as we haven't implemented sharing yet.
         if let mainMenu = NSApp.mainMenu,
             let fileMenuItem = mainMenu.item(withTitle: "File"),

@@ -811,7 +811,6 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
     }
 
     size_t inBufferSize = socket->getInBuffer().size();
-    Poco::MemoryInputStream startmessage(socket->getInBuffer().data(), inBufferSize);
 
 #if 0 // debug a specific command's payload
         if (Util::findInVector(socket->getInBuffer(), "insertfile") != std::string::npos)
@@ -823,7 +822,7 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
         }
 #endif
 
-    headerSize = socket->readHeader("Client", startmessage, inBufferSize, request, delayMs);
+    headerSize = readHeader(socket, request, delayMs);
     if (headerSize < 0)
         return;
 
@@ -921,6 +920,102 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
     }
     socket->getInBuffer().clear();
 #endif // MOBILEAPP
+}
+
+ssize_t ClientRequestDispatcher::readHeader(const std::shared_ptr<StreamSocket>& socket,
+                                            Poco::Net::HTTPRequest& request,
+                                            std::chrono::duration<float, std::milli> delayMs)
+{
+    const std::string_view buffer = socket->getInBuffer().view();
+    assert(_headerPos <= buffer.size() &&
+           "Unexpected buffer shrunk under us — _headerPos is stale");
+    _headerPos = _headerPos > buffer.size() ? 0 : _headerPos; // Recover in release builds.
+
+    // Find the end of the header, if any.
+    constexpr std::string_view marker("\r\n\r\n");
+    const auto headerSize = buffer.find(marker, _headerPos);
+    if (headerSize == std::string_view::npos)
+    {
+        // A partial marker could span the boundary, so back up by marker.size()-1.
+        _headerPos = buffer.size() >= marker.size() ? buffer.size() - marker.size() + 1 : 0;
+        LOG_TRC("parseHeader: doesn't have enough data for the header yet. delay "
+                << delayMs.count() << "ms");
+        return -1;
+    }
+
+    // We found the end-of-header marker; Clear to allow for scanning again.
+    _headerPos = 0;
+
+    constexpr std::chrono::duration<float, std::milli> DelayMax =
+        std::chrono::duration_cast<std::chrono::milliseconds>(SocketPoll::DefaultPollTimeoutMicroS);
+    const size_t messagesize = buffer.size();
+    try
+    {
+        // Include the marker.
+        Poco::MemoryInputStream startmessage(socket->getInBuffer().data(),
+                                             headerSize + marker.size());
+        request.read(startmessage);
+    }
+    catch (const Poco::Net::NotAuthenticatedException& exc)
+    {
+        LOG_DBG("parseHeader: Exception caught with "
+                << messagesize << " bytes, shutdown: " << exc.displayText() << ", delay "
+                << delayMs.count() << "ms");
+        socket->asyncShutdown();
+        return 0; //FIXME: Why not -1 as we've closed the socket already?
+    }
+    catch (const Poco::Net::UnsupportedRedirectException& exc)
+    {
+        LOG_DBG("parseHeader: Exception caught with "
+                << messagesize << " bytes, shutdown: " << exc.displayText() << ", delay "
+                << delayMs.count() << "ms");
+        socket->asyncShutdown();
+        return -1;
+    }
+    catch (const Poco::Net::HTTPException& exc)
+    {
+        LOG_DBG("parseHeader: Exception caught with "
+                << messagesize << " bytes, shutdown: " << exc.displayText() << ", delay "
+                << delayMs.count() << "ms");
+        socket->asyncShutdown();
+        return -1;
+    }
+    catch (const Poco::Exception& exc)
+    {
+        if (delayMs > DelayMax)
+        {
+            LOG_DBG("parseHeader: Exception caught with "
+                    << messagesize << " bytes, shutdown: " << exc.displayText() << ", delay "
+                    << delayMs.count() << "ms");
+            socket->asyncShutdown();
+        }
+        else
+        {
+            LOG_DBG("parseHeader: Exception caught with "
+                    << messagesize << " bytes, continue: " << exc.displayText() << ", delay "
+                    << delayMs.count() << "ms");
+        }
+        return -1;
+    }
+    catch (const std::exception& exc)
+    {
+        if (delayMs > DelayMax)
+        {
+            LOG_DBG("parseHeader: Exception caught with "
+                    << messagesize << " bytes, shutdown: " << exc.what() << ", delay "
+                    << delayMs.count() << "ms");
+            socket->asyncShutdown();
+        }
+        else
+        {
+            LOG_DBG("parseHeader: Exception caught with "
+                    << messagesize << " bytes, continue: " << exc.what() << ", delay "
+                    << delayMs.count() << "ms");
+        }
+        return -1;
+    }
+
+    return headerSize + marker.size();
 }
 
 namespace
@@ -1158,14 +1253,28 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
             // Admin connections
             LOG_INF("Admin request: " << request.getURI());
             const bool allowed = allowedOrigin(request, requestDetails);
-            if (AdminSocketHandler::handleInitialRequest(_socket, request, allowed))
+            if (allowed && AdminSocketHandler::handleInitialRequest(_socket, request, allowed))
             {
                 // Hand the socket over to the Admin poll.
                 disposition.setTransfer(Admin::instance(),
                                         [](const std::shared_ptr<Socket>& /*moveSocket*/) {});
             }
             else
-                HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket);
+            {
+                if (!allowed)
+                {
+                    LOG_ERR(
+                        "Rejecting admin WebSocket upgrade due to disallowed origin for request: "
+                        << request);
+                    HttpHelper::sendErrorAndShutdown(http::StatusCode::Forbidden, socket);
+                }
+                else
+                {
+                    LOG_ERR("Rejecting admin WebSocket upgrade due to bad/invalid request: "
+                            << request);
+                    HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket);
+                }
+            }
         }
         else if (requestDetails.equals(RequestDetails::Field::Type, "cool") &&
                  requestDetails.equals(1, "getMetrics"))
@@ -2437,6 +2546,13 @@ bool ClientRequestDispatcher::handleClientWsUpgrade(const Poco::Net::HTTPRequest
 
     // First Upgrade.
     const bool allowed = allowedOrigin(request, requestDetails);
+    if (!allowed)
+    {
+        LOG_ERR("Rejecting WebSocket upgrade due to disallowed origin for request: " << request);
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Forbidden, socket);
+        return true; // Handled.
+    }
+
     auto ws = std::make_shared<WebSocketHandler>(socket, request, allowed);
 
     // Response to clients beyond this point is done via WebSocket.

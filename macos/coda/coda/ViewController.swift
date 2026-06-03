@@ -49,6 +49,17 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
 
     var consoleController: ConsoleController!
 
+    /// Whether UI testing mode is active.
+    private lazy var isUITesting: Bool = {
+        ProcessInfo.processInfo.arguments.contains("--uitesting")
+    }()
+
+    /// Offscreen text view that accumulates all "lok" messages for XCUITest assertions.
+    private var testMessageLog: NSTextView?
+
+    /// HTTP server for executing JS commands from XCUITest.
+    private var testHTTPServer: TestHTTPServer?
+
     var savedViewFrame: NSRect!
     var savedConsoleViewFrame: NSRect!
 
@@ -89,6 +100,8 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
         // Add it to the view controller's view
         self.view.addSubview(webView)
 
+        webView.setAccessibilityIdentifier("CODA.DocumentWebView")
+
         webView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             webView.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
@@ -96,6 +109,52 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
             webView.topAnchor.constraint(equalTo: self.view.topAnchor),
             webView.bottomAnchor.constraint(equalTo: self.view.bottomAnchor)
         ])
+
+        if isUITesting {
+            let scrollView = NSScrollView(frame: NSRect(x: -10000, y: 0, width: 100, height: 100))
+            let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+            textView.isEditable = false
+            textView.setAccessibilityIdentifier("CODA.TestMessageLog")
+            scrollView.documentView = textView
+            self.view.addSubview(scrollView)
+            testMessageLog = textView
+
+            // Start the test HTTP server for JS execution
+            let args = ProcessInfo.processInfo.arguments
+            let portString = args.lazy
+                .compactMap { $0.hasPrefix("--testDriverPort=") ? String($0.dropFirst("--testDriverPort=".count)) : nil }
+                .first
+            if let portString, let port = UInt16(portString) {
+                do {
+                    let server = try TestHTTPServer(port: port,
+                        jsExecutor: { [weak self] js, completion in
+                            DispatchQueue.main.async {
+                                guard let webView = self?.webView else {
+                                    completion(nil, NSError(domain: "TestHTTPServer", code: 1,
+                                                            userInfo: [NSLocalizedDescriptionKey: "webView not available"]))
+                                    return
+                                }
+                                webView.evaluateJavaScript(js, completionHandler: completion)
+                            }
+                        },
+                        focusHandler: { [weak self] done in
+                            DispatchQueue.main.async {
+                                if let webView = self?.webView {
+                                    webView.window?.makeKeyAndOrderFront(nil)
+                                    NSApp.activate(ignoringOtherApps: true)
+                                    webView.window?.makeFirstResponder(webView)
+                                }
+                                done()
+                            }
+                        }
+                    )
+                    server.start()
+                    testHTTPServer = server
+                } catch {
+                    NSLog("TestHTTPServer: failed to start: %@", error.localizedDescription)
+                }
+            }
+        }
     }
 
     /**
@@ -179,6 +238,10 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
         case "lok":
             if let body = message.body as? String {
                 COWrapper.LOG_DBG("To Online: '\(message.body)'")
+
+                if isUITesting, let log = testMessageLog {
+                    log.string += body + "\n"
+                }
 
                 if body == "HULLO" {
                     // Now we know that the JS has started completely

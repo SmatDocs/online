@@ -26,7 +26,7 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('contain','some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item', 'Modify').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
 		cy.cGet('#annotation-modify-textarea-1').type(', some other text');
 		cy.cGet('#annotation-save-1').click();
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
@@ -39,7 +39,7 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('contain','some text');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item', 'Reply').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
 		cy.cGet('#annotation-reply-textarea-1').type('some reply text');
 		cy.cGet('#annotation-reply-1').click();
 		cy.cGet('#annotation-content-area-2').should('contain','some reply text');
@@ -51,7 +51,7 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('.cool-annotation-content > div').should('contain','some text');
 		cy.cGet('.cool-annotation-menu').click();
-		cy.cGet('body').contains('.context-menu-item', 'Remove').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Remove').click();
 		cy.cGet('.cool-annotation-content-wrapper').should('not.exist');
 	});
 
@@ -113,7 +113,7 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 		cy.cGet('body').type('focus out of comments');
 		cy.cGet('#comment-container-2').should('exist');
 		cy.cGet('#comment-annotation-menu-2').click();
-		cy.cGet('body').contains('.context-menu-item', 'Resolve').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Resolve').click();
 		cy.cGet('.cool-annotation-content-resolved').should('exist');
 
 		/* scenario 1:
@@ -382,6 +382,73 @@ describe(['tagdesktop'], 'Annotation Tests', function() {
 		});
 	});
 
+	it('Annotation minimum width', function () {
+		cy.viewport(1920, 1080); // Let's have plenty of space
+		desktopHelper.insertComment();
+
+		cy.cGet('.cool-annotation-content-wrapper').should('exist');
+		cy.cGet('#annotation-content-area-1').should('contain', 'some text');
+
+		// Add several nested replies to create a deep thread
+		const replyCount = 5;
+		for (let i = 1; i <= replyCount; i++) {
+			cy.cGet('#comment-annotation-menu-' + i).click();
+			cy.cGet('body').contains('.ui-combobox-entry', 'Reply').click();
+			cy.cGet('#annotation-reply-textarea-' + i).type('reply ' + i);
+			cy.cGet('#annotation-reply-' + i).click();
+			cy.cGet('#annotation-content-area-' + (i + 1)).should('contain', 'reply ' + i);
+		}
+
+		// Check that the last reply content is wide enough
+		cy.cGet('#comment-container-' + (replyCount + 1) + ' .cool-annotation-content')
+			.should(el => expect(el.width()).gte(200));
+	});
+
+	it('Get_Comments postMessage returns all comments', function() {
+		desktopHelper.insertComment('first comment');
+		cy.cGet('#annotation-content-area-1').should('contain', 'first comment');
+
+		// Avoid notebookbar collapse before the second insertComment.
+		cy.cGet('#Home-tab-label').click();
+		helper.typeIntoDocument('{end}{enter}');
+
+		desktopHelper.insertComment('second comment');
+		cy.cGet('#annotation-content-area-2').should('contain', 'second comment');
+
+		// Stub postMessage to capture the response.
+		cy.getFrameWindow().then(win => {
+			cy.stub(win.parent, 'postMessage').as('postMessage');
+		});
+
+		// Send Get_Comments postMessage.
+		cy.getFrameWindow().then(win => {
+			const message = { 'MessageId': 'Get_Comments' };
+			win.postMessage(JSON.stringify(message), '*');
+		});
+
+		// Verify the response contains both comments.
+		cy.get('@postMessage').should(stub => {
+			const calls = stub.getCalls().filter(call => {
+				try {
+					const msg = typeof call.args[0] === 'string' ? JSON.parse(call.args[0]) : call.args[0];
+					return msg.MessageId === 'Get_Comments_Resp';
+				} catch (e) { return false; }
+			});
+			expect(calls.length, 'Get_Comments_Resp was not posted').to.be.greaterThan(0);
+			const resp = typeof calls[0].args[0] === 'string' ? JSON.parse(calls[0].args[0]) : calls[0].args[0];
+			const comments = resp.Values.Comments;
+			expect(comments.length).to.equal(2);
+			expect(comments[0].Id).to.equal('1');
+			expect(comments[0].Text).to.equal('first comment');
+			expect(comments[0]).to.have.property('Author');
+			expect(comments[0]).to.have.property('DateTime');
+			expect(comments[0].Resolved).to.equal('false');
+			expect(comments[0].Parent).to.equal('0');
+			expect(comments[1].Id).to.equal('2');
+			expect(comments[1].Text).to.equal('second comment');
+		});
+	});
+
 });
 
 describe(['tagdesktop'], 'Collapsed Annotation Tests', function() {
@@ -407,7 +474,7 @@ describe(['tagdesktop'], 'Collapsed Annotation Tests', function() {
 		cy.cGet('#annotation-content-area-1').should('contain','some text0');
 		cy.cGet('.cool-annotation-img').click();
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item','Modify').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
 		cy.cGet('#annotation-modify-textarea-1').type(', some other text');
 		cy.cGet('#annotation-save-1').click();
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
@@ -421,7 +488,7 @@ describe(['tagdesktop'], 'Collapsed Annotation Tests', function() {
 		cy.cGet('#annotation-content-area-1').should('contain','some text');
 		cy.cGet('.cool-annotation-img').click();
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item','Reply').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
 		cy.cGet('#annotation-reply-textarea-1').type('some reply text');
 		cy.cGet('#annotation-reply-1').click();
 		cy.cGet('#annotation-content-area-2').should('contain','some reply text');
@@ -434,7 +501,7 @@ describe(['tagdesktop'], 'Collapsed Annotation Tests', function() {
 		cy.cGet('.cool-annotation-content > div').should('contain','some text');
 		cy.cGet('.cool-annotation-img').click();
 		cy.cGet('.cool-annotation-menu').click();
-		cy.cGet('body').contains('.context-menu-item','Remove').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Remove').click();
 		cy.cGet('.cool-annotation-content-wrapper').should('not.exist');
 	});
 
@@ -532,7 +599,7 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item', 'Modify').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
 		cy.cGet('#annotation-modify-textarea-1').type(', some other text');
 		cy.cGet('#map').focus();
 		cy.cGet('.annotation-button-autosaved').should('be.visible');
@@ -550,7 +617,7 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item', 'Modify').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
 		cy.cGet('#annotation-modify-textarea-1').type(', some other text');
 		cy.cGet('#map').focus();
 		cy.cGet('.annotation-button-autosaved').should('be.visible');
@@ -572,7 +639,7 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item', 'Modify').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
 		cy.cGet('#annotation-modify-textarea-1').type('some other text, ');
 		cy.cGet('#map').focus();
 		cy.cGet('.annotation-button-autosaved').should('be.visible');
@@ -595,7 +662,7 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item', 'Reply').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
 		cy.cGet('#annotation-reply-textarea-1').type('some reply text');
 		cy.cGet('#map').focus();
 		cy.cGet('.annotation-button-autosaved').should('be.visible');
@@ -613,7 +680,7 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item', 'Reply').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
 		cy.cGet('#annotation-reply-textarea-1').type('some reply text');
 		cy.cGet('#map').focus();
 		cy.cGet('.annotation-button-autosaved').should('be.visible');
@@ -638,7 +705,7 @@ describe(['tagdesktop'], 'Annotation Autosave Tests', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('have.text','some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item', 'Reply').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
 		cy.cGet('#annotation-reply-textarea-1').type('some reply text');
 		cy.cGet('#map').focus();
 		cy.cGet('.annotation-button-autosaved').should('be.visible');
@@ -699,7 +766,7 @@ describe(['tagdesktop'], 'Annotation with @mention', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('contain', 'some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item', 'Modify').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Modify').click();
 
 		cy.cGet('#annotation-modify-textarea-1').type('{end}');
 		cy.cGet('#annotation-modify-textarea-1').type(' @Ale');
@@ -726,7 +793,7 @@ describe(['tagdesktop'], 'Annotation with @mention', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('contain','some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item', 'Reply').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
 
 		cy.cGet('#annotation-reply-textarea-1').type('some reply text @Ale');
 
@@ -748,7 +815,7 @@ describe(['tagdesktop'], 'Annotation with @mention', function() {
 		cy.cGet('.cool-annotation-content-wrapper').should('exist');
 		cy.cGet('#annotation-content-area-1').should('contain','some text0');
 		cy.cGet('#comment-annotation-menu-1').click();
-		cy.cGet('body').contains('.context-menu-item', 'Reply').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
 
 		cy.cGet('#annotation-reply-textarea-1').type('some reply text @Ale');
 
@@ -764,7 +831,7 @@ describe(['tagdesktop'], 'Annotation with @mention', function() {
 		cy.cGet('#annotation-content-area-2').should('contain','some reply text @Alexandra ');
 
 		cy.cGet('#comment-annotation-menu-2').should('exist').click();
-		cy.cGet('body').contains('.context-menu-item', 'Reply').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Reply').click();
 		cy.cGet('#annotation-reply-textarea-2').type('some reply to reply text @Ale');
 
 		cy.cGet('#mentionPopup').should('be.visible');

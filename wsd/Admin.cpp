@@ -16,12 +16,13 @@
 
 #include <config.h>
 
-#include <wsd/Admin.hpp>
+#include "Admin.hpp"
 
 #include <common/Common.hpp>
 #include <common/ConfigUtil.hpp>
 #include <common/JsonUtil.hpp>
 #include <common/Log.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Protocol.hpp>
 #include <common/SigUtil.hpp>
 #include <common/StringVector.hpp>
@@ -30,7 +31,7 @@
 #include <common/Util.hpp>
 #include <net/Socket.hpp>
 #if ENABLE_SSL
-#include <SslSocket.hpp>
+#include <net/SslSocket.hpp>
 #endif
 #include <net/WebSocketHandler.hpp>
 #include <wsd/AdminModel.hpp>
@@ -183,7 +184,7 @@ void AdminSocketHandler::handleMessage(const std::vector<char> &payload)
     {
         try
         {
-            const int pid = std::stoi(tokens[1]);
+            const int pid = NumUtil::stoi(tokens[1]);
             LOG_INF("Admin request to kill PID: " << pid);
 
             std::set<pid_t> pids = model.getDocumentPids();
@@ -217,11 +218,11 @@ void AdminSocketHandler::handleMessage(const std::vector<char> &payload)
         std::ostringstream oss;
         oss << "settings "
             << "mem_stats_size=" << model.query("mem_stats_size") << ' '
-            << "mem_stats_interval=" << std::to_string(_admin->getMemStatsInterval()) << ' '
+            << "mem_stats_interval=" << _admin->getMemStatsInterval().count() << ' '
             << "cpu_stats_size="  << model.query("cpu_stats_size") << ' '
-            << "cpu_stats_interval=" << std::to_string(_admin->getCpuStatsInterval()) << ' '
+            << "cpu_stats_interval=" << _admin->getCpuStatsInterval().count() << ' '
             << "net_stats_size=" << model.query("net_stats_size") << ' '
-            << "net_stats_interval=" << std::to_string(_admin->getNetStatsInterval()) << ' '
+            << "net_stats_interval=" << _admin->getNetStatsInterval().count() << ' '
             << "connection_stats_size=" << model.query("connection_stats_size") << ' '
             << "global_host_tcp_connections=" << net::Defaults.maxExtConnections << ' ';
 
@@ -256,7 +257,7 @@ void AdminSocketHandler::handleMessage(const std::vector<char> &payload)
             int settingVal = 0;
             try
             {
-                settingVal = std::stoi(setting[1]);
+                settingVal = NumUtil::stoi(setting[1]);
             }
             catch (const std::exception& exc)
             {
@@ -275,11 +276,12 @@ void AdminSocketHandler::handleMessage(const std::vector<char> &payload)
             }
             else if (settingName == "mem_stats_interval")
             {
-                if (settingVal != static_cast<int>(_admin->getMemStatsInterval()))
+                const std::chrono::milliseconds interval{ settingVal };
+                if (interval != _admin->getMemStatsInterval())
                 {
-                    _admin->rescheduleMemTimer(settingVal);
+                    _admin->rescheduleMemTimer(interval);
                     model.clearMemStats();
-                    model.notify("settings mem_stats_interval=" + std::to_string(_admin->getMemStatsInterval()));
+                    model.notify("settings mem_stats_interval=" + std::to_string(_admin->getMemStatsInterval().count()));
                 }
             }
             else if (settingName == "cpu_stats_size")
@@ -291,11 +293,12 @@ void AdminSocketHandler::handleMessage(const std::vector<char> &payload)
             }
             else if (settingName == "cpu_stats_interval")
             {
-                if (settingVal != static_cast<int>(_admin->getCpuStatsInterval()))
+                const std::chrono::milliseconds interval{ settingVal };
+                if (interval != _admin->getCpuStatsInterval())
                 {
-                    _admin->rescheduleCpuTimer(settingVal);
+                    _admin->rescheduleCpuTimer(interval);
                     model.clearCpuStats();
-                    model.notify("settings cpu_stats_interval=" + std::to_string(_admin->getCpuStatsInterval()));
+                    model.notify("settings cpu_stats_interval=" + std::to_string(_admin->getCpuStatsInterval().count()));
                 }
             }
             else if (COOLProtocol::matchPrefix("limit_", settingName))
@@ -521,6 +524,8 @@ bool AdminSocketHandler::handleInitialRequest(
     return false;
 }
 
+std::unique_ptr<Admin> Admin::Instance;
+
 /// An admin command processor.
 Admin::Admin()
     : SocketPoll("admin")
@@ -528,13 +533,13 @@ Admin::Admin()
     , _totalAvailMemKb(_totalSysMemKb)
     , _lastTotalMemory(0)
     , _lastJiffies(0)
-    , _cleanupIntervalMs(DefStatsIntervalMs * 10)
     , _lastSentCount(0)
     , _lastRecvCount(0)
-    , _forKitPid(-1)
     , _cpuStatsTaskIntervalMs(DefStatsIntervalMs)
     , _memStatsTaskIntervalMs(DefStatsIntervalMs * 2)
     , _netStatsTaskIntervalMs(DefStatsIntervalMs * 2)
+    , _cleanupIntervalMs(DefStatsIntervalMs * 10)
+    , _forKitPid(-1)
 {
     LOG_INF("Admin ctor");
 
@@ -609,32 +614,36 @@ Admin::~Admin()
 
 void Admin::pollingThread()
 {
-    _model.setThreadOwner(std::this_thread::get_id());
+    _model.setThreadOwner(ProcUtil::getThreadId());
 
     std::chrono::steady_clock::time_point lastCPU = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point lastMem = lastCPU;
     std::chrono::steady_clock::time_point lastNet = lastCPU;
     std::chrono::steady_clock::time_point lastCleanup = lastCPU;
 
+    const static auto SystemClockTicks = sysconf(_SC_CLK_TCK);
+    constexpr auto MaxProximityToTargetPeriod = MinStatsIntervalMs / 8;
+
     while (!isStop() && !SigUtil::getShutdownRequestFlag())
     {
         const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 
-        int cpuWait = _cpuStatsTaskIntervalMs -
-            std::chrono::duration_cast<std::chrono::milliseconds>(now - lastCPU).count();
-        if (cpuWait <= MinStatsIntervalMs / 2) // Close enough
+        auto cpuWait = _cpuStatsTaskIntervalMs -
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - lastCPU);
+        if (cpuWait <= MaxProximityToTargetPeriod) // Close enough
         {
             const size_t currentJiffies = getTotalCpuUsage();
-            const size_t cpuPercent = 100 * 1000 * currentJiffies / (sysconf (_SC_CLK_TCK) * _cpuStatsTaskIntervalMs);
+            const size_t cpuPercent =
+                100 * 1000 * currentJiffies / (SystemClockTicks * _cpuStatsTaskIntervalMs.count());
             _model.addCpuStats(cpuPercent);
 
             cpuWait += _cpuStatsTaskIntervalMs;
             lastCPU = now;
         }
 
-        int memWait = _memStatsTaskIntervalMs -
-            std::chrono::duration_cast<std::chrono::milliseconds>(now - lastMem).count();
-        if (memWait <= MinStatsIntervalMs / 2) // Close enough
+        auto memWait = _memStatsTaskIntervalMs -
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - lastMem);
+        if (memWait <= MaxProximityToTargetPeriod) // Close enough
         {
             // disable watchdog to avoid Document::updateMemoryDirty noise
             disableWatchdog();
@@ -658,9 +667,9 @@ void Admin::pollingThread()
             lastMem = now;
         }
 
-        int netWait = _netStatsTaskIntervalMs -
-            std::chrono::duration_cast<std::chrono::milliseconds>(now - lastNet).count();
-        if (netWait <= MinStatsIntervalMs / 2) // Close enough
+        auto netWait = _netStatsTaskIntervalMs -
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - lastNet);
+        if (netWait <= MaxProximityToTargetPeriod) // Close enough
         {
             const uint64_t sentCount = _model.getSentBytesTotal();
             const uint64_t recvCount = _model.getRecvBytesTotal();
@@ -680,7 +689,7 @@ void Admin::pollingThread()
             lastNet = now;
         }
 
-        std::chrono::milliseconds cleanupWait(_cleanupIntervalMs);
+        auto cleanupWait = _cleanupIntervalMs;
         if (_defDocProcSettings.getCleanupSettings().getEnable())
         {
             if (now > lastCleanup)
@@ -689,13 +698,13 @@ void Admin::pollingThread()
                     std::chrono::duration_cast<std::chrono::milliseconds>(now - lastCleanup);
             }
 
-            if (cleanupWait <= std::chrono::milliseconds(MinStatsIntervalMs / 2)) // Close enough
+            if (cleanupWait <= MaxProximityToTargetPeriod) // Close enough
             {
                 cleanupResourceConsumingDocs();
                 if (_defDocProcSettings.getCleanupSettings().getLostKitGracePeriod())
                     cleanupLostKits();
 
-                cleanupWait += std::chrono::milliseconds(_cleanupIntervalMs);
+                cleanupWait += _cleanupIntervalMs;
                 lastCleanup = now;
             }
         }
@@ -727,10 +736,10 @@ void Admin::pollingThread()
         }
 
         // Handle websockets & other work.
-        const auto timeout = std::chrono::milliseconds(capAndRoundInterval(
-            std::min<int>(std::min(std::min(cpuWait, memWait), netWait), cleanupWait.count())));
+        const auto timeout =
+            capAndRoundInterval(std::min({ cpuWait, memWait, netWait, cleanupWait }));
         LOGA_TRC(Admin, "Admin poll for " << timeout);
-        poll(timeout); // continue with ms for admin, settings etc.
+        pollUntilDeadline(now + timeout); // continue with ms for admin, settings etc.
     }
 
     if (!COOLWSD::IndirectionServerEnabled)
@@ -813,7 +822,7 @@ void Admin::rmDoc(const std::string& docKey)
     addCallback([this, docKey]{ _model.removeDocument(docKey); });
 }
 
-void Admin::rescheduleMemTimer(unsigned interval)
+void Admin::rescheduleMemTimer(std::chrono::milliseconds interval)
 {
     _memStatsTaskIntervalMs = capAndRoundInterval(interval);
     LOG_INF("Memory stats interval changed - New interval: " << _memStatsTaskIntervalMs);
@@ -822,7 +831,7 @@ void Admin::rescheduleMemTimer(unsigned interval)
     wakeup();
 }
 
-void Admin::rescheduleCpuTimer(unsigned interval)
+void Admin::rescheduleCpuTimer(std::chrono::milliseconds interval)
 {
     _cpuStatsTaskIntervalMs = capAndRoundInterval(interval);
     LOG_INF("CPU stats interval changed - New interval: " << _cpuStatsTaskIntervalMs);
@@ -840,8 +849,8 @@ size_t Admin::getTotalMemoryUsage() const
     // inside the forkit - we should account all of our fixed cost of
     // memory to the forkit; and then count only dirty pages in the clients
     // since we know that they share everything else with the forkit.
-    const size_t forkitRssKb = Util::getMemoryUsageRSS(_forKitPid);
-    const size_t wsdPssKb = Util::getMemoryUsagePSS(Util::getProcessId());
+    const size_t forkitRssKb = ProcUtil::getMemoryUsageRSS(_forKitPid);
+    const size_t wsdPssKb = ProcUtil::getMemoryUsagePSS(ProcUtil::getProcessId());
     const size_t kitsDirtyKb = _model.getKitsMemoryUsage();
     const size_t totalMem = wsdPssKb + forkitRssKb + kitsDirtyKb;
 
@@ -850,8 +859,8 @@ size_t Admin::getTotalMemoryUsage() const
 
 size_t Admin::getTotalCpuUsage() const
 {
-    const size_t forkitJ = Util::getCpuUsage(_forKitPid);
-    const size_t wsdJ = Util::getCpuUsage(Util::getProcessId());
+    const size_t forkitJ = ProcUtil::getCpuUsage(_forKitPid);
+    const size_t wsdJ = ProcUtil::getCpuUsage(ProcUtil::getProcessId());
 
     if (_lastJiffies == 0)
     {
@@ -866,19 +875,19 @@ size_t Admin::getTotalCpuUsage() const
     return totalJ;
 }
 
-unsigned Admin::getMemStatsInterval() const
+std::chrono::milliseconds Admin::getMemStatsInterval() const
 {
     ASSERT_CORRECT_THREAD();
     return _memStatsTaskIntervalMs;
 }
 
-unsigned Admin::getCpuStatsInterval() const
+std::chrono::milliseconds Admin::getCpuStatsInterval() const
 {
     ASSERT_CORRECT_THREAD();
     return _cpuStatsTaskIntervalMs;
 }
 
-unsigned Admin::getNetStatsInterval() const
+std::chrono::milliseconds Admin::getNetStatsInterval() const
 {
     ASSERT_CORRECT_THREAD();
     return _netStatsTaskIntervalMs;
@@ -1117,7 +1126,7 @@ void Admin::cleanupLostKits()
         if (internalKitPids.find(pid) == internalKitPids.end())
         {
             // Check if this is our kit process (forked from our ForKit process)
-            if (Util::getStatFromPid(pid, 3) == (size_t)_forKitPid)
+            if (ProcUtil::getStatFromPid(pid, 3) == (size_t)_forKitPid)
                 mapKitsLost.insert(std::pair<pid_t, std::time_t>(pid, std::time(nullptr)));
         }
         else
@@ -1255,12 +1264,12 @@ void Admin::getMetrics(std::ostream& metrics) const
     const size_t memAvail = getTotalAvailableMemory();
     const size_t memUsed = getTotalMemoryUsage();
 
-    metrics << "global_host_system_memory_bytes " << _totalSysMemKb * 1024 << std::endl;
-    metrics << "global_host_tcp_connections " << net::Defaults.maxExtConnections << std::endl;
-    metrics << "global_memory_available_bytes " << memAvail * 1024 << std::endl;
-    metrics << "global_memory_used_bytes " << memUsed * 1024 << std::endl;
-    metrics << "global_memory_free_bytes " << (memAvail - memUsed) * 1024 << std::endl;
-    metrics << std::endl;
+    metrics << "global_host_system_memory_bytes " << _totalSysMemKb * 1024 << '\n';
+    metrics << "global_host_tcp_connections " << net::Defaults.maxExtConnections << '\n';
+    metrics << "global_memory_available_bytes " << memAvail * 1024 << '\n';
+    metrics << "global_memory_used_bytes " << memUsed * 1024 << '\n';
+    metrics << "global_memory_free_bytes " << (memAvail - memUsed) * 1024 << '\n';
+    metrics << '\n';
 
     _model.getMetrics(metrics);
 }

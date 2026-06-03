@@ -34,6 +34,7 @@ class A11yValidator {
 		this.checks.push(this.checkLabelElement.bind(this));
 		this.checks.push(this.checkElementHasLabel.bind(this));
 		this.checks.push(this.checkAriaControls.bind(this));
+		this.checks.push(this.checkFrameOnlyDecorativeImages.bind(this));
 	}
 
 	checkWidget(type: string, element: HTMLElement): void {
@@ -248,6 +249,90 @@ class A11yValidator {
 		}
 	}
 
+	private checkFrameOnlyDecorativeImages(
+		type: string,
+		element: HTMLElement,
+	): void {
+		if (
+			!element.classList.contains('ui-frame-container') ||
+			!element.classList.contains('ui-fieldset')
+		) {
+			return;
+		}
+
+		const content = element.querySelector('.ui-expander-content');
+		if (!content) return;
+
+		const decorativeImages = content.querySelectorAll(
+			'img.ui-decorative-image',
+		);
+		if (decorativeImages.length === 0) return;
+
+		// If there is any focusable element, the frame has accessible content
+		if (JSDialog.FindFocusableWithin(content, 'next')) return;
+
+		// If there are any form controls (even disabled), the frame has
+		// real content rather than only decorative images
+		const formControlTags = JSDialog.GetFormControlTypesInCO();
+		for (const tag of formControlTags) {
+			if (content.querySelector(tag)) return;
+		}
+
+		throw new A11yValidatorException(
+			`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': frame '${type}' contains only decorative images with no accessible content. Remove the frame so its label does not mislead users into expecting meaningful content.`,
+		);
+	}
+
+	private checkInitialFocusNotCloseButton(dialogElement: HTMLElement): number {
+		const active = document.activeElement;
+		if (!active || !dialogElement.contains(active)) return 0;
+
+		if (active.classList.contains('ui-dialog-titlebar-close')) {
+			console.error(
+				new A11yValidatorException(
+					`In '${this.getDialogTitle(active as HTMLElement)}': initial keyboard focus is on the close (X) button in the titlebar. Focus should be on a control inside the dialog body.`,
+				),
+			);
+			return 1;
+		}
+		return 0;
+	}
+
+	private checkDuplicateButtonLabels(container: HTMLElement): number {
+		const buttons = container.querySelectorAll('button[aria-labelledby]');
+		const labelMap = new Map<string, HTMLElement[]>();
+
+		buttons.forEach((btn) => {
+			const labelledBy = btn.getAttribute('aria-labelledby')?.trim();
+			if (!labelledBy) return;
+
+			// Skip hidden buttons (e.g. inside collapsed sidebar panels).
+			// They are not reachable by users or screen readers.
+			if (!this.isVisible(btn as HTMLElement)) return;
+
+			if (!labelMap.has(labelledBy)) {
+				labelMap.set(labelledBy, []);
+			}
+			labelMap.get(labelledBy)?.push(btn as HTMLElement);
+		});
+
+		let errorCount = 0;
+
+		for (const [labelId, btns] of labelMap) {
+			if (btns.length > 1) {
+				const ids = btns.map((b) => b.id || '(no id)').join(', ');
+				console.error(
+					new A11yValidatorException(
+						`In '${this.getDialogTitle(container)}': buttons [${ids}] share the same aria-labelledby="${labelId}". Each button must have a distinct accessible name to clearly convey its function.`,
+					),
+				);
+				errorCount++;
+			}
+		}
+
+		return errorCount;
+	}
+
 	private shouldCheckChild(child: Element): boolean {
 		return (
 			child instanceof HTMLElement &&
@@ -319,6 +404,8 @@ class A11yValidator {
 			}
 		}
 
+		errorCount += this.checkDuplicateButtonLabels(dialogElement);
+
 		this._directlyValidatedElements = null;
 		return errorCount;
 	}
@@ -326,10 +413,11 @@ class A11yValidator {
 	validateDialog(dialogElement: HTMLElement): void {
 		const content = dialogElement.querySelector('.ui-dialog-content');
 
-		const errorCount = this.validateContainer(
-			dialogElement,
-			content instanceof HTMLElement ? content : undefined,
-		);
+		const errorCount =
+			this.validateContainer(
+				dialogElement,
+				content instanceof HTMLElement ? content : undefined,
+			) + this.checkInitialFocusNotCloseButton(dialogElement);
 
 		if (errorCount === 0) {
 			console.error('A11yValidator: dialog passed all checks');

@@ -19,7 +19,9 @@
 #include <cppunit/extensions/HelperMacros.h>
 
 #include <cerrno>
+#include <cstdint>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -28,8 +30,10 @@ class NumUtilWhiteBoxTests : public CPPUNIT_NS::TestFixture
 {
     CPPUNIT_TEST_SUITE(NumUtilWhiteBoxTests);
     CPPUNIT_TEST(testI32FromString);
+    CPPUNIT_TEST(testI64FromString);
+    CPPUNIT_TEST(testU32FromString);
     CPPUNIT_TEST(testU64FromString);
-    CPPUNIT_TEST(testSafeAtoi);
+    CPPUNIT_TEST(testStoi);
     CPPUNIT_TEST(testStrtoint64MatchesStrtol);
     CPPUNIT_TEST(testStrtouint64MatchesStrtoul);
     CPPUNIT_TEST(testStrtoint64MatchesStrtoll);
@@ -38,13 +42,19 @@ class NumUtilWhiteBoxTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST_SUITE_END();
 
     void testI32FromString();
+    void testI64FromString();
+    void testU32FromString();
     void testU64FromString();
-    void testSafeAtoi();
+    void testStoi();
     void testStrtoint64MatchesStrtol();
     void testStrtouint64MatchesStrtoul();
     void testStrtoint64MatchesStrtoll();
     void testStrtouint64MatchesStrtoull();
     void testParseStrTo();
+    void testStrtoiWithOffset();
+
+    void stoiCompare(std::int64_t num);
+    void stoiTest(const std::string& str, std::int64_t num);
 };
 
 void NumUtilWhiteBoxTests::testI32FromString()
@@ -207,6 +217,257 @@ void NumUtilWhiteBoxTests::testI32FromString()
     LOK_ASSERT_EQUAL(static_cast<std::int32_t>(99), NumUtil::i32FromString("2147483648", 99));
 }
 
+void NumUtilWhiteBoxTests::testI64FromString()
+{
+    constexpr std::string_view testname = __func__;
+
+    // Basic positive numbers.
+    {
+        const auto [value, success] = NumUtil::i64FromString("0");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::int64_t>(0), value);
+    }
+    {
+        const auto [value, success] = NumUtil::i64FromString("42");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::int64_t>(42), value);
+    }
+    {
+        const auto [value, success] = NumUtil::i64FromString("123456789012345");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::int64_t>(123456789012345LL), value);
+    }
+
+    // Trailing non-numeric characters (partial parse, still succeeds).
+    {
+        const auto [value, success] = NumUtil::i64FromString("999abc");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::int64_t>(999), value);
+    }
+    {
+        const auto [value, success] = NumUtil::i64FromString("100,200");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::int64_t>(100), value);
+    }
+
+    // Negative numbers.
+    {
+        const auto [value, success] = NumUtil::i64FromString("-1");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::int64_t>(-1), value);
+    }
+    {
+        const auto [value, success] = NumUtil::i64FromString("-123456789012345");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::int64_t>(-123456789012345LL), value);
+    }
+
+    // INT64_MAX boundary.
+    {
+        const auto [value, success] = NumUtil::i64FromString("9223372036854775807");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(std::numeric_limits<std::int64_t>::max(), value);
+    }
+
+    // INT64_MIN boundary.
+    {
+        const auto [value, success] = NumUtil::i64FromString("-9223372036854775808");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(std::numeric_limits<std::int64_t>::min(), value);
+    }
+
+    // INT64_MAX + 1 overflows.
+    {
+        const auto [value, success] = NumUtil::i64FromString("9223372036854775808");
+        LOK_ASSERT(!success);
+    }
+
+    // INT64_MIN - 1 overflows.
+    {
+        const auto [value, success] = NumUtil::i64FromString("-9223372036854775809");
+        LOK_ASSERT(!success);
+    }
+
+    // Empty and invalid strings.
+    {
+        const auto [value, success] = NumUtil::i64FromString("");
+        LOK_ASSERT(!success);
+    }
+    {
+        const auto [value, success] = NumUtil::i64FromString("abc");
+        LOK_ASSERT(!success);
+    }
+
+    // Leading whitespace.
+    {
+        const auto [value, success] = NumUtil::i64FromString("  42");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::int64_t>(42), value);
+    }
+    {
+        const auto [value, success] = NumUtil::i64FromString("\t -7");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::int64_t>(-7), value);
+    }
+
+    // Leading '+' sign.
+    {
+        const auto [value, success] = NumUtil::i64FromString("+99");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::int64_t>(99), value);
+    }
+
+    // Whitespace-only is failure.
+    {
+        const auto [value, success] = NumUtil::i64FromString("   ");
+        LOK_ASSERT(!success);
+    }
+
+    // Just a sign with no digits.
+    {
+        const auto [value, success] = NumUtil::i64FromString("+");
+        LOK_ASSERT(!success);
+    }
+    {
+        const auto [value, success] = NumUtil::i64FromString("-");
+        LOK_ASSERT(!success);
+    }
+
+    // Single digit.
+    {
+        const auto [value, success] = NumUtil::i64FromString("7");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::int64_t>(7), value);
+    }
+
+    // Default-value overload.
+    LOK_ASSERT_EQUAL(static_cast<std::int64_t>(42), NumUtil::i64FromString("42", -1));
+    LOK_ASSERT_EQUAL(static_cast<std::int64_t>(-1), NumUtil::i64FromString("", -1));
+    LOK_ASSERT_EQUAL(static_cast<std::int64_t>(-1), NumUtil::i64FromString("abc", -1));
+    LOK_ASSERT_EQUAL(static_cast<std::int64_t>(55), NumUtil::i64FromString("  55", -1));
+    LOK_ASSERT_EQUAL(static_cast<std::int64_t>(-1), NumUtil::i64FromString("   ", -1));
+    LOK_ASSERT_EQUAL(static_cast<std::int64_t>(-1), NumUtil::i64FromString("+", -1));
+    LOK_ASSERT_EQUAL(static_cast<std::int64_t>(99),
+                     NumUtil::i64FromString("9223372036854775808", 99));
+    LOK_ASSERT_EQUAL(static_cast<std::int64_t>(99),
+                     NumUtil::i64FromString("-9223372036854775809", 99));
+}
+
+void NumUtilWhiteBoxTests::testU32FromString()
+{
+    constexpr std::string_view testname = __func__;
+
+    // Basic positive numbers.
+    {
+        const auto [value, success] = NumUtil::u32FromString("0");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(0), value);
+    }
+    {
+        const auto [value, success] = NumUtil::u32FromString("42");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(42), value);
+    }
+    {
+        const auto [value, success] = NumUtil::u32FromString("12345");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(12345), value);
+    }
+
+    // Trailing non-numeric characters (partial parse, still succeeds).
+    {
+        const auto [value, success] = NumUtil::u32FromString("42xy");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(42), value);
+    }
+    {
+        const auto [value, success] = NumUtil::u32FromString("100,200");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(100), value);
+    }
+
+    // UINT32_MAX boundary.
+    {
+        const auto [value, success] = NumUtil::u32FromString("4294967295");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(std::numeric_limits<std::uint32_t>::max(), value);
+    }
+
+    // UINT32_MAX + 1 overflows.
+    {
+        const auto [value, success] = NumUtil::u32FromString("4294967296");
+        LOK_ASSERT(!success);
+    }
+
+    // Large overflow.
+    {
+        const auto [value, success] = NumUtil::u32FromString("99999999999999");
+        LOK_ASSERT(!success);
+    }
+
+    // Negative values are invalid for unsigned.
+    {
+        const auto [value, success] = NumUtil::u32FromString("-1");
+        LOK_ASSERT(!success);
+    }
+    {
+        const auto [value, success] = NumUtil::u32FromString("-0");
+        LOK_ASSERT(!success);
+    }
+
+    // Empty and invalid strings.
+    {
+        const auto [value, success] = NumUtil::u32FromString("");
+        LOK_ASSERT(!success);
+    }
+    {
+        const auto [value, success] = NumUtil::u32FromString("abc");
+        LOK_ASSERT(!success);
+    }
+
+    // Leading whitespace.
+    {
+        const auto [value, success] = NumUtil::u32FromString("  42");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(42), value);
+    }
+
+    // Leading '+' sign.
+    {
+        const auto [value, success] = NumUtil::u32FromString("+99");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(99), value);
+    }
+
+    // Whitespace-only is failure.
+    {
+        const auto [value, success] = NumUtil::u32FromString("   ");
+        LOK_ASSERT(!success);
+    }
+
+    // Just a sign with no digits.
+    {
+        const auto [value, success] = NumUtil::u32FromString("+");
+        LOK_ASSERT(!success);
+    }
+
+    // Single digit.
+    {
+        const auto [value, success] = NumUtil::u32FromString("7");
+        LOK_ASSERT(success);
+        LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(7), value);
+    }
+
+    // Default-value overload.
+    LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(42), NumUtil::u32FromString("42", 99));
+    LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(99), NumUtil::u32FromString("", 99));
+    LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(99), NumUtil::u32FromString("abc", 99));
+    LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(99), NumUtil::u32FromString("-1", 99));
+    LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(88), NumUtil::u32FromString("  ", 88));
+    LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(50), NumUtil::u32FromString("  50", 99));
+    LOK_ASSERT_EQUAL(static_cast<std::uint32_t>(77), NumUtil::u32FromString("4294967296", 77));
+}
+
 void NumUtilWhiteBoxTests::testU64FromString()
 {
     constexpr std::string_view testname = __func__;
@@ -317,104 +578,219 @@ void NumUtilWhiteBoxTests::testU64FromString()
     LOK_ASSERT_EQUAL(static_cast<std::uint64_t>(50), NumUtil::u64FromString("  50", 99));
 }
 
-void NumUtilWhiteBoxTests::testSafeAtoi()
+void NumUtilWhiteBoxTests::stoiTest(const std::string& str, std::int64_t num)
 {
     constexpr std::string_view testname = __func__;
 
-    // Helper to compare safe_atoi with std::atoi for non-overflow cases.
-    // std::atoi has UB on overflow, so we only compare within int range.
-    auto compareWithAtoi = [&](const char* str)
+    bool unexpectedThrow = false;
+    try
     {
-        const int stdResult = std::atoi(str);
-        const int safeResult = NumUtil::safe_atoi(str, std::strlen(str));
-        LOK_ASSERT_EQUAL_CTX(stdResult, safeResult, std::string(str));
-    };
+        const auto value = std::stoi(str);
+        unexpectedThrow = true; // std::stoi() didn't throw, so we shouldn't either.
 
-    // Basic positive numbers.
-    compareWithAtoi("0");
-    compareWithAtoi("1");
-    compareWithAtoi("7");
-    compareWithAtoi("42");
-    compareWithAtoi("123");
-    compareWithAtoi("999");
-    compareWithAtoi("12345");
-
-    // Negative numbers.
-    compareWithAtoi("-1");
-    compareWithAtoi("-7");
-    compareWithAtoi("-42");
-    compareWithAtoi("-123");
-    compareWithAtoi("-999");
-    compareWithAtoi("-12345");
-
-    // Plus sign prefix.
-    compareWithAtoi("+7");
-    compareWithAtoi("+42");
-    compareWithAtoi("+0");
-
-    // Leading whitespace.
-    compareWithAtoi("  42");
-    compareWithAtoi("\t123");
-    compareWithAtoi("   -456");
-    compareWithAtoi(" \t +789");
-
-    // Leading zeros.
-    compareWithAtoi("0042");
-    compareWithAtoi("00123");
-    compareWithAtoi("-00456");
-
-    // Trailing non-numeric characters.
-    compareWithAtoi("42xy");
-    compareWithAtoi("123abc");
-    compareWithAtoi("-456def");
-
-    // Zero variants.
-    compareWithAtoi("-0");
-    compareWithAtoi("+0");
-    compareWithAtoi("0000");
-
-    // Single digit numbers.
-    compareWithAtoi("1");
-    compareWithAtoi("9");
-    compareWithAtoi("-1");
-    compareWithAtoi("-9");
-
-    // INT_MAX boundary.
-    compareWithAtoi("2147483647");
-
-    // Empty and invalid strings (atoi returns 0).
-    compareWithAtoi("");
-    compareWithAtoi("abc");
-    compareWithAtoi("   ");
-
-    // Overflow: safe_atoi clamps to INT_MAX / -INT_MAX.
-    LOK_ASSERT_EQUAL(std::numeric_limits<int>::max(), NumUtil::safe_atoi("9999999990", 10));
-    LOK_ASSERT_EQUAL(-std::numeric_limits<int>::max(), NumUtil::safe_atoi("-9999999990", 11));
-    LOK_ASSERT_EQUAL(std::numeric_limits<int>::max(),
-                     NumUtil::safe_atoi("2147483648", 10)); // INT_MAX + 1.
-
-    // Length-limiting (not null-terminated behavior).
-    {
-        std::string s("42");
-        LOK_ASSERT_EQUAL(4, NumUtil::safe_atoi(s.data(), 1));
+        LOK_ASSERT_EQUAL(num, static_cast<std::int64_t>(value));
+        LOK_ASSERT_EQUAL(num, static_cast<std::int64_t>(NumUtil::stoi(str)));
     }
+    catch (const std::invalid_argument&)
     {
-        std::string s("12345");
-        LOK_ASSERT_EQUAL(123, NumUtil::safe_atoi(s.data(), 3));
-    }
+        if (!unexpectedThrow)
+        {
+            TST_LOG("std::stoi(" << str
+                                 << ") threw invalid_argument, now checking NumUtil::stoi()");
+        }
+        else
+        {
+            LOK_ASSERT_FAIL("Unexpected to get invalid_argument exception for [" << str << ']');
+        }
 
-    // Embedded null (safe_atoi uses length, stops at non-digit).
+        try
+        {
+            LOK_ASSERT_EQUAL_CTX(num, static_cast<std::int64_t>(NumUtil::stoi(str)), str);
+            LOK_ASSERT_FAIL("Expected invalid_argument exception to be thrown for [" << str << ']');
+        }
+        catch (const std::invalid_argument&)
+        {
+            LOK_ASSERT_PASS("Got invalid_argument exception as expected for [" << str << ']');
+        }
+    }
+    catch (const std::out_of_range&)
     {
-        std::string s("123");
-        s[1] = '\0';
-        LOK_ASSERT_EQUAL(1, NumUtil::safe_atoi(s.data(), s.size()));
+        if (!unexpectedThrow)
+        {
+            TST_LOG("std::stoi(" << str << ") threw out_of_range, now checking NumUtil::stoi()");
+        }
+        else
+        {
+            LOK_ASSERT_FAIL("Unexpected to get out_of_range exception for [" << str << ']');
+        }
+
+        try
+        {
+            LOK_ASSERT_EQUAL_CTX(num, static_cast<std::int64_t>(NumUtil::stoi(str)), str);
+            LOK_ASSERT_FAIL("Expected out_of_range exception to be thrown for [" << str << ']');
+        }
+        catch (const std::out_of_range&)
+        {
+            LOK_ASSERT_PASS("Got out_of_range exception as expected for [" << str << ']');
+        }
     }
+    catch (const std::exception&)
+    {
+        if (!unexpectedThrow)
+        {
+            TST_LOG("std::stoi(" << str << ") threw an exception, now checking NumUtil::stoi()");
+        }
+        else
+        {
+            LOK_ASSERT_FAIL("Unexpected to get exception for [" << str << ']');
+        }
 
-    // Null pointer.
-    LOK_ASSERT_EQUAL(0, NumUtil::safe_atoi(nullptr, 0));
+        try
+        {
+            LOK_ASSERT_EQUAL_CTX(num, static_cast<std::int64_t>(NumUtil::stoi(str)), str);
+            LOK_ASSERT_FAIL("Expected exception to be thrown for [" << str << ']');
+        }
+        catch (const std::exception&)
+        {
+            LOK_ASSERT_PASS("Got exception as expected for [" << str << ']');
+        }
+    }
+}
 
-    // Zero length.
-    LOK_ASSERT_EQUAL(0, NumUtil::safe_atoi("42", 0));
+void NumUtilWhiteBoxTests::stoiCompare(std::int64_t num)
+{
+    constexpr std::string_view testname = __func__;
+
+    LOK_ASSERT_EQUAL(num, num);
+    const auto str = std::to_string(num);
+    LOK_ASSERT(!str.empty());
+
+    stoiTest(str, num);
+}
+
+void NumUtilWhiteBoxTests::testStoi()
+{
+    constexpr std::string_view testname = __func__;
+
+    try
+    {
+        stoiCompare(0);
+        stoiCompare(1);
+        stoiCompare(-1);
+        stoiCompare(1L << 34);
+        stoiCompare(-(1L << 34));
+        for (int i = 0; i < 10000; ++i)
+        {
+            stoiCompare(Util::rng::getNext());
+        }
+
+        // Test empty string - should throw invalid_argument.
+        stoiTest("", 0);
+
+        // Test whitespace only - should throw invalid_argument.
+        stoiTest("   ", 0);
+
+        // Test non-numeric string - should throw invalid_argument.
+        stoiTest("abc", 0);
+
+        // Test string starting with letters - should throw invalid_argument.
+        stoiTest("abc123", 0);
+
+        // Test leading whitespace with valid number - should parse successfully.
+        LOK_ASSERT_EQUAL(123, NumUtil::stoi("  123"));
+        LOK_ASSERT_EQUAL(456, NumUtil::stoi("\t456"));
+        LOK_ASSERT_EQUAL(789, NumUtil::stoi("   \t  789"));
+
+        // Test trailing non-numeric characters - should parse the numeric part.
+        LOK_ASSERT_EQUAL(123, NumUtil::stoi("123abc"));
+        LOK_ASSERT_EQUAL(456, NumUtil::stoi("456xyz"));
+        LOK_ASSERT_EQUAL(789, NumUtil::stoi("789   "));
+
+        // Test plus sign prefix - should work.
+        LOK_ASSERT_EQUAL(123, NumUtil::stoi("+123"));
+        LOK_ASSERT_EQUAL(0, NumUtil::stoi("+0"));
+
+        // Test minus sign prefix - should work.
+        LOK_ASSERT_EQUAL(-123, NumUtil::stoi("-123"));
+        LOK_ASSERT_EQUAL(0, NumUtil::stoi("-0"));
+
+        // Test just a minus sign - should throw invalid_argument.
+        stoiTest("-", 0);
+
+        // Test just a plus sign - should throw invalid_argument.
+        stoiTest("+", 0);
+
+        // Test double signs - should throw invalid_argument.
+        stoiTest("--123", 0);
+
+        // Test double signs + should throw invalid_argument.
+        stoiTest("++123", 0);
+
+        // Test leading zeros - should work.
+        LOK_ASSERT_EQUAL(123, NumUtil::stoi("00123"));
+        LOK_ASSERT_EQUAL(0, NumUtil::stoi("0000"));
+        LOK_ASSERT_EQUAL(-123, NumUtil::stoi("-00123"));
+
+        // Test INT32_MAX boundary.
+        LOK_ASSERT_EQUAL(std::numeric_limits<std::int32_t>::max(), NumUtil::stoi("2147483647"));
+
+        // Test INT32_MIN boundary.
+        LOK_ASSERT_EQUAL(std::numeric_limits<std::int32_t>::min(), NumUtil::stoi("-2147483648"));
+
+        // Test INT32_MAX + 1 - should throw out_of_range.
+        stoiTest("2147483648", 0);
+
+        // Test INT32_MIN - 1 - should throw out_of_range.
+        stoiTest("-2147483649", 0);
+
+        // Test very large positive number - should throw out_of_range.
+        stoiTest("9999999999999999999", 0);
+
+        // Test very large negative number - should throw out_of_range.
+        stoiTest("-9999999999999999999", 0);
+
+        // Test single zero.
+        LOK_ASSERT_EQUAL(0, NumUtil::stoi("0"));
+
+        // Test negative zero.
+        LOK_ASSERT_EQUAL(0, NumUtil::stoi("-0"));
+
+        // Test positive zero.
+        LOK_ASSERT_EQUAL(0, NumUtil::stoi("+0"));
+
+        // Test single digit numbers.
+        LOK_ASSERT_EQUAL(1, NumUtil::stoi("1"));
+        LOK_ASSERT_EQUAL(9, NumUtil::stoi("9"));
+        LOK_ASSERT_EQUAL(-1, NumUtil::stoi("-1"));
+        LOK_ASSERT_EQUAL(-9, NumUtil::stoi("-9"));
+
+        // Test common values.
+        LOK_ASSERT_EQUAL(100, NumUtil::stoi("100"));
+        LOK_ASSERT_EQUAL(1000, NumUtil::stoi("1000"));
+        LOK_ASSERT_EQUAL(1000000, NumUtil::stoi("1000000"));
+        LOK_ASSERT_EQUAL(-100, NumUtil::stoi("-100"));
+        LOK_ASSERT_EQUAL(-1000, NumUtil::stoi("-1000"));
+        LOK_ASSERT_EQUAL(-1000000, NumUtil::stoi("-1000000"));
+
+        // Test whitespace + bare sign - should throw invalid_argument.
+        stoiTest(" -", 0);
+        stoiTest("\t+", 0);
+        stoiTest("  +", 0);
+
+        // Test whitespace + sign + non-digit - should throw invalid_argument.
+        stoiTest(" -a", 0);
+
+        // Test tab-only whitespace - should throw invalid_argument.
+        stoiTest("\t", 0);
+        stoiTest("\t\t", 0);
+
+        // Test mixed double signs - should throw invalid_argument.
+        stoiTest("+-123", 0);
+    }
+    catch (const std::exception& exc)
+    {
+        LOK_ASSERT_FAIL("Unexpected: " << exc.what());
+    }
 }
 
 void NumUtilWhiteBoxTests::testStrtoint64MatchesStrtol()

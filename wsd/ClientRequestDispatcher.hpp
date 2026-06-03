@@ -58,6 +58,10 @@ private:
     /// Called after successful socket reads.
     void handleIncomingMessage(SocketDisposition& disposition) override;
 
+    /// Read the HTTP Header and create an HTTP Request.
+    ssize_t readHeader(const std::shared_ptr<StreamSocket>& socket, Poco::Net::HTTPRequest& request,
+                       std::chrono::duration<float, std::milli> delayMs);
+
     int getPollEvents(std::chrono::steady_clock::time_point /* now */,
                       int64_t& /* timeoutMaxMs */) override
     {
@@ -201,6 +205,9 @@ private:
 #if !MOBILEAPP
     std::streamsize _postContentPending = 0;
 #endif // !MOBILEAPP
+
+    /// The current position while reading the header.
+    std::size_t _headerPos = 0;
 
     /// The minimum number of RVS instances in flight to trigger cleanup.
     static constexpr std::size_t RvsLowWatermark = 1 * 1024;

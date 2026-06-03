@@ -324,10 +324,15 @@ class LOUtil {
 		return url;
 	}
 
-	public static setImage(img: HTMLImageElement, name: string, map: any): void {
+	public static setImage(
+		img: HTMLImageElement,
+		name: string,
+		map: any,
+		imageIsLayoutCritical?: boolean,
+	): void {
 		const setupIcon = function () {
 			img.src = LOUtil.getImageURL(name);
-			LOUtil.checkIfImageExists(img);
+			LOUtil.checkIfImageExists(img, imageIsLayoutCritical);
 		};
 		setupIcon();
 
@@ -406,10 +411,15 @@ class LOUtil {
 		}
 
 		// Skip icon lookup for numeric-only IDs (JSDialog artifacts like 1, 5, 65535)
-		if (/^\d+$/.test(cleanName)) return '';
+		// and core sr* resource IDs (like sr20006)
+		if (/^\d+$/.test(cleanName) || /^sr\d+$/.test(cleanName)) return '';
 
 		// Skip icon lookup for overflow button pseudo-commands
 		if (cleanName.startsWith('overflow-button-')) return '';
+
+		// Strip 'sc_' prefix from sidebar controller command names
+		// (core's small-command icon prefix that doesn't apply to COOL)
+		if (cleanName.startsWith('sc_')) cleanName = cleanName.substring(3);
 
 		var iconURLAliases: IconNameMap = {
 			// lc_closemobile.svg is generated when loading in NB mode then
@@ -432,6 +442,7 @@ class LOUtil {
 			formatsparklinemenu: 'insertsparkline',
 			insertdatecontentcontrol: 'datefield',
 			editheaderandfooter: 'headerandfooter',
+			insertfooter: 'insertpagefooter',
 			exportas: 'saveas',
 			insertheaderfooter: 'headerandfooter',
 			previoustrackedchange: 'prevrecord',
@@ -456,6 +467,7 @@ class LOUtil {
 			insertrowsafter: 'insertrowsmenu',
 			insertobjectchart: 'drawchart',
 			textpropertypanel: 'sidebartextpanel',
+			textbodyparastyle: 'parastyle',
 			spacepara15: 'linespacing',
 			orientationdegrees: 'rotation',
 			clearoutline: 'delete',
@@ -527,6 +539,8 @@ class LOUtil {
 			tableautofitmenu: 'columnwidth',
 			menucolumnwidth: 'columnwidth',
 			hyphenation: 'hyphenate',
+			validatedialogsa11y: 'validation',
+			validatesidebara11y: 'validation',
 			objectbackone: 'behindobject',
 			deleteannotation: 'deletenote',
 			areapropertypanel: 'chartareapanel',
@@ -631,6 +645,8 @@ class LOUtil {
 			graphicfiltersharpen: 'graphicfiltersharpen',
 			graphicfiltersobel: 'graphicfiltersobel',
 			effects: 'pictureeffectsmenu',
+			showmultiplepages: 'multipageview',
+			showtwopages: 'multipageview',
 			fitwidthzoom: 'pagewidth',
 			open: 'formularesfapopen',
 			'exportas-pdf': 'exportpdf',

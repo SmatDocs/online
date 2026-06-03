@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
+#include <stdexcept>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -258,6 +259,23 @@ inline std::int32_t i32FromString(const std::string_view input, const std::int32
     return strTo<std::int32_t>(input, def);
 }
 
+/// Convert a string to 32-bit unsigned int.
+/// Returns the parsed value and a boolean indicating success or failure.
+/// const auto [number, success] = NumUtil::u32FromString(portString);
+inline std::pair<std::uint32_t, bool> u32FromString(const std::string_view input)
+{
+    std::size_t offset = 0;
+    const auto [value, status] = parseStrTo<std::uint32_t>(input, offset);
+    return { value, status <= StrToState::Partial };
+}
+
+/// Convert a string to 32-bit unsigned int. On failure, returns the default value.
+/// Used where there is no interest in knowing whether the input was valid or not.
+inline std::uint32_t u32FromString(const std::string_view input, const std::uint32_t def)
+{
+    return strTo<std::uint32_t>(input, def);
+}
+
 /// Parse a string to unsigned 32-bit int.
 /// Returns the parsed value and a boolean indicating success or failure.
 /// const auto [number, state] = NumUtil::parseStrToUint32(str, offset);
@@ -284,6 +302,22 @@ inline std::pair<std::uint64_t, StrToState> parseStrToUint64(const std::string_v
     return parseStrTo<std::uint64_t>(str, offset);
 }
 
+/// Convert a string to 64-bit int.
+/// Returns the parsed value and a boolean indicating success or failure.
+inline std::pair<std::int64_t, bool> i64FromString(const std::string_view input)
+{
+    std::size_t offset = 0;
+    const auto [value, status] = parseStrTo<std::int64_t>(input, offset);
+    return { value, status <= StrToState::Partial };
+}
+
+/// Convert a string to 64-bit int. On failure, returns the default value.
+/// Used where there is no interest in knowing whether the input was valid or not.
+inline std::int64_t i64FromString(const std::string_view input, const std::int64_t def)
+{
+    return strTo<std::int64_t>(input, def);
+}
+
 /// Convert a string to 64-bit unsigned int.
 /// Returns the parsed value and a boolean indicating success or failure.
 inline std::pair<std::uint64_t, bool> u64FromString(const std::string_view input)
@@ -300,59 +334,20 @@ inline std::uint64_t u64FromString(const std::string_view input, const std::uint
     return strTo<std::uint64_t>(input, def);
 }
 
-/**
-* Similar to std::atoi() but does not require p to be null-terminated.
-*
-* Returns std::numeric_limits<int>::min/max() if the result would overflow.
-*/
-inline int safe_atoi(const char* p, int len)
+/// Fast string to 32-bit signed int conversion.
+/// Optimized for performance with manual parsing and minimal branches.
+/// Drop-in replacement to std::stoi() that accepts string_view.
+inline std::int32_t stoi(const std::string_view str)
 {
-    long ret{};
-    if (!p || !len)
-    {
-        return ret;
-    }
+    std::size_t offset = 0;
+    const auto [value, res] = parseStrToInt32(str, offset);
+    if (offset == 0)
+        throw std::invalid_argument("stoi");
 
-    int multiplier = 1;
-    int offset = 0;
-    while (isspace(p[offset]))
-    {
-        ++offset;
-        if (offset >= len)
-        {
-            return ret;
-        }
-    }
+    if (res == StrToState::Overflow)
+        throw std::out_of_range("stoi");
 
-    switch (p[offset])
-    {
-        case '-':
-            multiplier = -1;
-            ++offset;
-            break;
-        case '+':
-            ++offset;
-            break;
-    }
-    if (offset >= len)
-    {
-        return ret;
-    }
-
-    while (isdigit(p[offset]))
-    {
-        std::int64_t next = ret * 10 + (p[offset] - '0');
-        if (next >= std::numeric_limits<int>::max())
-            return multiplier * std::numeric_limits<int>::max();
-        ret = next;
-        ++offset;
-        if (offset >= len)
-        {
-            return multiplier * ret;
-        }
-    }
-
-    return multiplier * ret;
+    return value;
 }
 
 } // namespace NumUtil

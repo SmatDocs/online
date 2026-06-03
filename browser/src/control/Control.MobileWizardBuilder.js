@@ -28,6 +28,7 @@ window.L.Control.MobileWizardBuilder = window.L.Control.JSDialogBuilder.extend({
 		this._controlHandlers['checkbox'] = this._checkboxControl;
 		this._controlHandlers['combobox'] = JSDialog.mobileCombobox;
 		this._controlHandlers['comboboxentry'] = JSDialog.mobileComboboxEntry;
+		this._controlHandlers['fixedtext'] = JSDialog.fixedtextControl;
 		this._controlHandlers['edit'] = this._editControl;
 		this._controlHandlers['frame'] = this._frameHandler;
 		this._controlHandlers['grid'] = this._gridHandler;
@@ -88,11 +89,12 @@ window.L.Control.MobileWizardBuilder = window.L.Control.JSDialogBuilder.extend({
 		data.parent = parent;
 	},
 
+	/* todo: merge this with JSDialog.baseSpinField */
 	baseSpinField: function(parentContainer, data, builder, customCallback) {
 		var controls = {};
 		if (data.label) {
 			var fixedTextData = { text: data.label };
-			builder._fixedtextControl(parentContainer, fixedTextData, builder);
+			JSDialog.fixedtextControl(parentContainer, fixedTextData, builder);
 		}
 
 		var div = window.L.DomUtil.create('div', 'spinfieldcontainer', parentContainer);
@@ -653,7 +655,7 @@ window.L.Control.MobileWizardBuilder = window.L.Control.JSDialogBuilder.extend({
 			builder.map.sendUnoCommand(command, params);
 		};
 
-		builder._spinfieldControl(parentContainer, lineData, builder, callbackFunction);
+		JSDialog.spinfieldControl(parentContainer, lineData, builder, callbackFunction);
 	},
 
 	_panelHandler: function(parentContainer, data, builder) {

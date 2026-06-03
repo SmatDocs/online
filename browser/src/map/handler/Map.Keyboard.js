@@ -7,7 +7,7 @@
  * at TextInput.
  */
 
-/* global _ app UNOKey TileManager */
+/* global app UNOKey TileManager */
 
 window.L.Map.mergeOptions({
 	keyboard: true,
@@ -311,13 +311,14 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 			container.tabIndex = '0';
 		}
 
-		window.L.DomEvent.on(this._map.getContainer(), 'keydown keyup keypress', this._onKeyDown, this);
+		this._keyEventContainer = document.getElementById('document-container');
+		window.L.DomEvent.on(this._keyEventContainer, 'keydown keyup keypress', this._onKeyDown, this);
 		window.L.DomEvent.on(window.document, 'keydown', this._globalKeyEvent, this);
 		window.document.addEventListener('keyup', this._globalKeyUp.bind(this), true);
 	},
 
 	removeHooks: function () {
-		window.L.DomEvent.off(this._map.getContainer(), 'keydown keyup keypress', this._onKeyDown, this);
+		window.L.DomEvent.off(this._keyEventContainer, 'keydown keyup keypress', this._onKeyDown, this);
 		window.L.DomEvent.off(window.document, 'keydown', this._globalKeyEvent, this);
 		window.document.removeEventListener('keyup', this._globalKeyUp.bind(this));
 	},
@@ -671,11 +672,7 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 				map.setZoom(map.getZoom() + (ev.shiftKey ? 3 : 1) * this._zoomKeys[key], null, true /* animate? */);
 			}
 			else if (ev.key && ev.key.length === 1 && !ev.ctrlKey && !ev.altKey && !map.isEditMode()) {
-				let permissionMode = map.uiManager && map.uiManager.permissionViewMode;
-				let viewModeBtn = permissionMode && (permissionMode.viewModeDropdown || permissionMode.viewModeContainer);
-				if (viewModeBtn && map.uiManager && map.uiManager.showAttention) {
-					map.uiManager.showAttention(viewModeBtn, _('You are currently in View mode'), true, 5000);
-				}
+				map.uiManager.showViewModeAttention();
 			}
 		}
 

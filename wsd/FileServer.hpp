@@ -16,12 +16,13 @@
 
 #pragma once
 
-#include <COOLWSD.hpp>
-#include <ConfigUtil.hpp>
-#include <FileUtil.hpp>
-#include <HttpRequest.hpp>
+#include <common/ConfigUtil.hpp>
+#include <common/FileUtil.hpp>
+#include <net/HttpRequest.hpp>
+#include <net/Socket.hpp>
+#include <wsd/COOLWSD.hpp>
+
 #include <Poco/Net/PartHandler.h>
-#include <Socket.hpp>
 
 #include <string>
 #include <unordered_map>
@@ -222,19 +223,20 @@ public:
     static void hstsHeaders([[maybe_unused]] http::Response& response)
     {
         // HSTS hardening. Disabled in debug builds.
-#if !ENABLE_DEBUG
-        if (ConfigUtil::isSslEnabled() || ConfigUtil::isSSLTermination())
+        if constexpr (!Util::isDebugEnabled())
         {
-            if (ConfigUtil::getConfigValue<bool>("ssl.sts.enabled", false))
+            if (ConfigUtil::isSslEnabled() || ConfigUtil::isSSLTermination())
             {
-                // Only for release, which doesn't support tests. No CONFIG_STATIC, therefore.
-                static const auto maxAge =
-                    ConfigUtil::getConfigValue<int>("ssl.sts.max_age", 31536000); // Default 1 year.
-                response.add("Strict-Transport-Security",
-                             "max-age=" + std::to_string(maxAge) + "; includeSubDomains");
+                if (ConfigUtil::getConfigValue<bool>("ssl.sts.enabled", false))
+                {
+                    // Only for release, which doesn't support tests. No CONFIG_STATIC, therefore.
+                    static const auto maxAge = ConfigUtil::getConfigValue<int>(
+                        "ssl.sts.max_age", 31536000); // Default 1 year.
+                    response.add("Strict-Transport-Security",
+                                 "max-age=" + std::to_string(maxAge) + "; includeSubDomains");
+                }
             }
         }
-#endif
     }
 
     void dumpState(std::ostream& os);

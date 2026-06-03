@@ -19,9 +19,11 @@ interface WidgetJSON {
 	type: string; // type of widget
 	enabled?: boolean; // enabled state
 	visible?: boolean; // visibility state
+	userHidden?: boolean; // hidden by user preference (separate from doc-type preferences)
 	children?: Array<WidgetJSON>; // child nodes
 	title?: string;
 	text?: string; // TODO: remove, its for not yet defined widget types
+	editText?: string; // text content from WeldEditView (EditEngine)
 	tooltip?: string; // tooltip text (QuickHelpText from VCL)
 	top?: string; // placement in the grid - row
 	left?: string; // placement in the grid - column
@@ -59,6 +61,7 @@ interface JSBuilder {
 	options: JSBuilderOptions; // current state
 	map: MapInterface; // reference to map
 	rendersCache: any; // on demand content cache
+	wizard: any;
 	windowId?: WindowId | number;
 
 	build: (
@@ -84,6 +87,7 @@ interface JSBuilder {
 	_getAccessKeyFromText: (text: string) => string;
 	_stressAccessKey: (element: HTMLElement, accessKey: string) => void;
 	_expanderHandler: any; // FIXME: use handlers getter instead
+	_unitToVisibleString: (unit: string) => string;
 }
 
 // widget handler, returns true if child nodes should be still processed by the builder
@@ -264,6 +268,7 @@ interface GridWidgetJSON extends ContainerWidgetJSON {
 	rows: number; // numer of grid rows
 	tabIndex?: number;
 	initialSelectedId?: string; // id of the first selected element
+	columnSpacing?: number;
 }
 
 interface ToolboxWidgetJSON extends WidgetJSON {
@@ -307,9 +312,11 @@ interface TextWidget extends WidgetJSON {
 	text: string;
 	html?: string;
 	labelFor?: string;
+	labelForType?: string;
 	style?: string;
 	hidden?: boolean;
 	renderAsStatic?: boolean;
+	xalign: string;
 }
 
 // type: 'pushbutton'
@@ -396,6 +403,8 @@ interface TreeHeaderJSON {
 	text: string;
 	sortable: boolean; // can be sorted by column
 	arrow?: 'up' | 'down'; // sorting arrow to show
+	color?: string; // series color as hex string (RRGGBB) for color bar indicator
+	headerName?: string; // series name for chart data table headers
 }
 
 interface TreeWidgetJSON extends WidgetJSON {

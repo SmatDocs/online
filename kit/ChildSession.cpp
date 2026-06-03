@@ -10,7 +10,7 @@
  */
 
 /*
- * Kit process child session handling LOK commands.
+ * Kit process child session handling COKit commands.
  * Classes: ChildSession - Document session command processing
  */
 
@@ -424,7 +424,22 @@ bool ChildSession::_handleInput(const char *buffer, int length)
                 "\"value\":\"" + encodedTransformQueryJSON + "\""
             "}}";
 
-        getLOKitDocument()->postUnoCommand(command.c_str(), arguments.c_str(), false);
+        try
+        {
+            // For interactive sessions, request a notification so we get
+            // the real success/failure via LOK_CALLBACK_UNO_COMMAND_RESULT.
+            // For MCP/convert-to, the saveas flow returns the modified
+            // document, so no notification is needed.
+            std::string url;
+            getTokenString(tokens[1], "url", url);
+            bool interactive = (url == "interactive");
+            getLOKitDocument()->postUnoCommand(command.c_str(), arguments.c_str(), interactive);
+        }
+        catch (const std::exception& exc)
+        {
+            LOG_ERR("transformdocumentstructure: postUnoCommand failed: " << exc.what());
+            sendTextFrameAndLogError("error: cmd=transformdocumentstructure kind=parseerror");
+        }
 
         LOG_TRC("Transformation JSON application was requested.");
 
@@ -501,10 +516,6 @@ bool ChildSession::_handleInput(const char *buffer, int length)
     {
         sendTextFrameAndLogError("error: cmd=" + tokens[0] + " kind=nodocloaded");
         return false;
-    }
-    else if (tokens.equals(0, "renderfont"))
-    {
-        sendFontRendering(tokens);
     }
     else if (tokens.equals(0, "setclientpart"))
     {
@@ -963,7 +974,9 @@ bool ChildSession::loadDocument(const StringVector& tokens)
 #if ENABLE_DEBUG && !MOBILEAPP
     if (std::getenv("PAUSEFORDEBUGGER"))
     {
-        std::cerr << getDocURL() << " paused waiting for a debugger to attach: " << Util::getProcessId() << std::endl;
+        std::cerr << getDocURL()
+                  << " paused waiting for a debugger to attach: " << ProcUtil::getProcessId()
+                  << std::endl;
         SigUtil::setDebuggerSignal();
         pause();
     }
@@ -1094,69 +1107,6 @@ bool ChildSession::saveDocumentBackground([[maybe_unused]] const StringVector& t
     }
 
     return false;
-}
-
-bool ChildSession::sendFontRendering(const StringVector& tokens)
-{
-    std::string font, text, decodedFont, decodedChar;
-    bool success;
-
-    if (tokens.size() < 3 ||
-        !getTokenString(tokens[1], "font", font))
-    {
-        sendTextFrameAndLogError("error: cmd=renderfont kind=syntax");
-        return false;
-    }
-
-    getTokenString(tokens[2], "char", text);
-
-    try
-    {
-        URI::decode(font, decodedFont);
-        URI::decode(text, decodedChar);
-    }
-    catch (Poco::SyntaxException& exc)
-    {
-        LOG_ERR(exc.message());
-        sendTextFrameAndLogError("error: cmd=renderfont kind=syntax");
-        return false;
-    }
-
-    const std::string response = "renderfont: " + tokens.cat(' ', 1) + '\n';
-
-    std::vector<char> output;
-    output.resize(response.size());
-    std::memcpy(output.data(), response.data(), response.size());
-
-    const auto start = std::chrono::steady_clock::now();
-    // renderFont use a default font size (25) when width and height are 0
-    int width = 0, height = 0;
-
-    getLOKitDocument()->setView(_viewId);
-
-    ScopedBytes ptrFont(getLOKitDocument()->renderFont(decodedFont.c_str(), decodedChar.c_str(), &width, &height));
-
-    const auto duration = std::chrono::steady_clock::now() - start;
-    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
-    LOG_TRC("renderFont [" << font << "] rendered in " << elapsed);
-
-    if (!ptrFont)
-    {
-        return sendTextFrame(output.data(), output.size());
-    }
-
-    const auto mode = static_cast<COKitTileMode>(getLOKitDocument()->getTileMode());
-
-    if (Png::encodeBufferToPNG(ptrFont.get(), width, height, output, mode))
-    {
-        success = sendTextFrame(output.data(), output.size());
-    }
-    else
-    {
-        success = sendTextFrameAndLogError("error: cmd=renderfont kind=failure");
-    }
-
-    return success;
 }
 
 bool ChildSession::getStatus()
@@ -1441,7 +1391,7 @@ bool ChildSession::downloadAs(const StringVector& tokens)
     const std::string filename = Poco::Path(nameAnonym).getFileName();
     const std::string urlAnonym = jailDoc + tmpDir + '/' + filename;
 
-    LOG_DBG("Calling LOK's saveAs with URL: ["
+    LOG_DBG("Calling COKit's saveAs with URL: ["
             << urlAnonym << "], Format: [" << (format.empty() ? "(nullptr)" : format.c_str())
             << "], Filter Options: ["
             << (filterOptions.empty() ? "(nullptr)" : filterOptions.c_str()) << ']');
@@ -2199,7 +2149,7 @@ bool ChildSession::dialogEvent(const StringVector& tokens)
 bool ChildSession::formFieldEvent(const char* buffer, int length, const StringVector& /*tokens*/)
 {
     std::string firstLine = getFirstLine(buffer, length);
-    std::string arguments = firstLine.substr(std::string("formfieldevent ").size());
+    std::string arguments = firstLine.substr(std::string_view("formfieldevent ").size());
 
     if (arguments.empty())
     {
@@ -2617,17 +2567,17 @@ bool ChildSession::renderSlide(const StringVector& tokens)
     int part = -1;
     std::string partString;
     if (getTokenString(tokens[2], "part", partString))
-        part = std::stoi(partString);
+        part = NumUtil::stoi(partString);
 
     unsigned suggestedWidth = 0;
     std::string widthString;
     if (getTokenString(tokens[3], "width", widthString))
-        suggestedWidth = std::stoi(widthString);
+        suggestedWidth = NumUtil::stoi(widthString);
 
     unsigned suggestedHeight = 0;
     std::string heightString;
     if (getTokenString(tokens[4], "height", heightString))
-        suggestedHeight = std::stoi(heightString);
+        suggestedHeight = NumUtil::stoi(heightString);
 
     if (hash.empty() || part < 0 || suggestedWidth == 0 || suggestedHeight == 0)
     {
@@ -2638,12 +2588,12 @@ bool ChildSession::renderSlide(const StringVector& tokens)
     bool renderBackground = true;
     std::string renderBackgroundString;
     if (tokens.size() > 5 && getTokenString(tokens[5], "renderBackground", renderBackgroundString))
-        renderBackground = std::stoi(renderBackgroundString) > 0;
+        renderBackground = NumUtil::stoi(renderBackgroundString) > 0;
 
     bool renderMasterPage = true;
     std::string renderMasterPageString;
     if (tokens.size() > 6 && getTokenString(tokens[6], "renderMasterPage", renderMasterPageString))
-        renderMasterPage = std::stoi(renderMasterPageString) > 0;
+        renderMasterPage = NumUtil::stoi(renderMasterPageString) > 0;
 
     double devicePixelRatio = 1.0;
     std::string devicePixelRatioString;
@@ -2653,7 +2603,7 @@ bool ChildSession::renderSlide(const StringVector& tokens)
     bool compressedLayers = false;
     std::string compressedLayersString;
     if (tokens.size() > 8 && getTokenString(tokens[8], "compressedLayers", compressedLayersString))
-        compressedLayers = std::stoi(compressedLayersString) > 0;
+        compressedLayers = NumUtil::stoi(compressedLayersString) > 0;
 
     unsigned bufferWidth = suggestedWidth;
     unsigned bufferHeight = suggestedHeight;
@@ -2734,7 +2684,14 @@ bool ChildSession::renderWindow(const StringVector& tokens)
             dpiScale = 1.0;
     }
 
-    const size_t pixmapDataSize = 4 * bufferWidth * bufferHeight;
+    constexpr int maxDimension = 4096;
+    if (bufferWidth <= 0 || bufferHeight <= 0 || bufferWidth > maxDimension || bufferHeight > maxDimension)
+    {
+        LOG_WRN("paintwindow: rejecting invalid dimensions " << bufferWidth << 'x' << bufferHeight);
+        return true;
+    }
+
+    const size_t pixmapDataSize = static_cast<size_t>(4) * bufferWidth * bufferHeight;
     std::vector<unsigned char> pixmap(pixmapDataSize);
     const int width = bufferWidth;
     const int height = bufferHeight;
@@ -3053,7 +3010,7 @@ bool ChildSession::saveAs(const StringVector& tokens)
     // We don't have the FileId at this point, just a new filename to save-as.
     // So here the filename will be obfuscated with some hashing, which later will
     // get a proper FileId that we will use going forward.
-    LOG_DBG("Calling LOK's saveAs with URL: ["
+    LOG_DBG("Calling COKit's saveAs with URL: ["
             << anonymizeUrl(wopiFilename) << "], Format: ["
             << (format.empty() ? "(nullptr)" : format.c_str()) << "], Filter Options: ["
             << (filterOptions.empty() ? "(nullptr)" : filterOptions.c_str()) << ']');
@@ -3092,7 +3049,7 @@ bool ChildSession::saveAs(const StringVector& tokens)
 
         if (retry)
         {
-            LOG_DBG("Retry: calling LOK's saveAs with URL: ["
+            LOG_DBG("Retry: calling COKit's saveAs with URL: ["
                     << url << "], Format: [" << (format.empty() ? "(nullptr)" : format.c_str())
                     << "], Filter Options: ["
                     << (filterOptions.empty() ? "(nullptr)" : filterOptions.c_str()) << ']');
@@ -3153,7 +3110,7 @@ bool ChildSession::exportAs(const StringVector& tokens)
     // We don't have the FileId at this point, just a new filename to save-as.
     // So here the filename will be obfuscated with some hashing, which later will
     // get a proper FileId that we will use going forward.
-    LOG_DBG("Calling LOK's exportAs with: [" << anonymizeUrl(wopiFilename) << ']');
+    LOG_DBG("Calling COKit's exportAs with: [" << anonymizeUrl(wopiFilename) << ']');
 
     getLOKitDocument()->setView(_viewId);
 
@@ -3583,13 +3540,14 @@ void ChildSession::loKitCallback(const int type, const std::string& payload)
                 int part, x, y, width, height, mode = 0;
                 try
                 {
-                    x = std::stoi(tokens[0]);
-                    y = std::stoi(tokens[1]);
-                    width = std::stoi(tokens[2]);
-                    height = std::stoi(tokens[3]);
-                    part = (_docType != "text" ? std::stoi(tokens[4]) : 0); // Writer renders everything as part 0.
+                    x = NumUtil::stoi(tokens[0]);
+                    y = NumUtil::stoi(tokens[1]);
+                    width = NumUtil::stoi(tokens[2]);
+                    height = NumUtil::stoi(tokens[3]);
+                    part = (_docType != "text" ? NumUtil::stoi(tokens[4])
+                                               : 0); // Writer renders everything as part 0.
                     if (tokens.size() == 6)
-                        mode = std::stoi(tokens[5]);
+                        mode = NumUtil::stoi(tokens[5]);
                 }
                 catch (const std::out_of_range&)
                 {
@@ -3770,6 +3728,31 @@ void ChildSession::loKitCallback(const int type, const std::string& payload)
 #endif
                 }
             }
+        }
+
+        if (!commandName.isEmpty() &&
+            commandName.toString() == ".uno:TransformDocumentStructure")
+        {
+            // Core may return a detailed JSON result via SetReturnValue.
+            // Extract the result string value if present; otherwise fall back
+            // to the simple success boolean from the dispatch result.
+            std::string resultJson;
+            auto resultObj = object->getObject("result");
+            if (resultObj)
+            {
+                std::string resultType;
+                JsonUtil::findJSONValue(resultObj, "type", resultType);
+                if (resultType == "string")
+                    JsonUtil::findJSONValue(resultObj, "value", resultJson);
+            }
+
+            if (resultJson.empty())
+            {
+                bool bSuccess = !success.isEmpty() && success.toString() == "true";
+                resultJson = "{\"success\":" + std::string(bSuccess ? "true" : "false") + "}";
+            }
+            sendTextFrame("transformeddocumentstructure: " + resultJson);
+            break;
         }
 
         const std::string saveMessage = "unocommandresult: " + payload;

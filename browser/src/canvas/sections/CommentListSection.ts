@@ -57,8 +57,36 @@ window.L.Map.include({
 		});
 	},
 
+	insertThreadedComment: function() {
+		if (this.stateChangeHandler.getItemValue('InsertAnnotation') === 'disabled')
+			return;
+		const editingComment = cool.Comment.isAnyEdit();
+		const commentSection = app.sectionContainer.getSectionWithName(
+			app.CSections.CommentList.name
+		) as cool.CommentSection;
+		if (commentSection && editingComment) {
+			commentSection.navigateAndFocusComment(editingComment);
+			return;
+		}
+
+		var avatar = undefined;
+		var author = this.getViewName(this._docLayer._viewId);
+		if (author in this._viewInfoByUserName) {
+			avatar = this._viewInfoByUserName[author].userextrainfo.avatar;
+		}
+		this._docLayer.newAnnotation({
+			text: '',
+			textrange: '',
+			author: author,
+			dateTime: new Date().toISOString(),
+			id: 'new',
+			avatar: avatar,
+			threaded: 'true',
+		});
+	},
+
 	showResolvedComments: function(on: boolean = false) {
-		var unoCommand = '.uno:ShowResolvedAnnotations';
+		const unoCommand = '.uno:ShowResolvedAnnotations';
 		this.sendUnoCommand(unoCommand);
 		app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).setViewResolved(on);
 		this.uiManager.setDocTypePref('ShowResolved', on);
@@ -195,7 +223,6 @@ export class CommentSection extends CanvasSectionObject {
 		}, this);
 
 		this.backgroundColor = this.containerObject.getClearColor();
-		this.initializeContextMenus();
 
 		if ((<any>window).mode.isSmallScreenDevice()) {
 			this.setShowSection(false);
@@ -406,7 +433,7 @@ export class CommentSection extends CanvasSectionObject {
 			if (!this.sectionProperties.doNotHideCommentTimer
 				|| this.sectionProperties.commentList[i] !== this.sectionProperties.selectedComment)
 				this.sectionProperties.commentList[i].hide();
-			var part = app.map._docLayer._selectedPart;
+			const part = app.map._docLayer._selectedPart;
 			if (app.map._docLayer._docType === 'spreadsheet') {
 				// Change drawing order so they don't prevent each other from being shown.
 				if (parseInt(this.sectionProperties.commentList[i].sectionProperties.data.tab) === part) {
@@ -448,8 +475,8 @@ export class CommentSection extends CanvasSectionObject {
 
 	private createCommentStructureWriter (menuStructure: any, threadOnly: any): void {
 		var rootComment, comment;
-		var commentList = this.getCommentListOneDimensionalArray();
-		var showResolved = this.sectionProperties.showResolved;
+		const commentList = this.getCommentListOneDimensionalArray();
+		const showResolved = this.sectionProperties.showResolved;
 
 		if (threadOnly) {
 			if (!threadOnly.sectionProperties.data.trackchange && threadOnly.sectionProperties.data.parent !== '0')
@@ -503,7 +530,7 @@ export class CommentSection extends CanvasSectionObject {
 		var rootComment;
 
 		for (var i in this.sectionProperties.commentList) {
-			var matchingThread = !threadOnly || (threadOnly && threadOnly.sectionProperties.data.id === this.sectionProperties.commentList[i].sectionProperties.data.id);
+			const matchingThread = !threadOnly || (threadOnly && threadOnly.sectionProperties.data.id === this.sectionProperties.commentList[i].sectionProperties.data.id);
 			if (matchingThread && (this.sectionProperties.commentList[i].sectionProperties.partIndex === app.map._docLayer._selectedPart || app.file.fileBasedView)) {
 				rootComment = {
 					id: 'comment' + this.sectionProperties.commentList[i].sectionProperties.data.id,
@@ -521,8 +548,8 @@ export class CommentSection extends CanvasSectionObject {
 
 	public createCommentStructureCalc (menuStructure: any, threadOnly: any): void {
 		var rootComment;
-		var commentList = this.sectionProperties.commentList;
-		var selectedTab = app.map._docLayer._selectedPart;
+		const commentList = this.sectionProperties.commentList;
+		const selectedTab = app.map._docLayer._selectedPart;
 
 		for (var i: number = 0; i < commentList.length; i++) {
 			var matchingThread = !threadOnly || (threadOnly && threadOnly.sectionProperties.data.id === commentList[i].sectionProperties.data.id);
@@ -566,9 +593,9 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public newAnnotationMobile (comment: any, addCommentFn: any, isMod: any): void {
-		var commentData = comment.sectionProperties.data;
+		const commentData = comment.sectionProperties.data;
 
-		var callback = function(div: HTMLDivElement) {
+		const callback = function(div: HTMLDivElement) {
 			if (div.textContent || div.innerHTML) {
 				var annotation = comment;
 
@@ -588,7 +615,7 @@ export class CommentSection extends CanvasSectionObject {
 		let listId = 'mentionPopupList';
 		if (this.map.mention)
 			listId = this.map.mention.getPopupId() + 'List';
-		var json = this.map.uiManager._modalDialogJSON(this.mobileCommentId, '', true, [
+		const json = this.map.uiManager._modalDialogJSON(this.mobileCommentId, '', true, [
 			{
 				id: 'input-modal-input',
 				type: 'multilineedit',
@@ -630,7 +657,7 @@ export class CommentSection extends CanvasSectionObject {
 			},
 		]);
 
-		var cancelFunction = function() {
+		const cancelFunction = function() {
 			this.cancel(comment);
 			this.map.uiManager.closeModal(this.mobileCommentModalId);
 		}.bind(this);
@@ -652,7 +679,7 @@ export class CommentSection extends CanvasSectionObject {
 		this.map.uiManager.showModal(json, [
 			{id: 'response-ok', func: function() {
 				if (typeof callback === 'function') {
-					var input = document.getElementById('input-modal-input') as HTMLDivElement;
+					const input = document.getElementById('input-modal-input') as HTMLDivElement;
 					callback(input);
 				}
 				this.map.uiManager.closeModal(this.mobileCommentModalId);
@@ -719,13 +746,11 @@ export class CommentSection extends CanvasSectionObject {
 	public highlightComment (comment: any): void {
 		this.removeHighlighters();
 
-		var commentList = this.sectionProperties.commentList;
-
-		var lastChild: any = this.getLastChildIndexOf(comment.sectionProperties.data.id);
+		const commentList = this.sectionProperties.commentList;
+		let lastChild: any = this.getLastChildIndexOf(comment.sectionProperties.data.id);
 
 		while (true && lastChild >= 0) {
 			commentList[lastChild].highlight();
-
 			if (commentList[lastChild].isRootComment())
 				break;
 
@@ -790,13 +815,15 @@ export class CommentSection extends CanvasSectionObject {
 						value: annotation.sectionProperties.data.text
 					} }
 			};
+			var unoCommand = annotation.sectionProperties.data.threaded
+				? '.uno:InsertThreadedComment' : '.uno:InsertAnnotation';
 			if (app.file.fileBasedView) {
 				this.map.setPart(app.map._docLayer._selectedPart, false);
-				this.map.sendUnoCommand('.uno:InsertAnnotation', comment, true /* force */);
+				this.map.sendUnoCommand(unoCommand, comment, true /* force */);
 				this.map.setPart(0, false);
 			}
 			else {
-				this.map.sendUnoCommand('.uno:InsertAnnotation', comment, true /* force */);
+				this.map.sendUnoCommand(unoCommand, comment, true /* force */);
 			}
 
 			// Object is later removed in onACKComment when newly inserted comment object is available
@@ -1127,7 +1154,7 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public saveReply (annotation: any): void {
-		var comment = {
+		const comment = {
 			Id: {
 				type: 'string',
 				value: annotation.sectionProperties.data.id
@@ -1169,7 +1196,7 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public onRedlineAccept (e: any): void {
-		var command = {
+		const command = {
 			AcceptTrackedChange: {
 				type: 'unsigned short',
 				value: e.id.substring('change-'.length)
@@ -1181,7 +1208,7 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public onRedlineReject (e: any): void {
-		var command = {
+		const command = {
 			RejectTrackedChange: {
 				type: 'unsigned short',
 				value: e.id.substring('change-'.length)
@@ -1193,7 +1220,7 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public remove (id: any): void {
-		var comment = {
+		const comment = {
 			Id: {
 				type: 'string',
 				value: id
@@ -1222,7 +1249,7 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public removeThread (id: any): void {
-		var comment = {
+		const comment = {
 			Id: {
 				type: 'string',
 				value: id
@@ -1234,7 +1261,7 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public resolve (annotation: any): void {
-		var comment = {
+		const comment = {
 			Id: {
 				type: 'string',
 				value: annotation.sectionProperties.data.id
@@ -1244,7 +1271,7 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public resolveThread (annotation: any): void {
-		var comment = {
+		const comment = {
 			Id: {
 				type: 'string',
 				value: annotation.sectionProperties.data.id
@@ -1254,7 +1281,7 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public promote(annotation: any): void {
-		var comment = {
+		const comment = {
 			Id: {
 				type: 'string',
 				value: annotation.sectionProperties.data.id
@@ -1279,8 +1306,8 @@ export class CommentSection extends CanvasSectionObject {
 		}
 		// If it has a parent.
 		else if (annotation.sectionProperties.data.parent !== '0') {
-			var index = this.getSubRootIndexOf(annotation.sectionProperties.data.parent);
-			var comment = this.sectionProperties.commentList[index];
+			const index = this.getSubRootIndexOf(annotation.sectionProperties.data.parent);
+			const comment = this.sectionProperties.commentList[index];
 			if (comment.sectionProperties.data.resolved !== 'true')
 				return false;
 			else if (comment.sectionProperties.children.length > 0) {
@@ -1293,111 +1320,9 @@ export class CommentSection extends CanvasSectionObject {
 		}
 	}
 
-	private initializeContextMenus (): void {
-		var docLayer = app.map._docLayer;
-		window.L.installContextMenu({
-			selector: '.cool-annotation-menu',
-			trigger: 'none',
-			zIndex: 1500,
-			className: 'cool-font',
-			build: function ($trigger: any) {
-				const blockChangeFromDifferentAuthor = this.map.isReadOnlyMode() && docLayer._docType === 'text' && this.map.getViewName(docLayer._viewId) !== $trigger[0].annotation.sectionProperties.data.author;
-				const isShownBig = this.sectionProperties.showSelectedBigger && this.sectionProperties.selectedComment === this.sectionProperties.commentList[this.getRootIndexOf($trigger[0].annotation.sectionProperties.data.id)];
-				return {
-					autoHide: true,
-					items: {
-						modify: blockChangeFromDifferentAuthor ? undefined : {
-							name: _('Modify'),
-							callback: function (key: any, options: any) {
-								this.modify.call(this, options.$trigger[0].annotation);
-							}.bind(this)
-						},
-						reply: (docLayer._docType !== 'text') ? undefined : {
-							name: _('Reply'),
-							callback: function (key: any, options: any) {
-								this.reply.call(this, options.$trigger[0].annotation);
-							}.bind(this)
-						},
-						remove: blockChangeFromDifferentAuthor ? undefined : {
-							name: _('Remove'),
-							callback: function (key: any, options: any) {
-								this.remove.call(this, options.$trigger[0].annotation.sectionProperties.data.id);
-							}.bind(this)
-						},
-						removeThread: docLayer._docType !== 'text' || !$trigger[0].annotation.isRootComment() || blockChangeFromDifferentAuthor ? undefined : {
-							name: _('Remove Thread'),
-							callback: function (key: any, options: any) {
-								this.removeThread.call(this, options.$trigger[0].annotation.sectionProperties.data.id);
-							}.bind(this)
-						},
-						resolve: docLayer._docType !== 'text' ? undefined : {
-							name: $trigger[0].annotation.sectionProperties.data.resolved === 'false' ? _('Resolve') : _('Unresolve'),
-							callback: function (key: any, options: any) {
-								this.resolve.call(this, options.$trigger[0].annotation);
-							}.bind(this)
-						},
-						resolveThread: docLayer._docType !== 'text' || !$trigger[0].annotation.isRootComment() ? undefined : {
-							name: this.isThreadResolved($trigger[0].annotation) ? _('Unresolve Thread') : _('Resolve Thread'),
-							callback: function (key: any, options: any) {
-								this.resolveThread.call(this, options.$trigger[0].annotation);
-							}.bind(this)
-						},
-						promote: docLayer._docType !== 'text' || $trigger[0].annotation.isRootComment() || blockChangeFromDifferentAuthor ? undefined : {
-							name: _('Promote to top comment'),
-							callback: function (key: any, options: any) {
-								this.promote.call(this, options.$trigger[0].annotation);
-							}.bind(this)
-						},
-						showBigger: docLayer._docType !== 'text' || (<any>window).mode.isSmallScreenDevice() ? undefined : {
-							name: isShownBig ? _('Show on the side') : _('Open in full view'),
-							callback: function (key: any, options: any) {
-								this.toggleShowBigger.call(this, options.$trigger[0].annotation);
-							}.bind(this)
-						},
-						showInNavigator: (docLayer._docType !== 'text' && docLayer._docType !== 'spreadsheet') || (<any>window).mode.isSmallScreenDevice() ? undefined : {
-							name: _('Show in navigator'),
-							callback: function (key: any, options: any) {
-								this.showInNavigator.call(this, options.$trigger[0].annotation);
-							}.bind(this)
-						}
-					},
-				};
-			}.bind(this),
-			events: {
-				show: function (options: any) {
-					options.$trigger[0].annotation.sectionProperties.contextMenu = true;
-					setTimeout(function() {
-						options.items.modify.$node[0].tabIndex = 0;
-						options.items.modify.$node[0].focus();
-					}.bind(this), 10);
-				},
-				hide: function (options: any) {
-					options.$trigger[0].annotation.sectionProperties.contextMenu = false;
-				}
-			}
-		});
-		window.L.installContextMenu({
-			selector: '.cool-annotation-menu-redline',
-			trigger: 'none',
-			zIndex: 1500,
-			className: 'cool-font',
-			items: {
-				modify: {
-					name: _('Comment'),
-					callback: function (key: any, options: any) {
-						this.modify.call(this, options.$trigger[0].annotation);
-					}.bind(this)
-				}
-			},
-			events: {
-				show: function (options: any) {
-					options.$trigger[0].annotation.sectionProperties.contextMenu = true;
-				},
-				hide: function (options: any) {
-					options.$trigger[0].annotation.sectionProperties.contextMenu = false;
-				}
-			}
-		});
+	public isShownBig (annotation: any): boolean {
+		return this.sectionProperties.showSelectedBigger
+			&& this.sectionProperties.selectedComment === this.sectionProperties.commentList[this.getRootIndexOf(annotation.sectionProperties.data.id)];
 	}
 
 	public onResize (): void {
@@ -1432,7 +1357,7 @@ export class CommentSection extends CanvasSectionObject {
 		}
 	}
 
-	public showHideComment (annotation: any): void {
+	public showHideComment (annotation: Comment): void {
 		// This manually shows/hides comments
 		if (!this.sectionProperties.showResolved && app.map._docLayer._docType === 'text') {
 			let hide = annotation.isContainerVisible() && annotation.sectionProperties.data.resolved === 'true';
@@ -1879,15 +1804,15 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	public selectById (commentId: any): void {
-		var idx = this.getRootIndexOf(commentId);
-		var annotation = this.sectionProperties.commentList[idx];
+		const idx = this.getRootIndexOf(commentId);
+		const annotation = this.sectionProperties.commentList[idx];
 		this.select(annotation);
 	}
 
 	public stringToRectangles (str: string): number[][] {
-		var strString = typeof str !== 'string' ? String(str) : str;
-		var matches = strString.match(/\d+/g);
-		var rectangles: number[][] = [];
+		const strString = typeof str !== 'string' ? String(str) : str;
+		const matches = strString.match(/\d+/g);
+		const rectangles: number[][] = [];
 		if (matches !== null) {
 			for (var i: number = 0; i < matches.length; i += 4) {
 				rectangles.push([parseInt(matches[i]), parseInt(matches[i + 1]), parseInt(matches[i + 2]), parseInt(matches[i + 3])]);
@@ -1904,30 +1829,6 @@ export class CommentSection extends CanvasSectionObject {
 			this.sectionProperties.selectedComment.onCancelClick(null);
 
 		this.checkSize();
-	}
-
-	// This converts the specified number of values into core pixels from twips.
-	// Returns a new array with the length of specified numbers.
-	private numberArrayToCorePixFromTwips (numberArray: Array<number>, startIndex: number = 0, length: number = null): Array<number> {
-		if (!length)
-			length = numberArray.length;
-
-		if (startIndex < 0)
-			startIndex = 0;
-
-		if (length < 0)
-			length = 0;
-
-		if (startIndex + length > numberArray.length)
-			length = numberArray.length - startIndex;
-
-		var result = new Array(length);
-
-		for (var i = startIndex; i < length; i++) {
-			result[i] = Math.round(numberArray[i] * app.twipsToPixels);
-		}
-
-		return result;
 	}
 
 	// In file based view, we need to move comments to their part's position.
@@ -2091,7 +1992,7 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	private layoutDown (subList: any, actualPosition: Array<number>, lastY: number, relayout: boolean = true): number {
-		var selectedComment = subList[0] === this.sectionProperties.selectedComment;
+		const selectedComment = subList[0] === this.sectionProperties.selectedComment;
 		for (var i = 0; i < subList.length; i++) {
 			lastY = subList[i].sectionProperties.data.anchorSPoint.vY > lastY ? subList[i].sectionProperties.data.anchorSPoint.vY: lastY;
 
@@ -2697,10 +2598,10 @@ export class CommentSection extends CanvasSectionObject {
 			this.update();
 		}
 
-		var show = this.map.stateChangeHandler.getItemValue('showannotations');
+		const show = this.map.stateChangeHandler.getItemValue('showannotations');
 		this.setView(show === true || show === 'true');
 
-		var showResolved = this.map.stateChangeHandler.getItemValue('ShowResolvedAnnotations');
+		const showResolved = this.map.stateChangeHandler.getItemValue('ShowResolvedAnnotations');
 		this.setViewResolved(showResolved === true || showResolved === 'true');
 
 		if (app.map._docLayer._docType === 'spreadsheet')
@@ -2725,7 +2626,7 @@ export class CommentSection extends CanvasSectionObject {
 		changesList = this.turnIntoAList(changesList);
 
 		if (changesList.length > 0) {
-			for (var i = 0; i < changesList.length; i++) {
+			for (let i = 0; i < changesList.length; i++) {
 				changeComment = changesList[i];
 				if (!this.adjustRedLine(changeComment))
 					// something wrong in this redline, skip this one
@@ -2735,7 +2636,7 @@ export class CommentSection extends CanvasSectionObject {
 					changeComment.avatar = this.map._viewInfoByUserName[changeComment.author].userextrainfo.avatar;
 				}
 				const name = cool.Comment.makeName(changeComment);
-				var commentSection = new cool.Comment(name, changeComment, {}, this);
+				const commentSection = new cool.Comment(name, changeComment, {}, this);
 				if (!this.containerObject.addSection(commentSection))
 					continue;
 				this.sectionProperties.commentList.push(commentSection);
@@ -2790,7 +2691,7 @@ export class CommentSection extends CanvasSectionObject {
 
 	public onCommentsDataUpdate(): void {
 		for (var i: number = this.sectionProperties.commentList.length -1; i > -1; i--) {
-			var comment = this.sectionProperties.commentList[i];
+			const comment = this.sectionProperties.commentList[i];
 			if (!comment.valid && comment.sectionProperties.data.id !== 'new') {
 				comment.sectionProperties.commentListSection.removeItem(comment.sectionProperties.data.id);
 			}
@@ -2800,7 +2701,7 @@ export class CommentSection extends CanvasSectionObject {
 
 	public rejectAllTrackedCommentChanges(): void {
 		for (var i = 0; i < this.sectionProperties.commentList.length; i++) {
-			var comment = this.sectionProperties.commentList[i];
+			const comment = this.sectionProperties.commentList[i];
 			if (comment.sectionProperties.data.layoutStatus === CommentLayoutStatus.DELETED) {
 				comment.sectionProperties.data.layoutStatus = CommentLayoutStatus.VISIBLE;
 				comment.sectionProperties.container.classList.remove('tracked-deleted-comment-show');

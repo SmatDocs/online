@@ -88,6 +88,13 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'accessibility': { focusBack: true,	combination: 'G', de: null }
 			},
 			{
+				'id': 'Chart-tab-label',
+				'text': _('Chart'),
+				'name': 'Chart',
+				'context': 'Chart|Series|ErrorBar|Axis|Grid|ChartElements|Trendline|ChartTitle|ChartLegend|ChartLabel',
+				'accessibility': { focusBack: true,	combination: 'CH', de: null }
+			},
+			{
 				'id': 'View-tab-label',
 				'text': _('View'),
 				'name': 'View',
@@ -122,6 +129,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			this.getFormatTab(),
 			this.getShapeTab(),
 			this.getPictureTab(),
+			this.getChartTab(),
 			this.getViewTab(),
 			this.getSparklineTab(),
 			this.getCalcTableTab(),
@@ -499,7 +507,6 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 								{
 									'id': 'fontnamecombobox',
 									'type': 'combobox',
-									'label': _('Font'),
 									'text': 'Carlito',
 									'entries': [
 										'Carlito'
@@ -514,7 +521,6 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 								{
 									'id': 'fontsizecombobox',
 									'type': 'combobox',
-									'label': _('Size'),
 									'text': '10 pt',
 									'entries': [
 										'10 pt'
@@ -1655,6 +1661,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'id': 'view-ai-sidebar',
 				'type': 'bigcustomtoolitem',
 				'text': _('AI Assistant'),
+				'tooltip': _('AI Assistant'),
 				'icon': 'lc_ai_sidebar.svg',
 				'command': 'aichat',
 				'accessibility': { focusBack: true, combination: 'AI', de: null }
@@ -2048,9 +2055,18 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 						'type': 'toolbox',
 						'children': [
 							{
+								'id': 'insert-insert-threaded-comment',
+								'type': 'customtoolitem',
+								'text': _UNO('.uno:InsertThreadedComment', 'spreadsheet'),
+								'command': 'insertthreadedcomment',
+								'icon': 'lc_insertthreadedcomment.svg',
+								'lockUno': '.uno:InsertAnnotation',
+								'accessibility': { focusBack: true,	combination: 'TC', de: null }
+							},
+							{
 								'id': 'insert-insert-annotation',
 								'type': 'toolitem',
-								'text': _UNO('.uno:InsertAnnotation', 'text'),
+								'text': _UNO('.uno:InsertAnnotation', 'spreadsheet'),
 								'command': '.uno:InsertAnnotation',
 								'accessibility': { focusBack: true,	combination: 'IA', de: null }
 							}
@@ -2624,12 +2640,12 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'accessibility': { focusBack: true,	combination: 'IA', de: null },
 				'children' : [
 					{
-						'id': 'review-insert-annotation:AnnotationMenu',
+						'id': 'review-insert-threaded-comment:CalcAnnotationMenu',
 						'type': 'menubutton',
-						'text': _UNO('.uno:InsertAnnotation'),
-						'applyCallback': 'insertcomment',
-						'command': '.uno:InsertAnnotation',
-						'accessibility': { focusBack: true,	combination: 'IA', de: null }
+						'text': _UNO('.uno:InsertThreadedComment', 'spreadsheet'),
+						'applyCallback': 'insertthreadedcomment',
+						'command': '.uno:InsertThreadedComment',
+						'accessibility': { focusBack: true,	combination: 'TC', de: null }
 					},
 					{
 						'id': 'Review-Section-Annotation2',
@@ -2793,6 +2809,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 					{
 						'id': 'iconview_theme_colors-iconview-list',
 						'type': 'iconviewlist',
+						'accessibility': { focusBack: false, combination: 'TC', de: null },
 						'children': [
 							{
 								'id': 'iconview_theme_colors', // has to match core id

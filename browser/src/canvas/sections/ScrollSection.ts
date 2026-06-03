@@ -338,16 +338,14 @@ export class ScrollSection extends CanvasSectionObject {
 	private doMove() {
 		const scrollProps: ScrollProperties = (app.activeDocument as DocumentBase).activeLayout.scrollProperties;
 
-		app.layoutingService.appendLayoutingTask(() => {
-			this.map.panBy(new cool.Point(scrollProps.moveBy[0] / app.dpiScale, scrollProps.moveBy[1] / app.dpiScale));
-			scrollProps.moveBy = null;
-			this.onUpdateScrollOffset();
+		this.map.panBy(new cool.Point(scrollProps.moveBy[0] / app.dpiScale, scrollProps.moveBy[1] / app.dpiScale));
+		scrollProps.moveBy = null;
+		this.onUpdateScrollOffset();
 
-			if (app && app.file.fileBasedView === true)
-				app.map._docLayer._checkSelectedPart();
+		if (app && app.file.fileBasedView === true)
+			app.map._docLayer._checkSelectedPart();
 
-			app.activeDocument.activeLayout.refreshScrollProperties();
-		});
+		app.activeDocument.activeLayout.refreshScrollProperties();
 	}
 
 	public onDraw(frameCount: number, elapsedTime: number): void {
@@ -782,13 +780,10 @@ export class ScrollSection extends CanvasSectionObject {
 		const mirrorX = this.isRTL();
 		const documentAnchor = app.sectionContainer.getSectionWithName(app.CSections.Tiles.name);
 
-		// For CompareChanges view, viewedRectangle.pY1 can be negative (due to
-		// yStart offset) even when scrolling is possible, so use canScrollVertical instead.
-		const canScrollV = layout.type === 'ViewLayoutCompareChanges'
-			? layout.canScrollVertical(documentAnchor)
-			: layout.viewedRectangle.pY1 >= 0;
+		// For CompareChanges view, viewedRectangle.pY1 can be negative while scrolling is possible.
+		const initialVerticalCheck = layout.type === 'ViewLayoutCompareChanges' ? true : layout.viewedRectangle.pY1 >= 0;
 
-		if (canScrollV) {
+		if (initialVerticalCheck) {
 			if ((!mirrorX && point.pX >= this.size[0] - scrollProps.usableThickness)
 				|| (mirrorX && point.pY <= scrollProps.usableThickness)) {
 				if (point.pY > scrollProps.yOffset) {

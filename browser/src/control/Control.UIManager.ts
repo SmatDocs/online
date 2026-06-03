@@ -155,6 +155,17 @@ class UIManager extends window.L.Control {
 	}
 
 	/**
+	 * Shows a timed tooltip on the view mode button and optionally plays the attention animation.
+	 */
+	showViewModeAttention(): void {
+		const permissionMode = this.permissionViewMode;
+		const viewModeBtn = permissionMode && (permissionMode.viewModeDropdown || permissionMode.viewModeContainer);
+		if (viewModeBtn) {
+			this.showAttention(viewModeBtn, _('You are currently in View mode'), true, 5000);
+		}
+	}
+
+	/**
 	 * Returns the current UI mode ("notebookbar" or "classic").
 	 */
 	getCurrentMode(): UIMode {
@@ -1027,6 +1038,15 @@ class UIManager extends window.L.Control {
 
 		// be sure we hide old scrollable markers
 		JSDialog.RefreshScrollables();
+
+		// Recalculate overflow layout after all DOM modifications.
+		// RefreshScrollables dispatches a resize event, but the
+		// OverflowManager skips resize events when the window size
+		// is unchanged. Fire refreshoverflows explicitly with layouting service 
+		// so the browser has time to lay out the new DOM before overflow is measured.
+		app.layoutingService.appendLayoutingTask(() => {
+			this.map.fire('refreshoverflows', { force: true });
+		});
 	}
 
 	// UI modification

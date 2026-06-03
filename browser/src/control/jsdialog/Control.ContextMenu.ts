@@ -223,6 +223,7 @@ class ContextMenuControl extends JSControl {
 			'',
 			false,
 			true /* earlyCallbackCall? */,
+			true /* noDefaultSelection? */,
 		);
 	}
 
@@ -369,10 +370,8 @@ class ContextMenuControl extends JSControl {
 					Util.ensureValue(item.text);
 					itemName = item.text;
 					contextMenu[item.command] = {
-						name: window.mode.isSmallScreenDevice()
-							? _(itemName)
-							: app.IconUtil.createMenuItemLink(itemName, item.command),
-						isHtmlName: true,
+						name: _(itemName),
+						isHtmlName: false,
 					};
 					isLastItemText = true;
 					continue;
@@ -495,7 +494,7 @@ class ContextMenuControl extends JSControl {
 
 	// Prevents right mouse button's mouseup event from triggering menu item accidentally.
 	public stopRightMouseUpEvent(): void {
-		const menuItems = document.getElementsByClassName('context-menu-item');
+		const menuItems = document.getElementsByClassName('ui-combobox-entry');
 
 		for (let i = 0; i < menuItems.length; i++) {
 			menuItems[i].addEventListener('mouseup', function (eo: Event) {

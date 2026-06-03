@@ -20,6 +20,8 @@ interface ViewSetting {
 	accessibilityState: boolean;
 	signatureCertificate?: string;
 	aiConfigured?: boolean;
+	aiRequestTimeout?: string;
+	aiModelName?: string;
 }
 
 class ServerConnectionService {
@@ -35,6 +37,18 @@ class ServerConnectionService {
 		app.tableStyles = new TableStylesService();
 	}
 
+	public onWopiProps(props: { AIConfigured: boolean; AIModelName: string }) {
+		app.console.debug('ServerConnectionService: onWopiProps');
+
+		if (!app.map) {
+			app.console.error('ServerConnectionService: missing map reference');
+			return;
+		}
+
+		app.map.isAIConfigured = !!props.AIConfigured;
+		app.map.aiModelName = props.AIModelName || '';
+	}
+
 	public onViewSetting(viewSetting: ViewSetting) {
 		app.console.debug('ServerConnectionService: onViewSetting');
 
@@ -44,6 +58,10 @@ class ServerConnectionService {
 		}
 
 		app.map.isAIConfigured = !!viewSetting.aiConfigured;
+		app.map.aiRequestTimeout = viewSetting.aiRequestTimeout
+			? Math.max(10, Number(viewSetting.aiRequestTimeout))
+			: 120;
+		app.map.aiModelName = viewSetting.aiModelName || '';
 
 		let zoteroPlugin = app.map.zotero;
 		const zoteroAPIKey = viewSetting.zoteroAPIKey;

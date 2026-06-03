@@ -163,6 +163,16 @@ static FilenameAndUri fileSaveDialog(const std::string& name,
 
 static void openCOOLWindow(const FilenameAndUri& filenameAndUri, DocumentMode mode);
 
+static std::set<std::string> currentlyOpenDocumens()
+{
+    std::set<std::string> result;
+
+    for (const auto& i : windowData)
+        result.insert(i.second.filenameAndUri.uri);
+
+    return result;
+}
+
 // Vector of documents to open passed on the command line, or multiple documents to open selected in
 // a file open dialog. We open the next one only as soon as the previous one has finished loading.
 static std::deque<FilenameAndUri> filenamesAndUrisToOpen;
@@ -336,7 +346,7 @@ static void send2JS(const HWND hWnd, const char* buffer, int length)
     PostMessageW(hWnd, CODA_WM_EXECUTESCRIPT, (WPARAM)wparam, 0);
 }
 
-// LOK file save dialog callback.
+// COKit file save dialog callback.
 void output_file_dialog_from_core(const char* suggestedURI, char* result, size_t resultLen)
 {
     // Some sanity checks first.
@@ -390,7 +400,7 @@ static void createAndStartMessagePumpThread(WindowData& data)
     data.app2js = std::thread(
         [&data]
         {
-            Util::setThreadName("app2js " + std::to_string(data.appDocId));
+            ProcUtil::setThreadName("app2js " + std::to_string(data.appDocId));
             while (true)
             {
                 struct pollfd pollfd[2];
@@ -564,7 +574,7 @@ static void do_getrecentdocs(const WindowData& data, int id)
     PostMessageW(data.hWnd, CODA_WM_EXECUTESCRIPT,
                  (WPARAM)_strdup(("window.replyFromNativeToCall(" +
                                   std::to_string(id) +
-                                  ", '" + recentFiles.serialise() + "')").c_str()), 0);
+                                  ", '" + recentFiles.serialiseFiltered(currentlyOpenDocumens()) + "')").c_str()), 0);
 }
 
 static void do_cut_or_copy(ClipboardOp op, WindowData& data)
@@ -1143,6 +1153,52 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 {
     switch (message)
     {
+        case WM_CREATE:
+            {
+                // Contrary to documentation, when you use CW_USEDEFAULT for the x and y parameters
+                // in the CreateWindowW() call, Windows will occasionally place the window so that
+                // it is partially obscured by the taskbar. Workaround for that.
+
+                MONITORINFO monitorInfo;
+                monitorInfo.cbSize = sizeof(monitorInfo);
+                GetMonitorInfoW(MonitorFromWindow(hWnd, MONITOR_DEFAULTTOPRIMARY), &monitorInfo);
+
+                CREATESTRUCT *cs = (CREATESTRUCT *)lParam;
+
+                int x = cs->x, y = cs->y;
+
+                if (cs->cx < (monitorInfo.rcWork.right - monitorInfo.rcWork.left))
+                {
+                    if (cs->x < monitorInfo.rcWork.left)
+                    {
+                        // Left edge obscured by taskbar at the left. Move window right by the width
+                        // of the taskbar.
+                        x = cs->x + (monitorInfo.rcWork.left - monitorInfo.rcMonitor.left);
+                    } else if (cs->x + cs->cx > monitorInfo.rcWork.right)
+                    {
+                        // Left edge obscured by taskbar at the right. Move window left.
+                        x = cs->x - (monitorInfo.rcMonitor.right - monitorInfo.rcWork.right);
+                    }
+                }
+                if (cs->cy < (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top))
+                {
+                    if (cs->y < monitorInfo.rcWork.top)
+                    {
+                        // Top edge obscured by taskbar at the top. Move window down by the height
+                        // of the taskbar.
+                        y = cs->y + (monitorInfo.rcWork.top - monitorInfo.rcMonitor.top);
+                    } else if (cs->y + cs->cy > monitorInfo.rcWork.bottom)
+                    {
+                        // Bottom edge obscured by taskbar at the bottom. Move window up.
+                        y = cs->y - (monitorInfo.rcMonitor.bottom - monitorInfo.rcWork.bottom);
+                    }
+                }
+
+                if (x != cs->x || y != cs->y)
+                    SetWindowPos(hWnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+                return 0;
+            }
+
         case WM_SIZING:
             {
                 int minimumWidth = 1000, minimumHeight = 800;
@@ -2237,7 +2293,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int showWindowMode)
     if (!loglevel)
         loglevel = COOLWSD_LOGLEVEL;
     Log::initialize("CODA", loglevel);
-    Util::setThreadName("main");
+    ProcUtil::setThreadName("main");
 
     persistentWindowSizeStoreOK =
         (persistentWindowSizeStore.open
@@ -2308,7 +2364,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int showWindowMode)
             // warnings, but let's try to do as they want.
             argv[0] = _strdup("mobile");
             argv[1] = nullptr;
-            Util::setThreadName("app");
+            ProcUtil::setThreadName("app");
             while (true)
             {
                 coolwsd = new COOLWSD();

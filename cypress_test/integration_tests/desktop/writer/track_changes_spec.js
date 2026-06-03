@@ -13,6 +13,19 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 		desktopHelper.selectZoomLevel('50', false);
 	});
 
+	// The overflow dropdown overlay sometimes lingers after clicking a
+	// toolitem inside it (e.g. #insertannotation from the folded "other"
+	// group). Dismiss it if present so subsequent clicks on the overflow
+	// arrow or menubar are not intercepted.
+	function dismissOverflowOverlayIfPresent() {
+		cy.cGet('body').then(($body) => {
+			const overlay = $body.find('.jsdialog-overlay');
+			if (overlay.length) {
+				cy.wrap(overlay).click({ force: true });
+			}
+		});
+	}
+
 	function confirmChange(action) {
 		cy.cGet('#menu-editmenu').click();
 		cy.cGet('#menu-changesmenu').should($el => { expect(Cypress.dom.isDetached($el)).to.eq(false); }).click();
@@ -45,6 +58,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 			cy.cGet('#insertannotation').click();
 			cy.cGet('#annotation-modify-textarea-new').type('some text' + n, { force: true });
 			cy.cGet('#annotation-save-new').click({force: true});
+			dismissOverflowOverlayIfPresent();
 			// Wait for animation
 			cy.wait(500);
 		}
@@ -54,13 +68,14 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 		cy.cGet('#insertannotation').click();
 		cy.cGet('#annotation-modify-textarea-new').type('some text2', { force: true });
 		cy.cGet('#annotation-save-new').click({force: true});
+		dismissOverflowOverlayIfPresent();
 		cy.wait(500);
 		helper.typeIntoDocument('{home}');
 		cy.cGet('div.cool-annotation').should('have.length', 3);
 
 		cy.cGet('#comment-container-2').should('contain','some text1');
 		cy.cGet('#comment-container-2 .cool-annotation-menubar .cool-annotation-menu').click();
-		cy.cGet('body').contains('.context-menu-item', 'Remove').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Remove').click();
 		cy.cGet('#comment-container-2').should('have.class','tracked-deleted-comment-show');
 		cy.cGet('#comment-container-2').should('contain','some text1');
 		cy.cGet('div.cool-annotation').should('have.length', 3);
@@ -89,6 +104,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 			cy.cGet('#insertannotation').click();
 			cy.cGet('#annotation-modify-textarea-new').type('some text' + n, { force: true });
 			cy.cGet('#annotation-save-new').click({force: true});
+			dismissOverflowOverlayIfPresent();
 			// Wait for animation
 			cy.wait(500);
 		}
@@ -98,13 +114,14 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 		cy.cGet('#insertannotation').click();
 		cy.cGet('#annotation-modify-textarea-new').type('some text2', { force: true });
 		cy.cGet('#annotation-save-new').click({force: true});
+		dismissOverflowOverlayIfPresent();
 		cy.wait(500);
 		helper.typeIntoDocument('{home}');
 		cy.cGet('div.cool-annotation').should('have.length', 3);
 
 		cy.cGet('#comment-container-2').should('contain','some text1');
 		cy.cGet('#comment-container-2 .cool-annotation-menubar .cool-annotation-menu').click();
-		cy.cGet('body').contains('.context-menu-item', 'Remove').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Remove').click();
 		cy.cGet('#comment-container-2').should('have.class','tracked-deleted-comment-show');
 		cy.cGet('#comment-container-2').should('contain','some text1');
 		cy.cGet('div.cool-annotation').should('have.length', 3);
@@ -422,7 +439,7 @@ describe(['tagdesktop', 'tagnextcloud', 'tagproxy'], 'Track Changes', function (
 		// undo removed comment
 		cy.cGet('#comment-container-2').should('contain','some text1');
 		cy.cGet('#comment-container-2 .cool-annotation-menubar .cool-annotation-menu').click();
-		cy.cGet('body').contains('.context-menu-item', 'Remove').click();
+		cy.cGet('body').contains('.ui-combobox-entry.jsdialog.ui-grid-cell', 'Remove').click();
 		cy.cGet('#comment-container-2').should('have.class','tracked-deleted-comment-show');
 		cy.cGet('div.cool-annotation').should('have.length', 3);
 		cy.cGet('#undo').click();

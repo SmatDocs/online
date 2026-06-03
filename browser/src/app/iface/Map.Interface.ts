@@ -24,7 +24,11 @@ interface LatLngLike {
 interface MapInterface extends Evented {
 	_docLayer: DocLayerInterface;
 	uiManager: UIManager;
-	_textInput: { debug(value: boolean): void };
+	_textInput: {
+		debug(value: boolean): void;
+		_isDebugOn: boolean;
+		update(): void;
+	};
 	addressInputField: AddressInputField;
 
 	removeLayer(layer: any): void;
@@ -49,6 +53,7 @@ interface MapInterface extends Evented {
 	getDocSize(): cool.Point;
 	getSize(): cool.Point;
 	getCenter(): LatLngLike;
+	getContainer(): Element;
 	_getCurrentFontName(): string;
 
 	_docLoadedOnce: boolean;
@@ -83,6 +88,8 @@ interface MapInterface extends Evented {
 		BaseFileName: string;
 		HideExportOption: boolean;
 		DisableAISettings: boolean;
+		AIConfigured: boolean;
+		AIModelName: string;
 		UserCanWrite: boolean;
 		HideChangeTrackingControls: boolean;
 		EnableRemoteLinkPicker: boolean;
@@ -198,6 +205,7 @@ interface MapInterface extends Evented {
 		id?: string,
 	): void;
 	insertComment(): void;
+	insertThreadedComment(): void;
 	zoomIn(delta: number, options?: any, animate?: boolean): MapInterface;
 	zoomOut(delta: number, options?: any, animate?: boolean): MapInterface;
 	cancelSearch(): void;
@@ -228,6 +236,8 @@ interface MapInterface extends Evented {
 	// TODO: window.L.control.lokDialog
 	dialog: any;
 	isAIConfigured?: boolean;
+	aiRequestTimeout?: number;
+	aiModelName?: string;
 
 	_controlCorners: Record<string, Node>;
 	_contextMenu: ContextMenuControl;

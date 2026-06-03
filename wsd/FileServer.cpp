@@ -28,6 +28,7 @@
 #include <common/JsonUtil.hpp>
 #include <common/LangUtil.hpp>
 #include <common/Log.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Protocol.hpp>
 #include <common/Util.hpp>
 #include <common/base64.hpp>
@@ -203,11 +204,9 @@ bool isConfigAuthOk(const std::string& userProvidedUsr, const std::string& userP
         }
 
         std::vector<unsigned char> userProvidedPwdHash(tokens[4].size() / 2);
-        PKCS5_PBKDF2_HMAC(userProvidedPwd.c_str(), -1,
-                          saltData.data(), saltData.size(),
-                          std::stoi(tokens[2]),
-                          EVP_sha512(),
-                          userProvidedPwdHash.size(), userProvidedPwdHash.data());
+        PKCS5_PBKDF2_HMAC(userProvidedPwd.c_str(), -1, saltData.data(), saltData.size(),
+                          NumUtil::stoi(tokens[2]), EVP_sha512(), userProvidedPwdHash.size(),
+                          userProvidedPwdHash.data());
 
         std::stringstream stream;
         for (unsigned long j = 0; j < userProvidedPwdHash.size(); ++j)
@@ -231,6 +230,30 @@ std::string stringifyBoolFromConfig(const Poco::Util::LayeredConfiguration& conf
                                     const std::string& propertyName, bool defaultValue)
 {
     return config.getBool(propertyName, defaultValue) ? "true" : "false";
+}
+
+/// Returns the canonical base url for a pre-canned AI provider id, or an
+/// empty view if the id is not pre-canned. Keep in sync with AI_PROVIDERS in
+/// browser/admin/src/integrator/AdminIntegratorSettings.ts.
+std::string_view preCannedAIProviderBaseUrl(std::string_view id)
+{
+    if (id == "openai")   return "https://api.openai.com";
+    if (id == "groq")     return "https://api.groq.com/openai";
+    if (id == "together") return "https://api.together.xyz";
+    if (id == "mistral")  return "https://api.mistral.ai";
+    return {};
+}
+
+/// Returns true if the host is forbidden by KIT_HOST_ALLOWLIST, matching
+/// the convention of core's HostFilter::isForbidden.
+bool isForbiddenKitHost(const std::string& host)
+{
+    static const char* allowlist = std::getenv("KIT_HOST_ALLOWLIST");
+    if (!allowlist || allowlist[0] == '\0')
+        return false;
+
+    static const std::regex allowedRegex(allowlist);
+    return !std::regex_match(host, allowedRegex);
 }
 
 /// Returns true if the host is allowed, false otherwise.
@@ -1860,24 +1883,43 @@ void FileServerRequestHandler::fetchModels(const Poco::Net::HTTPRequest& request
         return;
     }
 
-    if (provider == "custom" && baseUrl.empty())
+    // Ignore the client's baseUrl for non-custom providers so a caller
+    // cannot pair a pre-canned id with an arbitrary url to bypass the KIT
+    // allowlist.
+    const bool isCustom = provider == "custom";
+    if (!isCustom)
+    {
+        const std::string_view preCanned = preCannedAIProviderBaseUrl(provider);
+        if (preCanned.empty())
+        {
+            sendError(http::StatusCode::BadRequest, getRequestPath(request), socket, shortMessage,
+                      "Unknown provider");
+            return;
+        }
+        baseUrl.assign(preCanned);
+    }
+    else if (baseUrl.empty())
     {
         sendError(http::StatusCode::BadRequest, getRequestPath(request), socket, shortMessage,
                   "Missing baseUrl for custom provider");
         return;
     }
 
-    if (baseUrl.empty())
-    {
-        sendError(http::StatusCode::BadRequest, getRequestPath(request), socket, shortMessage,
-                  "Missing baseUrl for provider");
-        return;
-    }
     if (baseUrl.back() == '/')
         baseUrl.pop_back();
     baseUrl += "/v1/models";
 
     Poco::URI uri(baseUrl);
+
+    if (isCustom && isForbiddenKitHost(uri.getHost()))
+    {
+        LOG_WRN("Rejected fetch-models request to host not in KIT allowlist ["
+                << COOLWSD::anonymizeUrl(baseUrl) << ']');
+        sendError(http::StatusCode::Forbidden, getRequestPath(request), socket, shortMessage,
+                  "Target host is not in the allowed host list");
+        return;
+    }
+
     const std::string& uriAnonym = COOLWSD::anonymizeUrl(uri.toString());
 
     Authorization auth(Authorization::Type::Token, apiKey, false);

@@ -16,7 +16,7 @@
 
 #include <config.h>
 
-#include <ConfigUtil.hpp>
+#include "ConfigUtil.hpp"
 
 #include <common/Util.hpp>
 
@@ -223,7 +223,6 @@ static const std::unordered_map<std::string, std::string> DefAppConfig = {
     { "per_document.max_concurrency", "4" },
     { "per_document.min_time_between_saves_ms", "500" },
     { "per_document.min_time_between_uploads_ms", "5000" },
-    { "per_document.pdf_resolution_dpi", "96" },
     { "per_document.redlining_as_comments", "false" },
     { "per_view.custom_os_info", "" },
     { "per_view.idle_timeout_secs", "900" },

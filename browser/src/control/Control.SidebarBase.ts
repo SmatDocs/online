@@ -25,20 +25,15 @@ enum SidebarType {
 
 abstract class SidebarBase extends JSDialogComponent {
 	type: SidebarType;
+	resizeTaskId: TaskId | null = null;
 
 	documentContainer: HTMLDivElement;
 	wrapper: HTMLElement;
-	private preferredLabels: [string, string][] = [
-		['fontnamecombobox', _('Font')],
-		['fontsizecombobox', _('Size')],
-	];
 
 	constructor(map: MapInterface, type: SidebarType) {
 		super(map, type, type);
 		this.type = type;
 		this.onAdd(map);
-		for (const [id, label] of this.preferredLabels)
-			this.labelsOverride.set(id, label);
 	}
 
 	protected createBuilder() {
@@ -176,12 +171,18 @@ abstract class SidebarBase extends JSDialogComponent {
 		return false;
 	}
 	onResize() {
-		this.wrapper.style.maxHeight =
-			this.documentContainer.getBoundingClientRect().height + 'px';
-		if (this.container) {
-			(this.container as HTMLElement).style.height =
+		if (this.resizeTaskId)
+			app.layoutingService.cancelLayoutingTask(this.resizeTaskId);
+
+		this.resizeTaskId = app.layoutingService.appendLayoutingTask(() => {
+			this.wrapper.style.maxHeight =
 				this.documentContainer.getBoundingClientRect().height + 'px';
-		}
+			if (this.container) {
+				(this.container as HTMLElement).style.height =
+					this.documentContainer.getBoundingClientRect().height + 'px';
+			}
+			this.resizeTaskId = null;
+		});
 	}
 
 	callback(

@@ -38,6 +38,8 @@ window.L.Map.WOPI = window.L.Handler.extend({
 	EnableInsertRemoteLink: false,
 	EnableRemoteAIContent: false,
 	DisableAISettings: false,
+	AIConfigured: false,
+	AIModelName: '',
 	EnableShare: false,
 	HideUserList: null,
 	CallPythonScriptSource: null,
@@ -161,6 +163,12 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		this.EnableRemoteLinkPicker = !!wopiInfo['EnableRemoteLinkPicker'];
 		this.EnableRemoteAIContent = !!wopiInfo['EnableRemoteAIContent'];
 		this.DisableAISettings = !!wopiInfo['DisableAISettings'];
+		this.AIConfigured = !!wopiInfo['AIConfigured'];
+		this.AIModelName = wopiInfo['AIModelName'] || '';
+		app.serverConnectionService.onWopiProps({
+			AIConfigured: this.AIConfigured,
+			AIModelName: this.AIModelName,
+		});
 		this.SupportsRename = !!wopiInfo['SupportsRename'];
 		this.UserCanRename = !!wopiInfo['UserCanRename'];
 		this.EnableShare = !!wopiInfo['EnableShare'];
@@ -657,9 +665,11 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		else if (msg.MessageId == 'Action_InsertLink') {
 			if (msg.Values) {
 				var link = this._map.makeURLFromStr(msg.Values.url);
-				var text = this._map.getTextForLink();
+				var selection = this._map.getTextForLink();
 
-				text = text ? text.trim() : link;
+				var text = selection ? selection.trim()
+					: (msg.Values.text ? String(msg.Values.text).trim() : '')
+					|| link;
 
 				var command = {
 					'Hyperlink.Text': {
@@ -676,29 +686,9 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			}
 		}
 		else if (msg.MessageId == 'Action_GetLinkPreview_Resp') {
-			var preview = document.querySelector('#hyperlink-pop-up-preview');
-			if (preview) {
-				// check if this is a preview for currently displayed link
-				if (preview.nextSibling && preview.nextSibling.innerText !== msg.Values.url)
-					return;
-
-				preview.innerText = '';
-				if (msg.Values.image && msg.Values.image.indexOf('data:') === 0) {
-					var image = window.L.DomUtil.create('img', '', preview);
-					image.src = msg.Values.image;
-					image.alt = msg.Values.title;
-					image.onload = function() {
-						URLPopUpSection.resetPosition();
-					};
-				} else {
-					window.L.DomUtil.addClass(preview, 'no-preview');
-				}
-				if (msg.Values.title) {
-					var title = window.L.DomUtil.create('p', '', preview);
-					title.innerText = msg.Values.title;
-					URLPopUpSection.resetPosition();
-				}
-			}
+			var popup = URLPopUpSection.getCurrent();
+			if (popup)
+				popup.updatePreview(msg.Values);
 		}
 		else if (msg.MessageId === 'Action_InsertFile') {
 			if (msg.Values && (msg.Values.File instanceof Blob)) {
@@ -736,6 +726,46 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			}
 
 			this._postMessage({msgId: 'Get_Export_Formats_Resp', args: exportFormatsResp});
+		}
+		else if (msg.MessageId === 'Get_Comments') {
+			let commentsResp = [];
+			const commentSection = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
+			if (commentSection) {
+				if (this._map._docLayer._docType === 'spreadsheet') {
+					// calcMasterList has raw data for all sheets.
+					const masterList = commentSection.sectionProperties.calcMasterList;
+					for (let i = 0; i < masterList.length; i++) {
+						const data = masterList[i];
+						const entry = {
+							Id: data.id,
+							Author: data.author,
+							DateTime: data.dateTime,
+							Text: data.text,
+						};
+						if (data.threaded) {
+							entry.Resolved = data.resolved;
+							entry.Parent = data.parent;
+						}
+						commentsResp.push(entry);
+					}
+				} else {
+					const commentList = commentSection.sectionProperties.commentList;
+					for (let i = 0; i < commentList.length; i++) {
+						const data = commentList[i].sectionProperties.data;
+						if (data.trackchange)
+							continue;
+						commentsResp.push({
+							Id: data.id,
+							Author: data.author,
+							DateTime: data.dateTime,
+							Text: commentList[i].sectionProperties.contentText.textContent,
+							Resolved: data.resolved,
+							Parent: data.parent,
+						});
+					}
+				}
+			}
+			this._postMessage({msgId: 'Get_Comments_Resp', args: { Comments: commentsResp }});
 		}
 		else if (msg.MessageId === 'Action_SaveAs') {
 			if (msg.Values) {
@@ -793,12 +823,13 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			this._map.mention.openMentionPopup(list);
 		}
 		else if (msg.MessageId === 'Action_ResolveComment') {
-			// Currently only Writer has "Resolve Comment" feature.
-			if (msg.Values && this._map._docLayer._docType === 'text') {
+			var docType = this._map._docLayer._docType;
+			if (msg.Values && (docType === 'text' || docType === 'spreadsheet')) {
 				const commentSection = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
 				if (commentSection) {
 					const comment = commentSection.getComment(msg.Values.Id);
-					if (comment && comment.sectionProperties.data.resolved !== 'true') {
+					if (comment && comment.sectionProperties.data.resolved !== 'true'
+						&& (docType === 'text' || comment.sectionProperties.data.threaded)) {
 						commentSection.resolve(comment);
 					}
 				}
