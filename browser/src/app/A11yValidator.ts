@@ -34,6 +34,86 @@ class A11yValidator {
 		this.checks.push(this.checkLabelElement.bind(this));
 		this.checks.push(this.checkElementHasLabel.bind(this));
 		this.checks.push(this.checkAriaControls.bind(this));
+		this.checks.push(this.checkFrameOnlyDecorativeImages.bind(this));
+		this.checks.push(this.checkNoSpatialReferences.bind(this));
+	}
+
+	// Spatial words in accessible text are useless to blind users who
+	// cannot perceive layout (see commit 1f1bafcbfd9), unless they sit
+	// next to a document-structure noun ("Insert Rows Above") where
+	// they describe the action's effect on content rather than the
+	// on-screen position of a UI element.
+	private static readonly SPATIAL_RE =
+		/\b(below|above|to the (?:left|right)(?: of)?)\b/gi;
+	private static readonly CONTENT_NOUNS: Set<string> = new Set([
+		'row',
+		'rows',
+		'paragraph',
+		'paragraphs',
+		'column',
+		'columns',
+		'cell',
+		'cells',
+		'page',
+		'pages',
+		'line',
+		'lines',
+		'section',
+		'sections',
+		'heading',
+		'headings',
+		'sheet',
+		'sheets',
+		'slide',
+		'slides',
+	]);
+
+	private findSpatialMatch(text: string | null | undefined): string | null {
+		if (!text) return null;
+		const re = A11yValidator.SPATIAL_RE;
+		re.lastIndex = 0;
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(text)) !== null) {
+			const before = text.slice(0, m.index).match(/(\w+)\W*$/)?.[1];
+			const after = text.slice(m.index + m[0].length).match(/^\W*(\w+)/)?.[1];
+			const neighbours = [before, after]
+				.filter((w): w is string => !!w)
+				.map((w) => w.toLowerCase());
+			if (!neighbours.some((w) => A11yValidator.CONTENT_NOUNS.has(w)))
+				return m[0];
+		}
+		return null;
+	}
+
+	private checkNoSpatialReferences(type: string, element: HTMLElement): void {
+		const sources: Array<[string, string | null]> = [
+			['aria-label', element.getAttribute('aria-label')],
+			['aria-description', element.getAttribute('aria-description')],
+			['alt', element.tagName === 'IMG' ? element.getAttribute('alt') : null],
+		];
+		const describedBy = element.getAttribute('aria-describedby') || '';
+		for (const id of describedBy.trim().split(/\s+/).filter(Boolean)) {
+			const ref = document.getElementById(id);
+			if (!ref) continue;
+			sources.push([
+				`aria-describedby="${id}"`,
+				(ref.textContent || '').trim(),
+			]);
+		}
+
+		for (const [source, text] of sources) {
+			const match = this.findSpatialMatch(text);
+			if (match)
+				throw new A11yValidatorException(
+					`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': widget of type '${type}' has spatial reference '${match}' in ${source} ('${(text as string).trim()}'). Spatial words like "above"/"below" are useless to screen-reader users; refer to widgets by name instead.`,
+				);
+		}
+
+		for (let i = 0; i < element.children.length; i++) {
+			const child = element.children[i];
+			if (this.shouldCheckChild(child))
+				this.checkNoSpatialReferences(type, child as HTMLElement);
+		}
 	}
 
 	checkWidget(type: string, element: HTMLElement): void {
@@ -161,7 +241,7 @@ class A11yValidator {
 				const hasAriaLabel = ariaLabel.trim() !== '';
 
 				if (
-					JSDialog.GetFormControlTypesInCO().has(element.tagName) &&
+					JSDialog.GetFormControlTypesInBrowser().has(element.tagName) &&
 					!hasAriaLabel
 				) {
 					throw new A11yValidatorException(
@@ -189,7 +269,9 @@ class A11yValidator {
 						`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': label element in widget of type '${type}' has htmlFor attribute pointing to non-existing element with id '${htmlFor}'`,
 					);
 				} else if (
-					!JSDialog.GetFormControlTypesInCO().has(referencedElement.tagName)
+					!JSDialog.GetFormControlTypesInBrowser().has(
+						referencedElement.tagName,
+					)
 				) {
 					throw new A11yValidatorException(
 						`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': label element in widget of type '${type}' references non-labelable element <${referencedElement.tagName.toLowerCase()}> via htmlFor attribute. Try using aria-labelledby on the referenced element instead.`,
@@ -246,6 +328,127 @@ class A11yValidator {
 				this.checkAriaControls(type, child as HTMLElement);
 			}
 		}
+	}
+
+	private checkFrameOnlyDecorativeImages(
+		type: string,
+		element: HTMLElement,
+	): void {
+		if (
+			!element.classList.contains('ui-frame-container') ||
+			!element.classList.contains('ui-fieldset')
+		) {
+			return;
+		}
+
+		const content = element.querySelector('.ui-expander-content');
+		if (!content) return;
+
+		const decorativeImages = content.querySelectorAll(
+			'img.ui-decorative-image',
+		);
+		if (decorativeImages.length === 0) return;
+
+		// If there is any focusable element, the frame has accessible content
+		if (JSDialog.FindFocusableWithin(content, 'next')) return;
+
+		// If there are any form controls (even disabled), the frame has
+		// real content rather than only decorative images
+		const formControlTags = JSDialog.GetFormControlTypesInBrowser();
+		for (const tag of formControlTags) {
+			if (content.querySelector(tag)) return;
+		}
+
+		throw new A11yValidatorException(
+			`In '${this.getDialogTitle(element)}' at '${this.getElementPath(element)}': frame '${type}' contains only decorative images with no accessible content. Remove the frame so its label does not mislead users into expecting meaningful content.`,
+		);
+	}
+
+	private checkInitialFocusNotCloseButton(dialogElement: HTMLElement): number {
+		const active = document.activeElement;
+		if (!active || !dialogElement.contains(active)) return 0;
+
+		if (active.classList.contains('ui-dialog-titlebar-close')) {
+			console.error(
+				new A11yValidatorException(
+					`In '${this.getDialogTitle(active as HTMLElement)}': initial keyboard focus is on the close (X) button in the titlebar. Focus should be on a control inside the dialog body.`,
+				),
+			);
+			return 1;
+		}
+		return 0;
+	}
+
+	private checkVisibleLabelsForFormControls(container: HTMLElement): number {
+		const elements = container.querySelectorAll('input, select');
+		const excludedInputTypes = new Set([
+			'hidden',
+			'button',
+			'submit',
+			'reset',
+			'image',
+		]);
+		let errorCount = 0;
+
+		elements.forEach((el) => {
+			const htmlEl = el as HTMLElement;
+
+			if (!this.isVisible(htmlEl)) return;
+
+			if (el.tagName === 'INPUT') {
+				const inputType = (el as HTMLInputElement).type?.toLowerCase();
+				if (excludedInputTypes.has(inputType)) return;
+			}
+
+			const hasLabelFor = !!document.querySelector(`label[for="${htmlEl.id}"]`);
+			const hasAriaLabelledBy = htmlEl.hasAttribute('aria-labelledby');
+
+			if (!hasLabelFor && !hasAriaLabelledBy) {
+				console.error(
+					new A11yValidatorException(
+						`In sidebar at '${this.getElementPath(htmlEl)}': ${el.tagName.toLowerCase()} element '${htmlEl.id}' is missing a visible label. Sidebar form controls should have a <label> or aria-labelledby association, not just aria-label.`,
+					),
+				);
+				errorCount++;
+			}
+		});
+
+		return errorCount;
+	}
+
+	private checkDuplicateButtonLabels(container: HTMLElement): number {
+		const buttons = container.querySelectorAll('button[aria-labelledby]');
+		const labelMap = new Map<string, HTMLElement[]>();
+
+		buttons.forEach((btn) => {
+			const labelledBy = btn.getAttribute('aria-labelledby')?.trim();
+			if (!labelledBy) return;
+
+			// Skip hidden buttons (e.g. inside collapsed sidebar panels).
+			// They are not reachable by users or screen readers.
+			if (!this.isVisible(btn as HTMLElement)) return;
+
+			if (!labelMap.has(labelledBy)) {
+				labelMap.set(labelledBy, []);
+			}
+			labelMap.get(labelledBy)?.push(btn as HTMLElement);
+		});
+
+		let errorCount = 0;
+
+		for (const [labelId, btns] of labelMap) {
+			if (btns.length > 1) {
+				const ids = btns.map((b) => b.id || '(no id)').join(', ');
+				console.error(
+					new A11yValidatorException(
+						`In '${this.getDialogTitle(container)}': buttons [${ids}] share the same aria-labelledby="${labelId}". Each button must have a distinct accessible name to clearly convey its function.`,
+					),
+				);
+				errorCount++;
+			}
+		}
+
+		return errorCount;
 	}
 
 	private shouldCheckChild(child: Element): boolean {
@@ -319,6 +522,8 @@ class A11yValidator {
 			}
 		}
 
+		errorCount += this.checkDuplicateButtonLabels(dialogElement);
+
 		this._directlyValidatedElements = null;
 		return errorCount;
 	}
@@ -326,10 +531,11 @@ class A11yValidator {
 	validateDialog(dialogElement: HTMLElement): void {
 		const content = dialogElement.querySelector('.ui-dialog-content');
 
-		const errorCount = this.validateContainer(
-			dialogElement,
-			content instanceof HTMLElement ? content : undefined,
-		);
+		const errorCount =
+			this.validateContainer(
+				dialogElement,
+				content instanceof HTMLElement ? content : undefined,
+			) + this.checkInitialFocusNotCloseButton(dialogElement);
 
 		if (errorCount === 0) {
 			console.error('A11yValidator: dialog passed all checks');
@@ -378,7 +584,8 @@ class A11yValidator {
 
 		const container = currentSidebar.getContainer();
 		Util.ensureValue(container);
-		const errorCount = this.validateContainer(container);
+		let errorCount = this.validateContainer(container);
+		errorCount += this.checkVisibleLabelsForFormControls(container);
 
 		if (errorCount === 0) {
 			console.error('A11yValidator: sidebar passed all checks');

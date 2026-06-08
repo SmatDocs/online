@@ -23,18 +23,18 @@
 #include <wsd/RequestDetails.hpp>
 
 // ----- Kit stubs -----
-void setKitInProcess() {}
-
 #include <kit/ChildSession.hpp>
 bool ChildSession::NoCapsForKit = true;
 
 
 
 // ----- COOLWSD stubs -----
+// coverity[global_init_order] - test stub, never populated, destructor is a no-op
 std::unique_ptr<ClipboardCache> COOLWSD::SavedClipboards;
 int createForkit(const std::string&, const StringVector&) { return -1; }
 
 // ----- COOLWSDServer stubs -----
+// coverity[global_init_order] - test stub, never populated, destructor is a no-op
 std::unique_ptr<COOLWSDServer> COOLWSDServer::Instance;
 std::shared_ptr<TerminatingPoll> COOLWSDServer::WebServerPoll;
 

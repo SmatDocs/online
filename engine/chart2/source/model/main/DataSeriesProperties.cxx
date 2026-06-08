@@ -1,0 +1,234 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ */
+
+#include <DataSeriesProperties.hxx>
+#include "DataPointProperties.hxx"
+#include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/chart2/StackingDirection.hpp>
+
+using namespace ::com::sun::star;
+
+using ::com::sun::star::beans::Property;
+
+namespace chart
+{
+
+void DataSeriesProperties::AddPropertiesToVector(
+    std::vector< Property > & rOutProperties )
+{
+    rOutProperties.emplace_back( "AttributedDataPoints",
+                  PROP_DATASERIES_ATTRIBUTED_DATA_POINTS,
+                  cppu::UnoType<uno::Sequence< sal_Int32 >>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "StackingDirection",
+                  PROP_DATASERIES_STACKING_DIRECTION,
+                  cppu::UnoType<chart2::StackingDirection>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+
+    rOutProperties.emplace_back( "VaryColorsByPoint",
+                  PROP_DATASERIES_VARY_COLORS_BY_POINT,
+                  cppu::UnoType<bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+
+    rOutProperties.emplace_back( "AttachedAxisIndex",
+                  PROP_DATASERIES_ATTACHED_AXIS_INDEX,
+                  cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+
+    rOutProperties.emplace_back( "ShowLegendEntry",
+                  PROP_DATASERIES_SHOW_LEGEND_ENTRY,
+                  cppu::UnoType<sal_Bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+
+    rOutProperties.emplace_back( "DeletedLegendEntries",
+                  PROP_DATASERIES_DELETED_LEGEND_ENTRIES,
+                  cppu::UnoType<uno::Sequence<sal_Int32>>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "ShowCustomLeaderLines",
+                  PROP_DATASERIES_SHOW_CUSTOM_LEADERLINES,
+                  cppu::UnoType<sal_Bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+
+    rOutProperties.emplace_back( "InvertNegative",
+                  PROP_DATASERIES_INVERT_NEGATIVE,
+                  cppu::UnoType<sal_Bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+
+    rOutProperties.emplace_back( "IntervalClosed",
+                  PROP_DATASERIES_INTERVAL_CLOSED,
+                  cppu::UnoType<sal_uInt32>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "ConnectorLines",
+                  PROP_DATASERIES_CONNECTOR_LINES,
+                  cppu::UnoType<sal_Bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "HasExplicitFill",
+                  PROP_DATASERIES_HAS_EXPLICIT_FILL,
+                  cppu::UnoType<sal_Bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "HasDataLabels",
+                  PROP_DATASERIES_HAS_DATA_LABELS,
+                  cppu::UnoType<sal_Bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "MeanLine",
+                  PROP_DATASERIES_MEAN_LINE,
+                  cppu::UnoType<sal_Bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "MeanMarker",
+                  PROP_DATASERIES_MEAN_MARKER,
+                  cppu::UnoType<sal_Bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "Nonoutliers",
+                  PROP_DATASERIES_NONOUTLIERS,
+                  cppu::UnoType<sal_Bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "Outliers",
+                  PROP_DATASERIES_OUTLIERS,
+                  cppu::UnoType<sal_Bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "ParentLabelLayout",
+                  PROP_DATASERIES_PARENT_LABEL_LAYOUT,
+                  cppu::UnoType<OUString>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "RegionLabelLayout",
+                  PROP_DATASERIES_REGION_LABEL_LAYOUT,
+                  cppu::UnoType<OUString>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "QuartileMethod",
+                  PROP_DATASERIES_QUARTILE_METHOD,
+                  cppu::UnoType<OUString>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "SubtotalIndices",
+                  PROP_DATASERIES_SUBTOTAL_INDICES,
+                  cppu::UnoType<uno::Sequence<sal_Int32>>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "HasGeography",
+                  PROP_DATASERIES_HAS_GEOGRAPHY,
+                  cppu::UnoType<sal_Bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "GeographyProjectionType",
+                  PROP_DATASERIES_GEOGRAPHY_PROJECTION_TYPE,
+                  cppu::UnoType<sal_Int32>::get(), // Actually enum GeoProjectionType
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "GeographyViewedRegionType",
+                  PROP_DATASERIES_GEOGRAPHY_VIEWED_REGION_TYPE,
+                  cppu::UnoType<sal_Int32>::get(), // Actually enum GeoMappingLevel
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "GeographyCultureLanguage",
+                  PROP_DATASERIES_GEOGRAPHY_CULTURE_LANGUAGE,
+                  cppu::UnoType<OUString>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "GeographyCultureRegion",
+                  PROP_DATASERIES_GEOGRAPHY_CULTURE_REGION,
+                  cppu::UnoType<OUString>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "GeographyAttribution",
+                  PROP_DATASERIES_GEOGRAPHY_ATTRIBUTION,
+                  cppu::UnoType<OUString>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "GeoCacheProvider",
+                  PROP_DATASERIES_GEOCACHE_PROVIDER,
+                  cppu::UnoType<OUString>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "GeoCacheBinary",
+                  PROP_DATASERIES_GEOCACHE_BINARY,
+                  cppu::UnoType<OUString>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    rOutProperties.emplace_back( "GeoCacheClearData",
+                  PROP_DATASERIES_GEOCACHE_CLEAR_DATA,
+                  cppu::UnoType<uno::Sequence<beans::PropertyValue>>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEVOID );
+
+    // add properties of service DataPointProperties
+    DataPointProperties::AddPropertiesToVector( rOutProperties );
+}
+
+void DataSeriesProperties::AddDefaultsToMap(
+    tPropertyValueMap & rOutMap )
+{
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATASERIES_STACKING_DIRECTION, chart2::StackingDirection_NO_STACKING );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATASERIES_VARY_COLORS_BY_POINT, false );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATASERIES_ATTACHED_AXIS_INDEX, sal_Int32(0) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATASERIES_SHOW_LEGEND_ENTRY, true );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATASERIES_SHOW_CUSTOM_LEADERLINES, true );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATASERIES_INVERT_NEGATIVE, false );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATASERIES_HAS_EXPLICIT_FILL, false );
+
+    // PROP_DATASERIES_ATTRIBUTED_DATA_POINTS has no default
+
+    // add properties of service DataPointProperties
+    DataPointProperties::AddDefaultsToMap( rOutMap );
+}
+
+}  // namespace chart
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

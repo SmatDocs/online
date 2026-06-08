@@ -38,6 +38,8 @@ app.localeService = new LocaleService();
 app.setPermission(global.coolParams.get('permission') || 'edit');
 app.serverConnectionService = new ServerConnectionService();
 app.layoutingService = new LayoutingService();
+app.pendingOnDemandRenders = 0;
+app.pendingOnDemandRenderRequests = new Set();
 
 var timestamp = global.coolParams.get('timestamp');
 var target = global.coolParams.get('target') || '';
@@ -77,13 +79,14 @@ var map = window.L.map('map', {
 
 ////// Controls /////
 
+window.L.Map.THIS = map;
+app.map = map;
+
 map.uiManager = new UIManager();
 map.addControl(map.uiManager);
 if (!window.L.Browser.cypressTest)
 	map.tooltip = window.L.control.tooltip();
 
-window.L.Map.THIS = map;
-app.map = map;
 app.idleHandler.map = map;
 
 if (window.coolParams.get('starterMode')) {
@@ -145,7 +148,7 @@ if (uaLowerCase.indexOf('msie') != -1 || uaLowerCase.indexOf('trident') != -1) {
 		'', _('OK'), null, false);
 }
 
-if (window.ThisIsAMobileApp && !window.ThisIsTheEmscriptenApp)
+if (window.ThisIsAMobileApp && !window.ThisIsTheEmscriptenApp && !window.ThisIsTheiOSApp && !window.ThisIsTheAndroidApp)
 	window.postMobileMessage('SYNCSETTINGS');
 
 }(window));

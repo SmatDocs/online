@@ -40,6 +40,11 @@ export class TilesSection extends CanvasSectionObject {
 		this.sectionProperties.pageBackgroundTextColor = 'grey';
 		this.sectionProperties.pageBackgroundFont = String(40 * app.roundedDpiScale) + 'px Arial';
 
+		// Loading-state skeleton: for a subtle hint of a heading / cell content
+		// drawn over a page's white background before tiles arrive.
+		this.sectionProperties.skeletonHeadingColor = '#c8d2dc';
+		this.sectionProperties.skeletonLineColor = '#dde3ea';
+
 		/*
 			Seems that this number is equal to 45 twips in core.
 			Page rectangles are sent from core side.
@@ -176,9 +181,57 @@ export class TilesSection extends CanvasSectionObject {
 		}
 
 		if (app.file.fileBasedView) {
-			const partHeightPixels = Math.round((this.sectionProperties.docLayer._partHeightTwips + this.sectionProperties.docLayer._spaceBetweenParts) * app.twipsToPixels);
+			// Narrow activeLayout to ViewLayoutFileBased before reading
+			// documentRectangles; TypeScript can't see through the flag.
+			const activeLayout = app.activeDocument.activeLayout;
+			const layout =
+				activeLayout && activeLayout.type === 'ViewLayoutFileBased'
+					? (activeLayout as ViewLayoutFileBased)
+					: null;
+			const docRect = layout && layout.documentRectangles[tile.coords.part];
+			if (docRect) {
+				// tile.coords.x/y are page-local pixels. Set the tile position
+				// in twips by combining docRect.y1 (exact twips) with the
+				// pixel-to-twip conversion of tile.coords. Setting via .pX /
+				// .pY would compose docRect.pY1 (already rounded) with the
+				// tile coord and convert the sum back to twips - that double
+				// round-trip can shift the resulting twip value by a few
+				// twips relative to docRect.y1, which then causes
+				// SimpleRectangle.containsPoint inside
+				// getClosestRectangleIndex to miss this docRect and fall
+				// through to closest-by-center. The closest-by-center pick
+				// can land on a neighbouring part and route the tile through
+				// its viewRect; if that neighbour has a different X centering
+				// offset (e.g. mixed page orientations) the page paints at
+				// the wrong X.
+				tilePos.x = docRect.x1 + Math.round(tile.coords.x * app.pixelsToTwips);
+				tilePos.y = docRect.y1 + Math.round(tile.coords.y * app.pixelsToTwips);
 
-			tilePos.pY = tile.coords.part * partHeightPixels + tile.coords.y;
+				// Clip the tile to page bounds. The last row/column of tiles
+				// can extend up to tileSize-1 pixels past the page edge. Those
+				// pixels are drawn at the canvas position of the next page
+				// (vertically) or to the right of the page (horizontally) and
+				// the next page may be narrower or positioned differently,
+				// leaving a visible bleed strip. drawTileToCanvasCrop only
+				// draws the in-page portion of the tile.
+				const drawW = Math.min(TileManager.tileSize, docRect.pWidth - tile.coords.x);
+				const drawH = Math.min(TileManager.tileSize, docRect.pHeight - tile.coords.y);
+				if (drawW <= 0 || drawH <= 0) return;
+				if (drawW < TileManager.tileSize || drawH < TileManager.tileSize) {
+					this.drawTileToCanvasCrop(
+						tile, this.context,
+						0, 0, drawW, drawH,
+						tilePos.vX - this.myTopLeft[0],
+						tilePos.vY - this.myTopLeft[1],
+						drawW, drawH,
+					);
+					return;
+				}
+			} else {
+				// Fallback before the layout has built rectangles.
+				const partHeightPixels = Math.round((this.sectionProperties.docLayer._partHeightTwips + this.sectionProperties.docLayer._spaceBetweenParts) * app.twipsToPixels);
+				tilePos.pY = tile.coords.part * partHeightPixels + tile.coords.y;
+			}
 		}
 
 		this.drawTileToCanvas(tile, this.context, tilePos.vX - this.myTopLeft[0], tilePos.vY - this.myTopLeft[1], TileManager.tileSize, TileManager.tileSize);
@@ -256,7 +309,7 @@ export class TilesSection extends CanvasSectionObject {
 
 	private drawPageBackgroundWriter (ctx: any) {
 		const viewRectangleTwips = app.activeDocument.activeLayout.viewedRectangle.toArray();
-		this.context.fillStyle = this.containerObject.getDocumentBackgroundColor();
+		const docBg = this.containerObject.getDocumentBackgroundColor();
 
 		for (let i: number = 0; i < app.file.writer.pageRectangleList.length; i++) {
 			const simpleRectangle = new cool.SimpleRectangle(
@@ -266,51 +319,121 @@ export class TilesSection extends CanvasSectionObject {
 				app.file.writer.pageRectangleList[i][3]
 			);
 
-			if (simpleRectangle.intersectsRectangle(viewRectangleTwips)) {
-				this.context.fillRect(
-					simpleRectangle.v1X + this.sectionProperties.pageBackgroundInnerMargin,
-					simpleRectangle.v1Y + this.sectionProperties.pageBackgroundInnerMargin,
-					simpleRectangle.v2X - simpleRectangle.v1X - this.sectionProperties.pageBackgroundInnerMargin,
-					simpleRectangle.v3Y - simpleRectangle.v1Y - this.sectionProperties.pageBackgroundInnerMargin
-				);
-			}
+			if (!simpleRectangle.intersectsRectangle(viewRectangleTwips))
+				continue;
+
+			const px = simpleRectangle.v1X + this.sectionProperties.pageBackgroundInnerMargin;
+			const py = simpleRectangle.v1Y + this.sectionProperties.pageBackgroundInnerMargin;
+			const pw = simpleRectangle.v2X - simpleRectangle.v1X - this.sectionProperties.pageBackgroundInnerMargin;
+			const ph = simpleRectangle.v3Y - simpleRectangle.v1Y - this.sectionProperties.pageBackgroundInnerMargin;
+
+			this.context.fillStyle = docBg;
+			this.context.fillRect(px, py, pw, ph);
+
+			this.drawWriterLoadingSkeleton(px, py, pw, ph);
 		}
 	}
 
+	// Paint a skeleton of a heading + a few paragraph lines on a Writer page
+	// before tiles arrive and over-paint that; FIXME: eventually writer tiles
+	// should be transparent, and we'll need to clip this.
+	private drawWriterLoadingSkeleton(px: number, py: number, pw: number, ph: number): void {
+		// Roughly mirror a 1" margin on so the skeleton sits inside
+		// the would-be text frame rather than against the page edge.
+		const marginX = Math.round(pw * 0.12);
+		const marginY = Math.round(ph * 0.12);
+		const textLeft = px + marginX;
+		const textTop = py + marginY;
+		const textWidth = pw - 2 * marginX;
+		if (textWidth <= 0)
+			return;
+
+		const headingHeight = Math.max(8, Math.round(ph * 0.035));
+		const headingWidth = Math.round(textWidth * 0.55);
+		const lineHeight = Math.max(4, Math.round(ph * 0.014));
+		const lineGap = Math.max(3, Math.round(ph * 0.014));
+		const paragraphGap = Math.max(6, Math.round(ph * 0.025));
+		const radius = Math.max(2, Math.round(lineHeight * 0.5));
+
+		// Heading.
+		this.context.fillStyle = this.sectionProperties.skeletonHeadingColor;
+		this.roundedFillRect(textLeft, textTop, headingWidth, headingHeight, Math.max(3, Math.round(headingHeight * 0.35)));
+
+		// Paragraph lines: two short paragraphs with a ragged last line, so it
+		// reads as prose rather than a UI placeholder.
+		this.context.fillStyle = this.sectionProperties.skeletonLineColor;
+		const lineWidths = [1.0, 0.97, 0.94, 0.62, /* gap */ 0.98, 0.95, 0.93, 0.45];
+		const gapAfter = 3; // index 3 is the last line of the first paragraph.
+
+		let y = textTop + headingHeight + paragraphGap;
+		for (let i = 0; i < lineWidths.length; i++) {
+			const w = Math.round(textWidth * lineWidths[i]);
+			if (y + lineHeight > py + ph - marginY)
+				break;
+			this.roundedFillRect(textLeft, y, w, lineHeight, radius);
+			y += lineHeight + lineGap;
+			if (i === gapAfter)
+				y += paragraphGap;
+		}
+	}
+
+	private roundedFillRect(x: number, y: number, w: number, h: number, r: number): void {
+		const ctx = this.context as any;
+		if (typeof ctx.roundRect === 'function') {
+			ctx.beginPath();
+			ctx.roundRect(x, y, w, h, r);
+			ctx.fill();
+			return;
+		}
+		// Fallback for older canvas implementations.
+		const rr = Math.min(r, w * 0.5, h * 0.5);
+		ctx.beginPath();
+		ctx.moveTo(x + rr, y);
+		ctx.lineTo(x + w - rr, y);
+		ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+		ctx.lineTo(x + w, y + h - rr);
+		ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+		ctx.lineTo(x + rr, y + h);
+		ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+		ctx.lineTo(x, y + rr);
+		ctx.quadraticCurveTo(x, y, x + rr, y);
+		ctx.closePath();
+		ctx.fill();
+	}
+
 	private drawPageBackgroundFileBasedView (ctx: any) {
-		// PDF view supports only same-sized pages for now. So we can use simple math instead of a loop.
-		var partHeightPixels: number = Math.round((this.map._docLayer._partHeightTwips + this.map._docLayer._spaceBetweenParts) * app.twipsToPixels);
-		var visibleBounds: Array<number> = app.activeDocument.activeLayout.viewedRectangle.pToArray();
-		var topVisible: number = Math.floor(visibleBounds[1] / partHeightPixels);
-		var bottomVisible: number = Math.ceil((visibleBounds[1] + visibleBounds[3]) / partHeightPixels);
+		const layout = app.activeDocument.activeLayout as ViewLayoutFileBased;
+		if (!layout || !layout.documentRectangles || layout.documentRectangles.length === 0)
+			return;
 
-		// Check existence of pages.
-		topVisible = topVisible >= 0 ? topVisible : 0;
-		bottomVisible = bottomVisible < this.map._docLayer._parts ? bottomVisible : this.map._docLayer._parts - 1;
+		const viewRectTwips = app.activeDocument.activeLayout.viewedRectangle.toArray();
+		const innerMargin = this.sectionProperties.pageBackgroundInnerMargin;
 
-		if (!isNaN(partHeightPixels) && partHeightPixels > 0) {
-			var partHeightPixels: number = Math.round(this.map._docLayer._partHeightTwips * app.twipsToPixels);
-			var gap: number = Math.round(this.map._docLayer._spaceBetweenParts * app.twipsToPixels);
-			var partWidthPixels: number = Math.round(this.map._docLayer._partWidthTwips * app.twipsToPixels);
-			var startY: number = (partHeightPixels + gap) * (topVisible > 0 ? topVisible : 0);
-			var rectangle: Array<number>;
+		for (let i = 0; i < layout.documentRectangles.length; i++) {
+			const docRect = layout.documentRectangles[i];
 
-			for (var i: number = 0; i <= bottomVisible - topVisible; i++) {
-				rectangle = [0, startY, partWidthPixels, partHeightPixels];
+			if (!docRect.intersectsRectangle(viewRectTwips)) continue;
 
-				this.context.strokeRect(
-					rectangle[0] - ctx.viewBounds.min.x + this.sectionProperties.pageBackgroundInnerMargin,
-					rectangle[1] - ctx.viewBounds.min.y + this.sectionProperties.pageBackgroundInnerMargin,
-					rectangle[2] - this.sectionProperties.pageBackgroundInnerMargin,
-					rectangle[3] - this.sectionProperties.pageBackgroundInnerMargin);
+			// v1X/v1Y route through activeLayout.documentToViewX/Y, so the
+			// centering offset and scroll are applied exactly once - matching
+			// where paintSimple places tiles. The caller has already
+			// translate()-d the canvas by -myTopLeft.
+			// Inset by innerMargin on all four sides: the top-left point shifts
+			// right/down by innerMargin and the width/height shrink by twice
+			// that to leave a matching margin on the right/bottom.
+			const x = docRect.v1X + innerMargin;
+			const y = docRect.v1Y + innerMargin;
+			const w = (docRect.v2X - docRect.v1X) - 2 * innerMargin;
+			const h = (docRect.v3Y - docRect.v1Y) - 2 * innerMargin;
 
-				this.context.fillText(String(i + topVisible + 1),
-					Math.round((2 * rectangle[0] + rectangle[2]) * 0.5) - ctx.viewBounds.min.x,
-					Math.round((2 * rectangle[1] + rectangle[3]) * 0.5) - ctx.viewBounds.min.y,
-					rectangle[2] * 0.4);
+			this.context.strokeRect(x, y, w, h);
 
-				startY += partHeightPixels + gap;
-			}
+			this.context.fillText(
+				String(i + 1),
+				Math.round(x + w * 0.5),
+				Math.round(y + h * 0.5),
+				w * 0.4,
+			);
 		}
 	}
 
@@ -413,7 +536,13 @@ export class TilesSection extends CanvasSectionObject {
 		} else if (!this.containerObject.isZoomChanged()) {
 			// Don't show page border and page numbers (drawn by drawPageBackgrounds) if zoom is changing
 			// after a zoom animation.
+
+			// drawPageBackgroundWriter uses absolute view coordinates (v1X, v1Y etc.)
+			// but the context is already translated by myTopLeft (by the section container).
+			// Compensate for this offset, same as the multipage view path.
+			this.context.translate(-this.myTopLeft[0], -this.myTopLeft[1]);
 			this.drawPageBackgrounds(ctx);
+			this.context.translate(this.myTopLeft[0], this.myTopLeft[1]);
 		}
 
 		var doneTiles = new Set();
@@ -540,9 +669,15 @@ export class TilesSection extends CanvasSectionObject {
 					var tilePos = coords.getPos();
 
 					if (app.file.fileBasedView) {
-						var ratio = TileManager.tileSize * relScale / app.tile.size.y;
-						var partHeightPixels = Math.round((docLayer._partHeightTwips + docLayer._spaceBetweenParts) * ratio);
-						tilePos.y = coords.part * partHeightPixels + tilePos.y;
+						var layout = app.activeDocument.activeLayout;
+						if (layout && layout.type === 'ViewLayoutFileBased') {
+							var ratio = TileManager.tileSize * relScale / app.tile.size.y;
+							var rect = (layout as ViewLayoutFileBased).getViewPartRectAtRatio(coords.part, ratio);
+							if (rect) {
+								tilePos.x = rect.x + tilePos.x;
+								tilePos.y = rect.y + tilePos.y;
+							}
+						}
 					}
 
 					var tileBounds = new cool.Bounds(tilePos, tilePos.add(new cool.Point(TileManager.tileSize, TileManager.tileSize)));
@@ -820,9 +955,15 @@ export class TilesSection extends CanvasSectionObject {
 
 				var tileCoords = tile.coords.getPos();
 				if (app.file.fileBasedView) {
-					var ratio = TileManager.tileSize * relScale / app.tile.size.y;
-					var partHeightPixels = Math.round((docLayer._partHeightTwips + docLayer._spaceBetweenParts) * ratio);
-					tileCoords.y = tile.coords.part * partHeightPixels + tileCoords.y;
+					var layout = app.activeDocument.activeLayout;
+					if (layout && layout.type === 'ViewLayoutFileBased') {
+						var ratio = TileManager.tileSize * relScale / app.tile.size.y;
+						var rect = (layout as ViewLayoutFileBased).getViewPartRectAtRatio(tile.coords.part, ratio);
+						if (rect) {
+							tileCoords.x = rect.x + tileCoords.x;
+							tileCoords.y = rect.y + tileCoords.y;
+						}
+					}
 				}
 				var tileBounds = new cool.Bounds(tileCoords, tileCoords.add(new cool.Point(TileManager.tileSize, TileManager.tileSize)));
 
@@ -889,6 +1030,11 @@ export class TilesSection extends CanvasSectionObject {
 			corePxBounds.min.multiplyBy(convScale),
 			corePxBounds.max.multiplyBy(convScale)
 		);
+	}
+
+	onNewDocumentTopLeft(): void {
+		if (app.map._textInput && app.map._textInput._isDebugOn)
+			app.map._textInput.update();
 	}
 }
 

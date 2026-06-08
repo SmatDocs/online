@@ -18,7 +18,6 @@
 // for uno
 interface TableStyleInfo {
 	ContainsHeader: boolean;
-	TotalsRow: boolean;
 	UseFirstColumnFormatting: boolean;
 	UseLastColumnFormatting: boolean;
 	UseRowStripes: boolean;
@@ -72,15 +71,6 @@ function toHex(r: number, g: number, b: number): string {
 	);
 }
 
-function lightenColor(hex: string, factor: number): string {
-	const [r, g, b] = parseHexToRgb(hex);
-	return toHex(
-		r + (255 - r) * factor,
-		g + (255 - g) * factor,
-		b + (255 - b) * factor,
-	);
-}
-
 function darkenColor(hex: string, factor: number): string {
 	const [r, g, b] = parseHexToRgb(hex);
 	return toHex(r * (1 - factor), g * (1 - factor), b * (1 - factor));
@@ -125,8 +115,47 @@ class TableStylesService {
 		app.map.on('commandstatechanged', this.onCommandState.bind(this));
 	}
 
+	/** Build the .uno:DatabaseSettings args from a TableStyleInfo, translating
+	 * state-side property names to the PoolItem MID names declared in
+	 * scslots.sdi (HeaderRow, FirstCol, ...) that the SDI parameter list
+	 * expects. Total Row lives on its own slot (.uno:TableTotalRow). */
+	private buildArgs(state: TableStyleInfo): any {
+		return {
+			'DatabaseSettings.HeaderRow': {
+				type: 'boolean',
+				value: state.ContainsHeader,
+			},
+			'DatabaseSettings.FirstCol': {
+				type: 'boolean',
+				value: state.UseFirstColumnFormatting,
+			},
+			'DatabaseSettings.LastCol': {
+				type: 'boolean',
+				value: state.UseLastColumnFormatting,
+			},
+			'DatabaseSettings.StripedRows': {
+				type: 'boolean',
+				value: state.UseRowStripes,
+			},
+			'DatabaseSettings.StripedCols': {
+				type: 'boolean',
+				value: state.UseColStripes,
+			},
+			'DatabaseSettings.ShowFilters': {
+				type: 'boolean',
+				value: state.AutoFilter,
+			},
+			'DatabaseSettings.StyleID': {
+				type: 'string',
+				value: state.TableStyleName || '',
+			},
+		};
+	}
+
 	public onCommandState(e: any) {
 		if (e.commandName === '.uno:TableStyles') {
+			if (e.state === '') return;
+
 			try {
 				this.styles = JSON.parse(e.state).TableStyles;
 				this.styles.sort((a, b) => {
@@ -206,6 +235,7 @@ class TableStylesService {
 				{
 					id: 'tablestyles_design-iconview-list',
 					type: 'iconviewlist',
+					accessibility: { focusBack: false, combination: 'TL', de: null },
 					children: [
 						{
 							id: 'tablestyles_design',
@@ -263,7 +293,6 @@ class TableStylesService {
 			// fallback, generate from defined styles
 			tableStyle = {
 				ContainsHeader: this.styleHasElement(tableStyleEntry, 'HeaderRow'),
-				TotalsRow: this.styleHasElement(tableStyleEntry, 'TotalRow'),
 				UseFirstColumnFormatting: this.styleHasElement(
 					tableStyleEntry,
 					'FirstColumn',
@@ -281,52 +310,22 @@ class TableStylesService {
 			} as TableStyleInfo;
 		}
 
-		// PoolItem names are different than ones from state handler
-		const args = {} as any;
-		args['DatabaseSettings.HeaderRow'] = {
-			type: 'boolean',
-			value: tableStyle.ContainsHeader,
-		};
-		args['DatabaseSettings.TotalRow'] = {
-			type: 'boolean',
-			value: tableStyle.TotalsRow,
-		};
-		args['DatabaseSettings.FirstCol'] = {
-			type: 'boolean',
-			value: tableStyle.UseFirstColumnFormatting,
-		};
-		args['DatabaseSettings.LastCol'] = {
-			type: 'boolean',
-			value: tableStyle.UseLastColumnFormatting,
-		};
-		args['DatabaseSettings.StripedRows'] = {
-			type: 'boolean',
-			value: tableStyle.UseRowStripes,
-		};
-		args['DatabaseSettings.StripedCols'] = {
-			type: 'boolean',
-			value: tableStyle.UseColStripes,
-		};
-		args['DatabaseSettings.ShowFilters'] = {
-			type: 'boolean',
-			value: tableStyle.AutoFilter,
-		};
-
-		const newStyleId = tableStyleEntry.Name;
-		args['DatabaseSettings.StyleID'] = { type: 'string', value: newStyleId };
-
-		app.map.sendUnoCommand('.uno:DatabaseSettings', args);
+		const updated = { ...tableStyle, TableStyleName: tableStyleEntry.Name };
+		app.map.sendUnoCommand('.uno:DatabaseSettings', this.buildArgs(updated));
 	}
 
 	public generateIcon(style: TableStyleEntry): string {
-		const wholeTable = getElementColor(style, 'WholeTable') || '000000';
+		const wholeTable = getElementColor(style, 'WholeTable') || 'FFFF';
 		const headerRow = getElementColor(style, 'HeaderRow') || wholeTable;
 		const firstRowStripe =
 			getElementColor(style, 'FirstRowStripe') || wholeTable;
+		const secondRowStripe =
+			getElementColor(style, 'SecondRowStripe') || wholeTable;
 
 		const wt = '#' + wholeTable;
 		const hr = '#' + headerRow;
 		const frs = '#' + firstRowStripe;
+		const srs = '#' + secondRowStripe;
 
 		const getStyleIndex = (variant: string) => {
 			const match = style.Name.match(new RegExp(`${variant}(\\d+)$`));
@@ -336,31 +335,13 @@ class TableStylesService {
 		let svg: string;
 
 		if (style.Name.indexOf('Light') >= 0) {
-			svg = lightTableStyleSvg(
-				hr,
-				lightenColor(frs, 0.5),
-				getStyleIndex('Light'),
-			);
+			svg = lightTableStyleSvg(hr, wt, frs, getStyleIndex('Light'));
 		} else if (style.Name.indexOf('Medium') >= 0) {
-			svg = mediumTableStyleSvg(
-				hr,
-				frs,
-				lightenColor(frs, 0.55),
-				getStyleIndex('Medium'),
-			);
+			svg = mediumTableStyleSvg(hr, wt, frs, getStyleIndex('Medium'));
 		} else if (style.Name.indexOf('Dark') >= 0) {
-			const darkStyleIndex = getStyleIndex('Dark');
-			const gridColor =
-				darkStyleIndex >= 8 && darkStyleIndex <= 11
-					? strengthenColor(wt, 0.75)
-					: darkenColor(wt, 0.35);
-			svg = darkTableStyleSvg(hr, wt, gridColor, darkStyleIndex);
+			svg = darkTableStyleSvg(hr, wt, frs, getStyleIndex('Dark'));
 		} else {
-			svg = lightTableStyleSvg(
-				wt,
-				lightenColor(wt, 0.5),
-				getStyleIndex('Light'),
-			);
+			svg = customTableStyleSvg(hr, frs, srs);
 		}
 
 		return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);

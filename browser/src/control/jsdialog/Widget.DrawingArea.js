@@ -39,49 +39,154 @@ function _drawingAreaControl (parentContainer, data, builder) {
 	if (!data.image)
 		return;
 
-	var image = window.L.DomUtil.create('img', builder.options.cssClass + ' ui-drawing-area', container);
+	var isTextbox = data.aria && data.aria.role === 'textbox';
 	var imageId = data.id + '-img';
-	image.id = imageId;
-	image.src = data.image.replace(/\\/g, '');
-	image.draggable = false;
-	image.ondragstart = function() { return false; };
 
-	const isFocusableImg = data.enabled && data.canFocus;
-	if (isFocusableImg) {
-		image.tabIndex = 0;
-		JSDialog.AddAltAttrOnFocusableImg(image, data, builder);
-	} else {
-		image.alt = '';
-		image.classList.add('ui-decorative-image');
-	}
+	if (isTextbox) {
+		// Editable drawing areas (e.g. spell check sentence box) use a
+		// div with role="textbox" wrapping the visual image.
+		var wrapper = _createDrawingAreaWrapper(container, data, builder, imageId, false);
+		wrapper.setAttribute('role', 'textbox');
+		wrapper.setAttribute('aria-multiline', 'true');
 
-	if (data.text) {
-		image.setAttribute('data-cooltip', data.text);
+		_setDescription(wrapper, data, imageId);
 
-		if (builder.map) {
-			window.L.control.attachTooltipEventListener(image, builder.map);
+		if (data.editText) {
+			wrapper.setAttribute('aria-label', data.editText);
 		}
+
+		if (data.text) {
+			wrapper.setAttribute('data-cooltip', data.text);
+			if (builder.map) {
+				window.L.control.attachTooltipEventListener(wrapper, builder.map);
+			}
+		}
+	} else if (data.selectedPoint) {
+		var selectedIndex = data.selectedIndex !== undefined ? data.selectedIndex : 0;
+
+		var wrapper = _createDrawingAreaWrapper(container, data, builder, imageId, true);
+		wrapper.setAttribute('role', 'radiogroup');
+		wrapper.setAttribute('aria-activedescendant', container.id + '-point-' + selectedIndex);
+
+		var previousWrapper = document.getElementById(imageId);
+		var isNavigating = previousWrapper && previousWrapper === document.activeElement;
+		if (!isNavigating) {
+			if (data.labelledBy) {
+				wrapper.setAttribute('aria-labelledby', data.labelledBy);
+			}
+			_setDescription(wrapper, data, imageId);
+		}
+
+		// Create 9 radio elements
+		for (var i = 0; i < data.pointNames.length; i++) {
+			var radio = window.L.DomUtil.create('span', 'visuallyhidden', wrapper);
+			radio.id = container.id + '-point-' + i;
+			radio.setAttribute('role', 'radio');
+			radio.setAttribute('aria-checked', i === selectedIndex ? 'true' : 'false');
+			radio.textContent = data.pointNames[i];
+		}
+	} else if (data.currentAngle !== undefined) {
+		var wrapper = _createDrawingAreaWrapper(container, data, builder, imageId, true);
+		wrapper.setAttribute('role', 'slider');
+		wrapper.setAttribute('aria-valuemin', '0');
+		wrapper.setAttribute('aria-valuemax', '359');
+		wrapper.setAttribute('aria-valuenow', data.currentAngle);
+		wrapper.setAttribute('aria-valuetext', data.currentAngle + '°');
+
+		var previousWrapper = document.getElementById(imageId);
+		var isNavigating = previousWrapper && previousWrapper === document.activeElement;
+		if (!isNavigating) {
+			if (data.labelledBy) {
+				wrapper.setAttribute('aria-labelledby', data.labelledBy);
+			}
+			_setDescription(wrapper, data, imageId);
+		}
+	} else {
+		var image = window.L.DomUtil.create('img', builder.options.cssClass + ' ui-drawing-area', container);
+		image.id = imageId;
+		image.src = data.image.replace(/\\/g, '');
+		image.draggable = false;
+		image.ondragstart = function() { return false; };
+
+		const isFocusableImg = data.enabled && data.canFocus;
+		if (isFocusableImg) {
+			image.tabIndex = 0;
+			JSDialog.AddAltAttrOnFocusableImg(image, data, builder);
+			if (data.aria && data.aria.role) {
+				image.setAttribute('role', data.aria.role);
+			}
+		} else {
+			image.alt = '';
+			image.classList.add('ui-decorative-image');
+		}
+
+		if (data.text) {
+			image.setAttribute('data-cooltip', data.text);
+
+			if (builder.map) {
+				window.L.control.attachTooltipEventListener(image, builder.map);
+			}
+		}
+
+		// Line width dialog is affected from delay on image render.
+		// So If the image render is delayed, use width and height of the data
+		if (JSDialog.isWidgetInModalPopup(data) && image.width == 0 && image.height == 0) {
+			image.width = data.imagewidth;
+			image.height = data.imageheight;
+		}
+
+		if (data.loading && data.loading === 'true') {
+			var loaderContainer = window.L.DomUtil.create('div', 'ui-drawing-area-loader-container', container);
+			window.L.DomUtil.create('div', 'ui-drawing-area-loader', loaderContainer);
+		}
+		if (data.placeholderText && data.placeholderText === 'true') {
+			var spanContainer = window.L.DomUtil.create('div', 'ui-drawing-area-placeholder-container', container);
+			var span = window.L.DomUtil.create('span', 'ui-drawing-area-placeholder', spanContainer);
+			span.innerText = data.text;
+		}
+
+		_setupDrawingAreaMouseEvents(image, container, builder);
+		_setupDrawingAreaKeyboardEvents(image, container, builder);
 	}
 
-	// Line width dialog is affected from delay on image render.
-	// So If the image render is delayed, use width and height of the data
-	if (JSDialog.isWidgetInModalPopup(data) && image.width == 0 && image.height == 0) {
-		image.width = data.imagewidth;
-		image.height = data.imageheight;
+	return false;
+}
+
+function _setDescription(wrapper, data, imageId) {
+	if (data.aria && data.aria.description) {
+		var descSpan = window.L.DomUtil.create('span', 'visuallyhidden', wrapper);
+		descSpan.id = imageId + '-desc';
+		descSpan.textContent = data.aria.description;
+		wrapper.setAttribute('aria-describedby', descSpan.id);
+	}
+}
+
+function _createDrawingAreaWrapper(container, data, builder, imageId, isDecorative) {
+	var wrapper = window.L.DomUtil.create('div', builder.options.cssClass + ' ui-drawing-area', container);
+	wrapper.id = imageId;
+	wrapper.tabIndex = 0;
+
+	var img = window.L.DomUtil.create('img', '', wrapper);
+	img.src = data.image.replace(/\\/g, '');
+	img.style.display = 'block';
+	img.draggable = false;
+	img.ondragstart = function() { return false; };
+	img.alt = '';
+	img.setAttribute('aria-hidden', 'true');
+	img.addEventListener('mousedown', function() { wrapper.focus(); });
+
+	if (isDecorative) {
+		img.classList.add('ui-decorative-image');
 	}
 
-	if (data.loading && data.loading === 'true') {
-		var loaderContainer = window.L.DomUtil.create('div', 'ui-drawing-area-loader-container', container);
-		window.L.DomUtil.create('div', 'ui-drawing-area-loader', loaderContainer);
-	}
-	if (data.placeholderText && data.placeholderText === 'true') {
-		var spanContainer = window.L.DomUtil.create('div', 'ui-drawing-area-placeholder-container', container);
-		var span = window.L.DomUtil.create('span', 'ui-drawing-area-placeholder', spanContainer);
-		span.innerText = data.text;
-	}
+	_setupDrawingAreaMouseEvents(img, container, builder);
+	_setupDrawingAreaKeyboardEvents(wrapper, container, builder);
 
+	return wrapper;
+}
+
+function _setupDrawingAreaMouseEvents (imageElement, container, builder) {
 	var getCoordinatesFromEvent = function (e) {
-		var imageElement = document.getElementById(imageId);
 		var boundingBox = imageElement.getBoundingClientRect();
 		var ret = [e.x - boundingBox.left, e.y - boundingBox.top];
 
@@ -94,7 +199,7 @@ function _drawingAreaControl (parentContainer, data, builder) {
 	var moveTimer = null;
 	var moveFunc = null;
 
-	window.L.DomEvent.on(image, 'dblclick', function(e) {
+	window.L.DomEvent.on(imageElement, 'dblclick', function(e) {
 		var pos = getCoordinatesFromEvent(e);
 		var coordinates = pos[0] + ';' + pos[1];
 
@@ -104,7 +209,7 @@ function _drawingAreaControl (parentContainer, data, builder) {
 		builder.callback('drawingarea', 'dblclick', container.getCurrent(), coordinates, builder);
 	}, this);
 
-	window.L.DomEvent.on(image, 'click touchend', function(e) {
+	window.L.DomEvent.on(imageElement, 'click touchend', function(e) {
 		var pos = getCoordinatesFromEvent(e);
 		var coordinates = pos[0] + ';' + pos[1];
 
@@ -141,7 +246,7 @@ function _drawingAreaControl (parentContainer, data, builder) {
 		builder.callback('drawingarea', 'mouseup', container.getCurrent(), coordinates, builder);
 	};
 
-	image.addEventListener('mousedown', function (e) {
+	imageElement.addEventListener('mousedown', function (e) {
 		moveFunc = function () {
 			var pos = getCoordinatesFromEvent(e);
 			var coordinates = pos[0] + ';' + pos[1];
@@ -157,10 +262,12 @@ function _drawingAreaControl (parentContainer, data, builder) {
 		window.addEventListener('mousemove', onMove);
 		window.addEventListener('mouseup', endMove);
 	});
+}
 
+function _setupDrawingAreaKeyboardEvents (focusElement, container, builder) {
 	var modifier = 0;
 
-	image.addEventListener('keydown', function(event) {
+	focusElement.addEventListener('keydown', function(event) {
 		if (event.key === 'Enter') {
 			builder.callback('drawingarea', 'keypress', container.getCurrent(), UNOKey.RETURN | modifier, builder);
 			event.preventDefault();
@@ -207,7 +314,7 @@ function _drawingAreaControl (parentContainer, data, builder) {
 		}
 	});
 
-	image.addEventListener('keyup', function(event) {
+	focusElement.addEventListener('keyup', function(event) {
 		if (event.key === 'Shift') {
 			modifier = modifier & (~app.UNOModifier.SHIFT);
 			event.preventDefault();
@@ -217,11 +324,11 @@ function _drawingAreaControl (parentContainer, data, builder) {
 		}
 	});
 
-	image.addEventListener('blur', function() {
+	focusElement.addEventListener('blur', function() {
 		modifier = 0;
 	});
 
-	image.addEventListener('keypress', function(event) {
+	focusElement.addEventListener('keypress', function(event) {
 		if (event.key === 'Enter' ||
 			event.key === 'Escape' ||
 			event.key === 'Esc' ||
@@ -253,8 +360,6 @@ function _drawingAreaControl (parentContainer, data, builder) {
 
 		event.preventDefault();
 	});
-
-	return false;
 }
 
 JSDialog.drawingArea = function (parentContainer, data, builder) {

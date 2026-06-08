@@ -26,6 +26,7 @@
 #include <common/Util.hpp>
 #include <wsd/ClientSession.hpp>
 
+#include <algorithm>
 #include <cassert>
 #include <climits>
 #include <cstddef>
@@ -40,26 +41,42 @@
 
 using namespace COOLProtocol;
 
+namespace
+{
+    /// Upper bound on how many stalled tiles a single stale-render sweep
+    /// will reissue. Unused unless ENABLE_STALE_TILE_REISSUE is on.
+    [[maybe_unused]] constexpr size_t MAX_STALE_REISSUE_PER_SWEEP = 64;
+
+    /// Reissue count at which log line is promoted for a tile
+    [[maybe_unused]] constexpr int STALE_REISSUE_WARN_AT = 3;
+
+    /// Cancel a stuck tile after this many reissues.
+    [[maybe_unused]] constexpr int MAX_STALE_REISSUE_TOTAL = 8;
+}
+
 TileCache::TileCache(std::string docURL, const std::chrono::system_clock::time_point& modifiedTime,
                      bool dontCache)
     : _docURL(std::move(docURL))
+    , _owner()
     , _cacheSize(0)
     , _maxCacheSize(1024 * 1024)
     , _dontCache(dontCache)
 {
 #ifndef BUILDING_TESTS
-    LOG_INF("TileCache ctor for uri [" << COOLWSD::anonymizeUrl(_docURL) <<
-            "], modifiedTime=" << std::chrono::duration_cast<std::chrono::seconds>
-							(modifiedTime.time_since_epoch()).count() << "], dontCache=" << _dontCache);
+    LOG_INF(
+        "TileCache ctor for uri ["
+        << Anonymizer::anonymizeUrl(_docURL) << "], modifiedTime="
+        << std::chrono::duration_cast<std::chrono::seconds>(modifiedTime.time_since_epoch()).count()
+        << "], dontCache=" << _dontCache);
 #endif
     (void)modifiedTime;
 }
 
 TileCache::~TileCache()
 {
-    _owner = std::thread::id();
+    _owner = ProcUtil::ThreadId();
 #ifndef BUILDING_TESTS
-    LOG_INF("~TileCache dtor for uri [" << COOLWSD::anonymizeUrl(_docURL) << "].");
+    LOG_INF("~TileCache dtor for uri [" << Anonymizer::anonymizeUrl(_docURL) << "].");
 #endif
 }
 
@@ -94,6 +111,9 @@ struct TileCache::TileBeingRendered
     void setVersion(int version) { _tile.setVersion(version); }
 
     std::chrono::steady_clock::time_point getStartTime() const { return _startTime; }
+    /// Reset the start time. Used after re-issuing a stalled render so the
+    /// entry is not flagged stale again on the very next sweep.
+    void resetStartTime(std::chrono::steady_clock::time_point now) { _startTime = now; }
     std::chrono::milliseconds
     getElapsedTimeMs(const std::chrono::steady_clock::time_point now) const
     {
@@ -105,6 +125,10 @@ struct TileCache::TileBeingRendered
         return getElapsedTimeMs(now) > std::chrono::milliseconds(COMMAND_TIMEOUT_MS);
     }
 
+    int getReissueCount() const { return _reissueCount; }
+    void bumpReissue() { ++_reissueCount; }
+    void resetReissueCount() { _reissueCount = 0; }
+
     std::vector<std::weak_ptr<ClientSession>>& getSubscribers() { return _subscribers; }
 
     void dumpState(std::ostream& os);
@@ -113,6 +137,7 @@ private:
     std::vector<std::weak_ptr<ClientSession>> _subscribers;
     std::chrono::steady_clock::time_point _startTime;
     TileDesc _tile;
+    int _reissueCount = 0;
 };
 
 size_t TileCache::countTilesBeingRenderedForSession(const std::shared_ptr<ClientSession>& session,
@@ -175,6 +200,99 @@ int TileCache::getTileBeingRenderedVersion(const TileDesc& tile)
     return tileBeingRendered ? tileBeingRendered->getVersion() : 0;
 }
 
+std::vector<TileDesc>
+TileCache::takeStaleRendersForReissue(std::chrono::steady_clock::time_point now)
+{
+    ASSERT_CORRECT_THREAD_OWNER(_owner);
+
+    // This first pass always runs: it finds stale entries and drops the ones
+    // whose subscribers have all gone away. The reissue mechanics below (start
+    // time reset, reissue counting, abandoning, building the list) run only
+    // when ENABLE_STALE_TILE_REISSUE is on.
+    using MapIter = std::unordered_map<TileDesc, std::shared_ptr<TileBeingRendered>,
+                       TileDescCacheHasher,
+                       TileDescCacheCompareEq>::iterator;
+    std::vector<MapIter> candidates;
+    candidates.reserve(_tilesBeingRendered.size());
+
+    for (auto it = _tilesBeingRendered.begin(); it != _tilesBeingRendered.end(); )
+    {
+        const auto& tbr = it->second;
+        if (!tbr->isStale(now))
+        {
+            ++it;
+            continue;
+        }
+
+        auto& subs = tbr->getSubscribers();
+        subs.erase(std::remove_if(subs.begin(), subs.end(),
+                                  [](const std::weak_ptr<ClientSession>& w)
+                                  { return w.expired(); }),
+                   subs.end());
+
+        if (subs.empty())
+        {
+            LOG_DBG("Dropping stale render with no live subscribers: "
+                    << it->first.serialize());
+            it = _tilesBeingRendered.erase(it);
+            continue;
+        }
+
+        candidates.push_back(it);
+        ++it;
+    }
+
+    std::vector<TileDesc> reissue;
+
+#if ENABLE_STALE_TILE_REISSUE
+    // oldest first
+    std::sort(candidates.begin(), candidates.end(),
+              [](const MapIter& a, const MapIter& b)
+              { return a->second->getStartTime() < b->second->getStartTime(); });
+
+    const size_t take = std::min(candidates.size(), MAX_STALE_REISSUE_PER_SWEEP);
+    reissue.reserve(take);
+
+    // reissue up to MAX_STALE_REISSUE_PER_SWEEP
+    for (size_t i = 0; i < take; ++i)
+    {
+        auto& tbr = candidates[i]->second;
+        const TileDesc& tile = candidates[i]->first;
+
+        if (tbr->getReissueCount() >= MAX_STALE_REISSUE_TOTAL)
+        {
+            LOG_WRN("Abandoning stalled tile after " << tbr->getReissueCount()
+                    << " reissues for " << tbr->getSubscribers().size()
+                    << " subscribers: " << tile.serialize());
+            _tilesBeingRendered.erase(candidates[i]);
+            continue;
+        }
+
+        tbr->bumpReissue();
+        const int count = tbr->getReissueCount();
+
+        if (count >= STALE_REISSUE_WARN_AT)
+            LOG_WRN("Tile reissued " << count << " times - kit likely unhealthy: "
+                    << tile.serialize());
+        else
+            LOG_INF("Re-issuing stalled tile render after "
+                    << tbr->getElapsedTimeMs(now).count() << "ms for "
+                    << tbr->getSubscribers().size() << " subscribers: "
+                    << tile.serialize());
+
+        reissue.push_back(tile);
+        tbr->resetStartTime(now);
+    }
+
+    if (candidates.size() > take)
+        LOG_INF("Deferred " << (candidates.size() - take)
+                << " stale tile(s) to next sweep; per-sweep cap is "
+                << MAX_STALE_REISSUE_PER_SWEEP);
+#endif
+
+    return reissue;
+}
+
 Tile TileCache::lookupTile(const TileDesc& tile)
 {
     if (_dontCache)
@@ -218,7 +336,11 @@ void TileCache::saveTileAndNotify(const TileDesc& desc, const char *data, const 
                 auto& subscriber = tileBeingRendered->getSubscribers()[i];
                 std::shared_ptr<ClientSession> session = subscriber.lock();
                 if (session)
+                {
                     session->sendTileNow(desc, tile);
+                    if (auto db = session->getDocumentBroker())
+                        db->recordFirstTileSent();
+                }
             }
         }
         else if (subscriberCount == 0)
@@ -464,6 +586,9 @@ bool TileCache::subscribeToTileRendering(const TileDesc& tile,
         if (tileBeingRendered->isStale(now))
             LOG_DBG("Painting stalled; need to re-issue on tile " << tile.debugName());
 
+        if (tile.getVersion() > tileBeingRendered->getVersion())
+            tileBeingRendered->resetReissueCount();
+
         for (const auto &s : tileBeingRendered->getSubscribers())
         {
             if (s.lock().get() == subscriber.get())
@@ -645,6 +770,19 @@ void TileCache::setMaxCacheSize(size_t cacheSize)
     _maxCacheSize = cacheSize;
     ensureCacheSize();
 }
+
+#ifdef BUILDING_TESTS
+void TileCache::injectTileBeingRenderedForTest(
+    const TileDesc& tile,
+    std::chrono::steady_clock::time_point startTime,
+    const std::shared_ptr<ClientSession>& subscriber)
+{
+    auto tileBeingRendered = std::make_shared<TileBeingRendered>(tile, startTime);
+    if (subscriber)
+        tileBeingRendered->getSubscribers().push_back(subscriber);
+    _tilesBeingRendered[tile] = std::move(tileBeingRendered);
+}
+#endif
 
 void TileCache::saveDataToStreamCache(StreamType type, const std::string &fileName, const char *data, const size_t size)
 {

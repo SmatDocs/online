@@ -36,14 +36,16 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QKeySequence>
 #include <QLabel>
 #include <QMainWindow>
-#include <QMessageBox>
 #include <QObject>
 #include <QScreen>
+#include <QShortcut>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QVariant>
+#include <common/SettingsStorage.hpp>
 #include <QWebChannel>
 #include <QWebEngineFullScreenRequest>
 #include <QWebEngineSettings>
@@ -216,7 +218,11 @@ QString findNextAvailableDocumentName(const QString& documentsDir, const QString
 
 class Window: public QMainWindow {
 public:
-    Window(QWidget * parent, WebView * owner): QMainWindow(parent), owner_(owner) {}
+    Window(QWidget * parent, WebView * owner): QMainWindow(parent), owner_(owner) {
+        auto* closeWindowShortcut = new QShortcut(QKeySequence::Quit, this);
+        closeWindowShortcut->setContext(Qt::WindowShortcut);
+        QObject::connect(closeWindowShortcut, &QShortcut::activated, this, &QMainWindow::close);
+    }
     void setCloseCallback(const std::function<void()>& closeCallback)
     {
         closeCallback_ = closeCallback;
@@ -226,25 +232,6 @@ private:
     void closeEvent(QCloseEvent * ev) override {
         if (closeCallback_)
             closeCallback_();
-
-        // prompt user if document has unsaved changes
-        if (owner_->isDocumentModified())
-        {
-            QMessageBox msgBox(this);
-            msgBox.setWindowTitle(QApplication::translate("WebView", "Unsaved Changes"));
-            msgBox.setText(QApplication::translate("WebView", "The document has unsaved changes. Do you want to close anyway?"));
-            msgBox.setStandardButtons(QMessageBox::Discard | QMessageBox::Cancel);
-            msgBox.setDefaultButton(QMessageBox::Cancel);
-            msgBox.setIcon(QMessageBox::Warning);
-
-            int ret = msgBox.exec();
-            if (ret == QMessageBox::Cancel)
-            {
-                // user chose not to exit
-                ev->ignore();
-                return;
-            }
-        }
 
         auto const p = owner_;
         owner_ = nullptr;
@@ -468,6 +455,13 @@ WebView::WebView(QWebEngineProfile* profile, bool isWelcome, QMainWindow* parent
     _webView->setPage(page);
 
     page->settings()->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
+    // JS-driven clipboard access is off by default in QtWebEngine - enable it so
+    // copy/paste buttons (e.g. the AI chat sidebar's "Copy to clipboard") work.
+    page->settings()->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, true);
+    page->settings()->setAttribute(QWebEngineSettings::JavascriptCanPaste, true);
+    // cool.html is loaded over file://; without this, JS fetch() to https:// is
+    // blocked (Zotero queries api.zotero.org directly from the page).
+    page->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
 
     QObject::connect(page, &QWebEnginePage::fullScreenRequested,
                      [this](QWebEngineFullScreenRequest request)
@@ -592,13 +586,15 @@ void WebView::load(const Poco::URI& fileURL, bool newFile, bool isStarterMode)
         urlAndQuery.addQueryParameter("userinterfacemode", "notebookbar");
     }
 
-    if (portalPrefersDark())
-        urlAndQuery.addQueryParameter("darkTheme", "true");
+    // Dark mode: the user's saved choice wins, otherwise follow the system theme.
+    const bool darkMode =
+        Desktop::getDarkMode().value_or(portalPrefersDark().value_or(false));
+    urlAndQuery.addQueryParameter("darkTheme", darkMode ? "true" : "false");
 
     if (!isStarterMode)
     {
-        if (newFile)
-            urlAndQuery.addQueryParameter("isnewdocument", "true");
+        if (!newFile)
+            urlAndQuery.addQueryParameter("startreadonly", "true");
         if (_isWelcome)
             urlAndQuery.addQueryParameter("welcome", "true");
     }
@@ -703,11 +699,6 @@ void WebView::activateWindow()
         _mainWindow->raise();
         _mainWindow->activateWindow();
     }
-}
-
-bool WebView::isDocumentModified() const
-{
-    return _bridge && _bridge->isModified();
 }
 
 void WebView::queryGnomeFontScalingUpdateZoom()

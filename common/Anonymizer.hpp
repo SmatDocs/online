@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <common/ContainerUtil.hpp>
 #include <common/HexUtil.hpp>
 #include <common/Log.hpp>
 #include <common/Util.hpp>
@@ -20,10 +21,9 @@
 #include <string>
 #include <string_view>
 #include <memory>
-#include <unordered_map>
-#include <vector>
 
 #if ENABLE_SSL
+#include <vector>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #endif
@@ -65,17 +65,17 @@ public:
 
     /// Sets the anonymized version of a given plain-text string.
     /// After this, 'anonymize(plain)' will return 'anonymized'.
-    static void mapAnonymized(const std::string& plain, const std::string& anonymized)
+    static void mapAnonymized(std::string plain, std::string anonymized)
     {
         if (_instance)
         {
-            _instance->map(plain, anonymized);
+            _instance->map(std::move(plain), std::move(anonymized));
         }
     }
 
     /// Sets the anonymized version of a given plain-text string.
     /// After this, 'anonymize(plain)' will return 'anonymized'.
-    void map(const std::string& plain, const std::string& anonymized)
+    void map(std::string plain, std::string anonymized)
     {
         if (plain.empty() || anonymized.empty())
             return;
@@ -85,12 +85,12 @@ public:
 
         std::unique_lock<std::mutex> lock(_mutex);
 
-        _map[plain] = anonymized;
+        _map.insert_or_assign(std::move(plain), std::move(anonymized));
     }
 
     /// Anonymize a sensitive string to avoid leaking it.
     /// Called on strings to be logged or exposed.
-    std::string_view lookup(const std::string& text) const
+    std::string_view lookup(std::string_view text) const
     {
         std::unique_lock<std::mutex> lock(_mutex);
 
@@ -107,14 +107,15 @@ public:
 
     /// Anonymize a sensitive string to avoid leaking it.
     /// Called on strings to be logged or exposed.
-    static std::string anonymize(const std::string& text)
+    static std::string anonymize(std::string_view text)
     {
-        return _instance ? _instance->anonymizeImpl(text) : text;
+        return _instance ? _instance->anonymizeImpl(text) : std::string(text);
     }
 
+private:
     /// Anonymize a sensitive string to avoid leaking it.
     /// Called on strings to be logged or exposed.
-    std::string anonymizeImpl(const std::string& text)
+    std::string anonymizeImpl(std::string_view text)
     {
         const std::string_view anonymized = lookup(text);
         if (!anonymized.empty())
@@ -134,13 +135,12 @@ public:
             res = fnvHash(text);
         }
 
-        map(text, res);
+        map(std::string(text), res);
         return res;
     }
 
-private:
     /// Fast FNV-1a hash (original algorithm).
-    std::string fnvHash(const std::string& text)
+    std::string fnvHash(std::string_view text)
     {
         // Modified 64-bit FNV-1a to add salting.
         // For the algorithm and the magic numbers, see http://isthe.com/chongo/tech/comp/fnv/
@@ -160,7 +160,7 @@ private:
         // Prepend with count to make it unique within a single process instance,
         // in case we get collisions (which we will, eventually). N.B.: Identical
         // strings likely to have different prefixes when logged in WSD process vs. Kit.
-        return '#' + Util::encodeId(_prefix++, 0) + '#' + Util::encodeId(hash, 0) + '#';
+        return '#' + HexUtil::encodeId(_prefix++, 0) + '#' + HexUtil::encodeId(hash, 0) + '#';
     }
 
 #if ENABLE_SSL
@@ -169,7 +169,7 @@ private:
     static constexpr int HighStrengthIterations = 10000;
     static constexpr int HighStrengthHashLen = 32; // 256-bit output, truncated for readability.
 
-    std::string highStrengthHash(const std::string& text)
+    std::string highStrengthHash(std::string_view text)
     {
         // Use the 64-bit salt as an 8-byte salt buffer for PBKDF2.
         const unsigned char saltBytes[8] = {
@@ -184,11 +184,8 @@ private:
         };
 
         std::vector<unsigned char> hash(HighStrengthHashLen);
-        PKCS5_PBKDF2_HMAC(text.c_str(), text.size(),
-                          saltBytes, sizeof(saltBytes),
-                          HighStrengthIterations,
-                          EVP_sha512(),
-                          HighStrengthHashLen, hash.data());
+        PKCS5_PBKDF2_HMAC(text.data(), text.size(), saltBytes, sizeof(saltBytes),
+                          HighStrengthIterations, EVP_sha512(), HighStrengthHashLen, hash.data());
 
         return '#' + HexUtil::dataToHexString(hash, 0, HighStrengthHashLen) + '#';
     }
@@ -221,7 +218,7 @@ private:
     static std::unique_ptr<Anonymizer> _instance;
 
     /// The map of plain to anonymized strings.
-    std::unordered_map<std::string, std::string> _map;
+    Util::UnorderedStringMap<std::string> _map;
 
     /// The mutex protecting the map.
     mutable std::mutex _mutex;

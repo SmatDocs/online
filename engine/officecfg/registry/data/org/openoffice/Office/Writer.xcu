@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This file incorporates work covered by the following license notice:
+ *
+ *   Licensed to the Apache Software Foundation (ASF) under one or more
+ *   contributor license agreements. See the NOTICE file distributed
+ *   with this work for additional information regarding copyright
+ *   ownership. The ASF licenses this file to you under the Apache
+ *   License, Version 2.0 (the "License"); you may not use this file
+ *   except in compliance with the License. You may obtain a copy of
+ *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
+ -->
+<!DOCTYPE oor:component-data SYSTEM "../../../../component-update.dtd">
+<oor:component-data xmlns:oor="http://openoffice.org/2001/registry" xmlns:install="http://openoffice.org/2004/installation" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" oor:name="Writer" oor:package="org.openoffice.Office">
+  <node oor:name="MailMergeWizard">
+    <prop oor:name="FemaleGreetingLines">
+      <value xml:lang="en-US" oor:separator=";">Dear Mrs. &lt;2&gt;,</value>
+    </prop>
+    <prop oor:name="MaleGreetingLines">
+      <value xml:lang="en-US" oor:separator=";">Dear Mr. &lt;2&gt;,</value>
+    </prop>
+    <prop oor:name="NeutralGreetingLines">
+      <value xml:lang="en-US" oor:separator=";">To whom it may concern,;Dear Friends,;Dear Sir or Madam,;Hello,</value>
+    </prop>
+    <prop oor:name="IsHideEmptyParagraphs">
+      <value>true</value>
+    </prop>
+    <node oor:name="DataSource">
+      <prop oor:name="DataSourceName" oor:type="xs:string">
+        <value>EvolutionLocal</value>
+      </prop>
+      <prop oor:name="DataTableName" oor:type="xs:string">
+        <value>Personal</value>
+      </prop>
+    </node>
+    <node oor:name="AddressDataAssignments">
+      <node oor:name="_0" oor:op="replace">
+        <prop oor:name="DBColumnAssignments" oor:type="oor:string-list">
+          <value oor:separator=",">title,full_name,family_name,org,addr_line1,addr_line2,city,state,zip,country,home_phone,business_phone,email_1,</value>
+        </prop>
+        <node oor:name="DataSource">
+          <prop oor:name="DataCommandType" oor:type="xs:int">
+            <value>0</value>
+          </prop>
+          <prop oor:name="DataSourceName" oor:type="xs:string">
+            <value>EvolutionLocal</value>
+          </prop>
+          <prop oor:name="DataTableName" oor:type="xs:string">
+            <value>Personal</value>
+          </prop>
+        </node>
+      </node>
+    </node>
+    <prop oor:name="EMailSupported">
+      <value>true</value>
+    </prop>
+  </node>
+  <node oor:name="AutoFunction" install:module="cjk">
+    <node oor:name="Completion">
+      <prop oor:name="Enable">
+        <value>false</value>
+      </prop>
+    </node>
+  </node>
+  <node oor:name="Insert">
+    <node oor:name="Caption">
+      <prop oor:name="CaptionOrderNumberingFirst">
+        <value xml:lang="hu">true</value>
+        <value xml:lang="lt">true</value>
+      </prop>
+      <node oor:name="WriterObject">
+        <node oor:name="Table">
+          <node oor:name="Settings">
+            <prop oor:name="Category">
+              <value xml:lang="en-US">Table</value>
+            </prop>
+            <prop oor:name="NumberingSeparator">
+              <value xml:lang="lt"> </value>
+            </prop>
+            <prop oor:name="CaptionText">
+              <value xml:lang="en-US">: </value>
+            </prop>
+            <prop oor:name="Position">
+              <value>0</value>
+            </prop>
+          </node>
+        </node>
+        <node oor:name="Frame">
+          <node oor:name="Settings">
+            <prop oor:name="Category">
+              <value xml:lang="en-US">Text</value>
+            </prop>
+            <prop oor:name="NumberingSeparator">
+              <value xml:lang="lt"> </value>
+            </prop>
+            <prop oor:name="CaptionText">
+              <value xml:lang="en-US">: </value>
+            </prop>
+          </node>
+        </node>
+        <node oor:name="Graphic">
+          <node oor:name="Settings">
+            <prop oor:name="Category">
+              <value xml:lang="en-US">Illustration</value>
+            </prop>
+            <prop oor:name="NumberingSeparator">
+              <value xml:lang="lt"> </value>
+            </prop>
+            <prop oor:name="CaptionText">
+              <value xml:lang="en-US">: </value>
+            </prop>
+          </node>
+        </node>
+      </node>
+      <node oor:name="OfficeObject">
+        <node oor:name="Calc">
+          <node oor:name="Settings">
+            <prop oor:name="Category">
+              <value xml:lang="en-US">Illustration</value>
+            </prop>
+            <prop oor:name="NumberingSeparator">
+              <value xml:lang="lt"> </value>
+            </prop>
+            <prop oor:name="CaptionText">
+              <value xml:lang="en-US">: </value>
+            </prop>
+          </node>
+        </node>
+        <node oor:name="Draw">
+          <node oor:name="Settings">
+            <prop oor:name="Category">
+              <value xml:lang="en-US">Illustration</value>
+            </prop>
+            <prop oor:name="NumberingSeparator">
+              <value xml:lang="lt"> </value>
+            </prop>
+            <prop oor:name="CaptionText">
+              <value xml:lang="en-US">: </value>
+            </prop>
+          </node>
+        </node>
+        <node oor:name="Chart">
+          <node oor:name="Settings">
+            <prop oor:name="Category">
+              <value xml:lang="en-US">Illustration</value>
+            </prop>
+            <prop oor:name="NumberingSeparator">
+              <value xml:lang="lt"> </value>
+            </prop>
+            <prop oor:name="CaptionText">
+              <value xml:lang="en-US">: </value>
+            </prop>
+          </node>
+        </node>
+        <node oor:name="Image">
+          <node oor:name="Settings">
+            <prop oor:name="Category">
+              <value xml:lang="en-US">Illustration</value>
+            </prop>
+            <prop oor:name="NumberingSeparator">
+              <value xml:lang="lt"> </value>
+            </prop>
+            <prop oor:name="CaptionText">
+              <value xml:lang="en-US">: </value>
+            </prop>
+          </node>
+        </node>
+        <node oor:name="Formula">
+          <node oor:name="Settings">
+            <prop oor:name="Category">
+              <value xml:lang="en-US">Illustration</value>
+            </prop>
+            <prop oor:name="NumberingSeparator">
+              <value xml:lang="lt"> </value>
+            </prop>
+            <prop oor:name="CaptionText">
+              <value xml:lang="en-US">: </value>
+            </prop>
+          </node>
+        </node>
+        <node oor:name="Impress">
+          <node oor:name="Settings">
+            <prop oor:name="Category">
+              <value xml:lang="en-US">Illustration</value>
+            </prop>
+            <prop oor:name="NumberingSeparator">
+              <value xml:lang="lt"> </value>
+            </prop>
+            <prop oor:name="CaptionText">
+              <value xml:lang="en-US">: </value>
+            </prop>
+          </node>
+        </node>
+        <node oor:name="OLEMisc">
+          <node oor:name="Settings">
+            <prop oor:name="Category">
+              <value xml:lang="en-US">Illustration</value>
+            </prop>
+            <prop oor:name="NumberingSeparator">
+              <value xml:lang="lt"> </value>
+            </prop>
+            <prop oor:name="CaptionText">
+              <value xml:lang="en-US">: </value>
+            </prop>
+          </node>
+        </node>
+      </node>
+    </node>
+    <node oor:name="Table">
+      <prop oor:name="RepeatHeader" oor:type="xs:boolean">
+        <value>true</value>
+      </prop>
+    </node>
+  </node>
+  <node oor:name="Layout">
+    <node oor:name="Other">
+      <prop oor:name="TabStop">
+        <value xml:lang="zh-CN">740</value>
+      </prop>
+    </node>
+  </node>
+  <node oor:name="Notes">
+    <prop oor:name="ShowAnkor">
+      <value>false</value>
+    </prop>
+  </node>
+</oor:component-data>

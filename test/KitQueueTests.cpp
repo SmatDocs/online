@@ -22,7 +22,11 @@
 #include <Message.hpp>
 #include <kit/KitQueue.hpp>
 #include <SenderQueue.hpp>
+#include <wsd/TileCache.hpp>
 #include <common/Util.hpp>
+
+#include <algorithm>
+#include <sstream>
 
 #include <cppunit/extensions/HelperMacros.h>
 
@@ -42,8 +46,13 @@ class KitQueueTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST(testSenderQueueLog);
     CPPUNIT_TEST(testSenderQueueProgress);
     CPPUNIT_TEST(testSenderQueueTileDeduplication);
-    CPPUNIT_TEST(testSenderQueueInteractivePriority);
-    CPPUNIT_TEST(testSenderQueueTextSelectionDeduplication);
+    CPPUNIT_TEST(testSenderQueueTileDedupReportsDroppedWireId);
+    CPPUNIT_TEST(testTileCacheKitHangBecomesStale);
+#if ENABLE_STALE_TILE_REISSUE
+    CPPUNIT_TEST(testTileCacheStaleRenderIsReissued);
+    CPPUNIT_TEST(testTileCacheStaleRenderAbandonAfterMaxReissues);
+    CPPUNIT_TEST(testTileCacheReissueCountResetsOnNewVersion);
+#endif
     CPPUNIT_TEST(testInvalidateViewCursorDeduplication);
     CPPUNIT_TEST(testCallbackModifiedStatusIsSkipped);
     CPPUNIT_TEST(testCallbackInvalidation);
@@ -72,6 +81,7 @@ class KitQueueTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST(testPreviewTilesNoCombine);
     CPPUNIT_TEST(testTileDeduplicationOnPush);
     CPPUNIT_TEST(testMultiViewTileQueues);
+    CPPUNIT_TEST(testTileQueueFairnessUnderReRequest);
     CPPUNIT_TEST(testGetCallbackBoolOverload);
     CPPUNIT_TEST(testCallbackInvalidationEmptyMode);
 
@@ -88,8 +98,13 @@ class KitQueueTests : public CPPUNIT_NS::TestFixture
     void testSenderQueueLog();
     void testSenderQueueProgress();
     void testSenderQueueTileDeduplication();
-    void testSenderQueueInteractivePriority();
-    void testSenderQueueTextSelectionDeduplication();
+    void testSenderQueueTileDedupReportsDroppedWireId();
+    void testTileCacheKitHangBecomesStale();
+#if ENABLE_STALE_TILE_REISSUE
+    void testTileCacheStaleRenderIsReissued();
+    void testTileCacheStaleRenderAbandonAfterMaxReissues();
+    void testTileCacheReissueCountResetsOnNewVersion();
+#endif
     void testInvalidateViewCursorDeduplication();
     void testCallbackModifiedStatusIsSkipped();
     void testCallbackInvalidation();
@@ -118,6 +133,7 @@ class KitQueueTests : public CPPUNIT_NS::TestFixture
     void testPreviewTilesNoCombine();
     void testTileDeduplicationOnPush();
     void testMultiViewTileQueues();
+    void testTileQueueFairnessUnderReRequest();
     void testGetCallbackBoolOverload();
     void testCallbackInvalidationEmptyMode();
 
@@ -598,66 +614,397 @@ void KitQueueTests::testSenderQueueTileDeduplication()
     LOK_ASSERT_EQUAL(static_cast<size_t>(0), queue.size());
 }
 
-void KitQueueTests::testSenderQueueInteractivePriority()
+// Reproduces the lost-tile / on-fly-leak scenario.
+//
+// When a queued tile message is replaced by a newer one for the same position,
+// SenderQueue::deduplicate erases the older entry from the queue. The older
+// tile never reaches the client, so the client never sends tileprocessed for
+// its wireId. Without reporting which wireId was dropped, ClientSession's
+// _tilesOnFly tracking would leak: the dropped wireId would stay there until
+// the 10s round-trip timeout, eating slots in tilesOnFlyUpperLimit and
+// stalling tile delivery.
+void KitQueueTests::testSenderQueueTileDedupReportsDroppedWireId()
 {
     constexpr std::string_view testname = __func__;
 
     SenderQueue<std::shared_ptr<Message>> queue;
 
+    auto makeTile = [](TileWireId wid)
+    {
+        std::ostringstream oss;
+        oss << "tile: nviewid=0 part=0 width=256 height=256 tileposx=0 tileposy=0"
+               " tilewidth=3840 tileheight=3840 oldwid=1 wid=" << wid << " ver=-1";
+        return std::make_shared<Message>(oss.str(), Message::Dir::Out);
+    };
+
+    auto makeTileAt = [](int posX, int posY, TileWireId wid)
+    {
+        std::ostringstream oss;
+        oss << "tile: nviewid=0 part=0 width=256 height=256 tileposx=" << posX
+            << " tileposy=" << posY
+            << " tilewidth=3840 tileheight=3840 oldwid=1 wid=" << wid << " ver=-1";
+        return std::make_shared<Message>(oss.str(), Message::Dir::Out);
+    };
+
+    // 1. First enqueue: nothing to dedup. droppedTileWireId stays 0.
+    {
+        TileWireId dropped = 999; // sentinel: should be cleared by enqueue
+        const bool enqueued = queue.enqueue(makeTile(100), &dropped);
+        LOK_ASSERT_EQUAL_STR(true, enqueued);
+        LOK_ASSERT_EQUAL(static_cast<TileWireId>(0), dropped);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(1), queue.size());
+    }
+
+    // 2. Same position, newer wireId: dedup happens, dropped wid is reported.
+    {
+        TileWireId dropped = 0;
+        const bool enqueued = queue.enqueue(makeTile(120), &dropped);
+        LOK_ASSERT_EQUAL_STR(true, enqueued);
+        LOK_ASSERT_EQUAL(static_cast<TileWireId>(100), dropped);
+        // queue still has just the newest one
+        LOK_ASSERT_EQUAL(static_cast<size_t>(1), queue.size());
+    }
+
+    // 3. Different position: no dedup, dropped stays 0.
+    {
+        TileWireId dropped = 999;
+        const bool enqueued = queue.enqueue(makeTileAt(3840, 0, 130), &dropped);
+        LOK_ASSERT_EQUAL_STR(true, enqueued);
+        LOK_ASSERT_EQUAL(static_cast<TileWireId>(0), dropped);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(2), queue.size());
+    }
+
+    // Drain the queue, only the surviving wireIds (120 and 130) come out.
     std::shared_ptr<Message> item;
-
-    queue.enqueue(std::make_shared<Message>(
-        "tile: nviewid=0 part=0 width=180 height=135 tileposx=0 tileposy=0 tilewidth=15875 tileheight=11906 ver=0",
-        Message::Dir::Out));
-    queue.enqueue(std::make_shared<Message>(
-        "tile: nviewid=0 part=1 width=180 height=135 tileposx=0 tileposy=0 tilewidth=15875 tileheight=11906 ver=0",
-        Message::Dir::Out));
-    queue.enqueue(std::make_shared<Message>("textselectionstart: 100,200,50,50", Message::Dir::Out));
-
-    LOK_ASSERT_EQUAL(static_cast<size_t>(3), queue.size());
+    LOK_ASSERT_EQUAL_STR(true, queue.dequeue(item));
+    LOK_ASSERT_EQUAL(static_cast<TileWireId>(120),
+                     TileDesc::parse(item->firstLine()).getWireId());
 
     LOK_ASSERT_EQUAL_STR(true, queue.dequeue(item));
-    LOK_ASSERT(item);
-    LOK_ASSERT_EQUAL(std::string("textselectionstart: 100,200,50,50"), msgStr(item));
-
-    LOK_ASSERT_EQUAL_STR(true, queue.dequeue(item));
-    LOK_ASSERT(item);
-    LOK_ASSERT_EQUAL(
-        std::string("tile: nviewid=0 part=0 width=180 height=135 tileposx=0 tileposy=0 tilewidth=15875 tileheight=11906 ver=0"),
-        msgStr(item));
-}
-
-void KitQueueTests::testSenderQueueTextSelectionDeduplication()
-{
-    constexpr std::string_view testname = __func__;
-
-    SenderQueue<std::shared_ptr<Message>> queue;
-
-    std::shared_ptr<Message> item;
-
-    queue.enqueue(std::make_shared<Message>("textselection: one", Message::Dir::Out));
-    queue.enqueue(std::make_shared<Message>("textselectionstart: start-one", Message::Dir::Out));
-    queue.enqueue(std::make_shared<Message>("textselectionend: end-one", Message::Dir::Out));
-    queue.enqueue(std::make_shared<Message>("textselection: two", Message::Dir::Out));
-    queue.enqueue(std::make_shared<Message>("textselectionstart: start-two", Message::Dir::Out));
-    queue.enqueue(std::make_shared<Message>("textselectionend: end-two", Message::Dir::Out));
-
-    LOK_ASSERT_EQUAL(static_cast<size_t>(3), queue.size());
-
-    LOK_ASSERT_EQUAL_STR(true, queue.dequeue(item));
-    LOK_ASSERT(item);
-    LOK_ASSERT_EQUAL(std::string("textselection: two"), msgStr(item));
-
-    LOK_ASSERT_EQUAL_STR(true, queue.dequeue(item));
-    LOK_ASSERT(item);
-    LOK_ASSERT_EQUAL(std::string("textselectionstart: start-two"), msgStr(item));
-
-    LOK_ASSERT_EQUAL_STR(true, queue.dequeue(item));
-    LOK_ASSERT(item);
-    LOK_ASSERT_EQUAL(std::string("textselectionend: end-two"), msgStr(item));
+    LOK_ASSERT_EQUAL(static_cast<TileWireId>(130),
+                     TileDesc::parse(item->firstLine()).getWireId());
 
     LOK_ASSERT_EQUAL(static_cast<size_t>(0), queue.size());
+
+    // Reproduce the full scenario:
+    // a sender should end up tracking only the wireIds still in the queue,
+    // never the ones removed by dedup.
+    SenderQueue<std::shared_ptr<Message>> q2;
+    std::vector<TileWireId> tilesOnFly;
+
+    auto sendTile = [&](TileWireId wid, int posX = 0)
+    {
+        TileWireId dropped = 0;
+        if (q2.enqueue(makeTileAt(posX, 0, wid), &dropped))
+        {
+            if (dropped != 0)
+            {
+                auto it = std::find(tilesOnFly.begin(), tilesOnFly.end(), dropped);
+                LOK_ASSERT(it != tilesOnFly.end()); // the dropped wid was tracked
+                tilesOnFly.erase(it);
+            }
+            tilesOnFly.push_back(wid);
+        }
+    };
+
+    // Simulate fast re-enqueues at the same position before the websocket
+    // gets to drain the queue: each new wireId dedups the previous.
+    sendTile(200);
+    sendTile(201);
+    sendTile(202);
+    sendTile(203);
+
+    // And one tile at a different position which is not dedup'd.
+    sendTile(204, 3840);
+
+    // The tracker mirrors what is actually in the queue:
+    // { 203 (latest at posX=0), 204 (at posX=3840) }
+    // Without the dropped-wireId reporting, tilesOnFly would still contain
+    // 200, 201, 202
+    LOK_ASSERT_EQUAL(static_cast<size_t>(2), tilesOnFly.size());
+    LOK_ASSERT_EQUAL(static_cast<size_t>(2), q2.size());
+    LOK_ASSERT(std::find(tilesOnFly.begin(), tilesOnFly.end(),
+                         static_cast<TileWireId>(203)) != tilesOnFly.end());
+    LOK_ASSERT(std::find(tilesOnFly.begin(), tilesOnFly.end(),
+                         static_cast<TileWireId>(204)) != tilesOnFly.end());
+    for (TileWireId leakedWid : { 200, 201, 202 })
+    {
+        LOK_ASSERT(std::find(tilesOnFly.begin(), tilesOnFly.end(),
+                             static_cast<TileWireId>(leakedWid)) == tilesOnFly.end());
+    }
+
+    // The default-argument overload (no out-param) must keep working too.
+    SenderQueue<std::shared_ptr<Message>> q3;
+    LOK_ASSERT_EQUAL_STR(true, q3.enqueue(makeTile(300)));
+    LOK_ASSERT_EQUAL_STR(true, q3.enqueue(makeTile(301)));
+    LOK_ASSERT_EQUAL(static_cast<size_t>(1), q3.size());
 }
+
+// Reproduces a slow render of a low priority in-flight tile.
+//
+// When a client sends a tilecombine, the server calls
+// requestTileRendering → subscribeToTileRendering, which inserts a
+// TileBeingRendered into _tilesBeingRendered with a start timestamp.
+// A low priority tile (a preview, another part, or an area outside the
+// visible one) can wait a long time when the kit is busy with more
+// important tiles, so the reply is slow and no path removes the entry.
+// Once the entry's age exceeds COMMAND_TIMEOUT_MS, isStale() flips
+// and hasTileBeingRendered returns false. The next call to
+// requestTileRendering sees "no in-progress render" and re-issues to
+// kit. Without a re-issue trigger, the entry sits there orphaned.
+// So in case throttled client tilecombine (5s limit) we would NOT re-issue
+// and leave this state with missing tiles on the client.
+void KitQueueTests::testTileCacheKitHangBecomesStale()
+{
+    constexpr std::string_view testname = __func__;
+
+    TileCache cache("dummy://test-doc.odt", std::chrono::system_clock::now(),
+                    /*dontCache=*/true);
+
+    const TileDesc tile = TileDesc::parse(
+        "tile nviewid=0 part=0 width=256 height=256 tileposx=0 tileposy=0 "
+        "tilewidth=3840 tileheight=3840");
+
+    // Simulate the server beginning to render this tile (kit request sent).
+    const auto t0 = std::chrono::steady_clock::now();
+    cache.injectTileBeingRenderedForTest(tile, t0);
+
+    // Existence-only check (no `now`): entry is in the map.
+    LOK_ASSERT_EQUAL_STR(true, cache.hasTileBeingRendered(tile));
+
+    // Just after the request: not stale. requestTileRendering would NOT
+    // re-issue here; it would just subscribe to the existing render.
+    {
+        const auto fresh = t0 + std::chrono::milliseconds(100);
+        LOK_ASSERT_EQUAL_STR(true, cache.hasTileBeingRendered(tile, &fresh));
+    }
+
+    // Just under the timeout: still considered in-progress.
+    {
+        const auto almost = t0 + std::chrono::milliseconds(COMMAND_TIMEOUT_MS - 1);
+        LOK_ASSERT_EQUAL_STR(true, cache.hasTileBeingRendered(tile, &almost));
+    }
+
+    // One step past the timeout: kit has hung. Staleness check now
+    // returns false. The entry has NOT been removed from the map - no
+    // automatic cleanup ever fires - so a client that retriggers will
+    // re-issue to kit; a client that doesn't (e.g. blocked by the
+    // 5s per-tile client-side rate limit) leaves the request lost.
+    {
+        const auto stale = t0 + std::chrono::milliseconds(COMMAND_TIMEOUT_MS + 1);
+        LOK_ASSERT_EQUAL_STR(false, cache.hasTileBeingRendered(tile, &stale));
+        // Entry still present:
+        LOK_ASSERT_EQUAL_STR(true, cache.hasTileBeingRendered(tile));
+    }
+
+    // Far past the timeout: still stale, still no cleanup.
+    {
+        const auto wayPast = t0 + std::chrono::seconds(60);
+        LOK_ASSERT_EQUAL_STR(false, cache.hasTileBeingRendered(tile, &wayPast));
+        LOK_ASSERT_EQUAL_STR(true, cache.hasTileBeingRendered(tile));
+    }
+}
+
+#if ENABLE_STALE_TILE_REISSUE
+// Verifies the periodic stale-render sweep:
+//   - returns stale entries for re-issue when live subscribers remain,
+//   - resets the start time so the next sweep does not re-flag them,
+//   - drops stale entries whose subscribers have all gone.
+void KitQueueTests::testTileCacheStaleRenderIsReissued()
+{
+    constexpr std::string_view testname = __func__;
+
+    TileCache cache("dummy://test-doc.odt", std::chrono::system_clock::now(),
+                    /*dontCache=*/true);
+
+    const TileDesc tileA = TileDesc::parse(
+        "tile nviewid=0 part=0 width=256 height=256 tileposx=0 tileposy=0 "
+        "tilewidth=3840 tileheight=3840");
+    const TileDesc tileB = TileDesc::parse(
+        "tile nviewid=0 part=0 width=256 height=256 tileposx=3840 tileposy=0 "
+        "tilewidth=3840 tileheight=3840");
+
+    int sessionA = 0;
+    auto liveSubscriber = std::shared_ptr<ClientSession>(
+        reinterpret_cast<ClientSession*>(&sessionA), [](ClientSession*) {});
+
+    const auto t0 = std::chrono::steady_clock::now();
+    cache.injectTileBeingRenderedForTest(tileA, t0, liveSubscriber);
+
+    // tileB has a subscriber that goes away before the sweep sees it.
+    {
+        int sessionB = 0;
+        auto goneSubscriber = std::shared_ptr<ClientSession>(
+            reinterpret_cast<ClientSession*>(&sessionB), [](ClientSession*) {});
+        cache.injectTileBeingRenderedForTest(tileB, t0, goneSubscriber);
+        // goneSubscriber drops out of scope here; its weak_ptr in the cache
+        // is now expired.
+    }
+
+    // Not stale yet: sweep should return nothing.
+    {
+        const auto fresh = t0 + std::chrono::milliseconds(100);
+        auto reissue = cache.takeStaleRendersForReissue(fresh);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(0), reissue.size());
+        // Both entries still tracked.
+        LOK_ASSERT_EQUAL_STR(true, cache.hasTileBeingRendered(tileA));
+        LOK_ASSERT_EQUAL_STR(true, cache.hasTileBeingRendered(tileB));
+    }
+
+    // After the timeout: sweep returns tileA (live subscriber), and
+    // silently drops tileB (no live subscribers left).
+    const auto stale = t0 + std::chrono::milliseconds(COMMAND_TIMEOUT_MS + 1);
+    {
+        auto reissue = cache.takeStaleRendersForReissue(stale);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(1), reissue.size());
+        LOK_ASSERT_EQUAL(tileA.getTilePosX(), reissue[0].getTilePosX());
+        LOK_ASSERT_EQUAL(tileA.getTilePosY(), reissue[0].getTilePosY());
+
+        // tileA's start time was reset to `stale`. The entry is still
+        // present (it is waiting for a new kit reply).
+        LOK_ASSERT_EQUAL_STR(true, cache.hasTileBeingRendered(tileA, &stale));
+
+        // tileB's entry was dropped because all subscribers are gone.
+        LOK_ASSERT_EQUAL_STR(false, cache.hasTileBeingRendered(tileB));
+    }
+
+    // Immediately calling the sweep again must not re-flag tileA: the
+    // start time was just reset to `stale`, so it is now fresh again.
+    {
+        auto reissue = cache.takeStaleRendersForReissue(stale);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(0), reissue.size());
+        LOK_ASSERT_EQUAL_STR(true, cache.hasTileBeingRendered(tileA));
+    }
+
+    // Advance far past the new start: tileA goes stale again, sweep
+    // returns it once more. This is what would happen if the kit keeps
+    // hanging across multiple sweep intervals.
+    {
+        const auto staleAgain = stale + std::chrono::milliseconds(COMMAND_TIMEOUT_MS + 1);
+        auto reissue = cache.takeStaleRendersForReissue(staleAgain);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(1), reissue.size());
+    }
+}
+
+// After MAX_STALE_REISSUE_TOTAL futile reissues, the sweep must abandon
+// the entry rather than keep re-asking the kit forever.
+void KitQueueTests::testTileCacheStaleRenderAbandonAfterMaxReissues()
+{
+    constexpr std::string_view testname = __func__;
+
+    // if it changes in TileCache.cpp, update this constant.
+    constexpr int kMaxReissue = 8;
+
+    TileCache cache("dummy://test-doc.odt", std::chrono::system_clock::now(),
+                    /*dontCache=*/true);
+
+    const TileDesc tile = TileDesc::parse(
+        "tile nviewid=0 part=0 width=256 height=256 tileposx=0 tileposy=0 "
+        "tilewidth=3840 tileheight=3840");
+
+    int sessionId = 0;
+    auto liveSubscriber = std::shared_ptr<ClientSession>(
+        reinterpret_cast<ClientSession*>(&sessionId), [](ClientSession*) {});
+
+    const auto t0 = std::chrono::steady_clock::now();
+    cache.injectTileBeingRenderedForTest(tile, t0, liveSubscriber);
+
+    // The kit never replies. Run kMaxReissue stale sweeps;
+    // each must reissue the tile and keep the entry alive.
+    auto t = t0;
+    for (int i = 0; i < kMaxReissue; ++i)
+    {
+        t += std::chrono::milliseconds(COMMAND_TIMEOUT_MS + 1);
+        auto reissue = cache.takeStaleRendersForReissue(t);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(1), reissue.size());
+        LOK_ASSERT_EQUAL_STR(true, cache.hasTileBeingRendered(tile));
+    }
+
+    // One more sweep: count has reached the max.
+    // The entry is abandoned and not reissued.
+    t += std::chrono::milliseconds(COMMAND_TIMEOUT_MS + 1);
+    {
+        auto reissue = cache.takeStaleRendersForReissue(t);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(0), reissue.size());
+        LOK_ASSERT_EQUAL_STR(false, cache.hasTileBeingRendered(tile));
+    }
+}
+
+// When a client re-subscribes with a newer wireId
+// (the content was invalidated and new content is now wanted for the same
+// tile slot), the reissue counter must reset so a once-stuck tile is
+// not abandoned prematurely against its new content.
+void KitQueueTests::testTileCacheReissueCountResetsOnNewVersion()
+{
+    constexpr std::string_view testname = __func__;
+    constexpr int kMaxReissue = 8;
+
+    TileCache cache("dummy://test-doc.odt", std::chrono::system_clock::now(),
+                    /*dontCache=*/true);
+
+    TileDesc tile = TileDesc::parse(
+        "tile nviewid=0 part=0 width=256 height=256 tileposx=0 tileposy=0 "
+        "tilewidth=3840 tileheight=3840");
+    tile.setVersion(1);
+
+    int sessionId = 0;
+    auto liveSubscriber = std::shared_ptr<ClientSession>(
+        reinterpret_cast<ClientSession*>(&sessionId), [](ClientSession*) {});
+
+    const auto t0 = std::chrono::steady_clock::now();
+    cache.injectTileBeingRenderedForTest(tile, t0, liveSubscriber);
+
+    // Run kMaxReissue - 1 reissues so we almost abandoned it
+    auto t = t0;
+    for (int i = 0; i < kMaxReissue - 1; ++i)
+    {
+        t += std::chrono::milliseconds(COMMAND_TIMEOUT_MS + 1);
+        auto reissue = cache.takeStaleRendersForReissue(t);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(1), reissue.size());
+    }
+
+    // The client requests the same tile slot at a newer wireId.
+    TileDesc newer = tile;
+    newer.setVersion(2);
+    t += std::chrono::milliseconds(10);
+    cache.subscribeToTileRendering(newer, liveSubscriber, t);
+
+    // After reset, the entry survives another full kMaxReissue sweeps.
+    for (int i = 0; i < kMaxReissue; ++i)
+    {
+        t += std::chrono::milliseconds(COMMAND_TIMEOUT_MS + 1);
+        auto reissue = cache.takeStaleRendersForReissue(t);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(1), reissue.size());
+        LOK_ASSERT_EQUAL_STR(true, cache.hasTileBeingRendered(tile));
+    }
+
+    // Limit reached against the new wireId; the next sweep abandons.
+    t += std::chrono::milliseconds(COMMAND_TIMEOUT_MS + 1);
+    {
+        auto reissue = cache.takeStaleRendersForReissue(t);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(0), reissue.size());
+        LOK_ASSERT_EQUAL_STR(false, cache.hasTileBeingRendered(tile));
+    }
+
+    // Resubscribing with the same version (no content change) must NOT
+    // reset the counter.
+    cache.injectTileBeingRenderedForTest(tile, t, liveSubscriber);
+    auto t2 = t;
+    for (int i = 0; i < kMaxReissue; ++i)
+    {
+        t2 += std::chrono::milliseconds(COMMAND_TIMEOUT_MS + 1);
+        auto reissue = cache.takeStaleRendersForReissue(t2);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(1), reissue.size());
+    }
+    cache.subscribeToTileRendering(tile, liveSubscriber, t2); // same ver=1
+    t2 += std::chrono::milliseconds(COMMAND_TIMEOUT_MS + 1);
+    {
+        auto reissue = cache.takeStaleRendersForReissue(t2);
+        LOK_ASSERT_EQUAL(static_cast<size_t>(0), reissue.size());
+        LOK_ASSERT_EQUAL_STR(false, cache.hasTileBeingRendered(tile));
+    }
+}
+#endif // ENABLE_STALE_TILE_REISSUE
 
 void KitQueueTests::testInvalidateViewCursorDeduplication()
 {
@@ -817,7 +1164,7 @@ void KitQueueTests::testCallbackModifiedStatusIsSkipped()
     KitQueue::Callback item;
 
     std::stringstream ss;
-    ss << "callback all " << LOK_CALLBACK_STATE_CHANGED;
+    ss << "callback all " << KIT_CALLBACK_STATE_CHANGED;
 
     const std::vector<std::string> messages =
     {
@@ -1070,7 +1417,7 @@ void KitQueueTests::testCallbackStateChangedDedup()
     KitQueue queue(dummy);
 
     std::stringstream ss;
-    ss << "callback all " << LOK_CALLBACK_STATE_CHANGED;
+    ss << "callback all " << KIT_CALLBACK_STATE_CHANGED;
 
     putCallback(queue, ss.str() + " .uno:Bold=true");
     putCallback(queue, ss.str() + " .uno:Bold=false");
@@ -1090,7 +1437,7 @@ void KitQueueTests::testCallbackStateChangedDifferentCommands()
     KitQueue queue(dummy);
 
     std::stringstream ss;
-    ss << "callback all " << LOK_CALLBACK_STATE_CHANGED;
+    ss << "callback all " << KIT_CALLBACK_STATE_CHANGED;
 
     putCallback(queue, ss.str() + " .uno:Bold=true");
     putCallback(queue, ss.str() + " .uno:Italic=true");
@@ -1107,7 +1454,7 @@ void KitQueueTests::testCallbackStateChangedNoEquals()
     KitQueue queue(dummy);
 
     std::stringstream ss;
-    ss << "callback all " << LOK_CALLBACK_STATE_CHANGED;
+    ss << "callback all " << KIT_CALLBACK_STATE_CHANGED;
 
     putCallback(queue, ss.str() + " .uno:Bold=true");
     putCallback(queue, ss.str() + " .uno:Bold");
@@ -1169,7 +1516,7 @@ void KitQueueTests::testCallbackCursorDedup()
     TilePrioritizer dummy;
     KitQueue queue(dummy);
 
-    // LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR = 1
+    // KIT_CALLBACK_INVALIDATE_VISIBLE_CURSOR = 1
     putCallback(queue, "callback all 1 old_cursor_pos");
     putCallback(queue, "callback all 1 new_cursor_pos");
 
@@ -1187,7 +1534,7 @@ void KitQueueTests::testCallbackViewCursorDedup()
     TilePrioritizer dummy;
     KitQueue queue(dummy);
 
-    // LOK_CALLBACK_CELL_VIEW_CURSOR = 26; payload requires JSON with viewId.
+    // KIT_CALLBACK_CELL_VIEW_CURSOR = 26; payload requires JSON with viewId.
     putCallback(queue, "callback all 26 { \"viewId\": \"1\", \"rectangle\": \"0, 0, 100, 100\" }");
     putCallback(queue, "callback all 26 { \"viewId\": \"1\", \"rectangle\": \"50, 50, 100, 100\" }");
 
@@ -1270,6 +1617,45 @@ void KitQueueTests::testMultiViewTileQueues()
     TileCombined c2 = queue.popTileQueue(prio);
     LOK_ASSERT_EQUAL(static_cast<size_t>(1), c2.getTiles().size());
     LOK_ASSERT_EQUAL(static_cast<size_t>(0), queue.getTileQueueSize());
+}
+
+// When several views share one canonical-view queue, a view that keeps
+// re-requesting tiles for its own row must not hold the front of the queue and
+// starve a row that another view is waiting for. popTileQueue advances its
+// service position over the rows rather than always taking the front.
+void KitQueueTests::testTileQueueFairnessUnderReRequest()
+{
+    constexpr std::string_view testname = __func__;
+
+    // Two rows far enough apart that they are not combined into one render.
+    const std::string reqTop = "tile nviewid=0 part=0 width=256 height=256 tileposx=0 tileposy=0 tilewidth=3840 tileheight=3840";
+    const std::string reqBottom = "tile nviewid=0 part=0 width=256 height=256 tileposx=0 tileposy=253440 tilewidth=3840 tileheight=3840";
+
+    TilePrioritizer dummy;
+    KitQueue queue(dummy);
+    TilePrioritizer::Priority prio;
+
+    queue.put(reqTop);
+    queue.put(reqBottom);
+
+    // First pop services the top row.
+    TileCombined c1 = queue.popTileQueue(prio);
+    LOK_ASSERT_EQUAL(static_cast<size_t>(1), c1.getTiles().size());
+    LOK_ASSERT_EQUAL(0, c1.getTiles()[0].getTilePosY());
+
+    // The top view re-requests its row. Taking the front again would render the
+    // top row a second time and never reach the bottom row; the bottom row must
+    // be serviced instead.
+    queue.put(reqTop);
+    TileCombined c2 = queue.popTileQueue(prio);
+    LOK_ASSERT_EQUAL(static_cast<size_t>(1), c2.getTiles().size());
+    LOK_ASSERT_EQUAL(253440, c2.getTiles()[0].getTilePosY());
+
+    // Past the last row the service position wraps back to the top row.
+    queue.put(reqBottom);
+    TileCombined c3 = queue.popTileQueue(prio);
+    LOK_ASSERT_EQUAL(static_cast<size_t>(1), c3.getTiles().size());
+    LOK_ASSERT_EQUAL(0, c3.getTiles()[0].getTilePosY());
 }
 
 void KitQueueTests::testGetCallbackBoolOverload()

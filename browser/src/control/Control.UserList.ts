@@ -83,8 +83,14 @@ class UserList extends window.L.Control {
 			this.options.noUser = _('0 users');
 		}
 
-		const userListElement = document.getElementById('userListSummary');
+		const userListElement = document.getElementById('userListSummaryButton');
 		userListElement.setAttribute('aria-label', _('User List Summary'));
+		userListElement.setAttribute('aria-haspopup', 'menu');
+		userListElement.setAttribute('aria-expanded', 'false');
+		userListElement.setAttribute('aria-controls', 'userlist-dropdown');
+		(userListElement as any)._onDropDown = (open: boolean) => {
+			userListElement.setAttribute('aria-expanded', String(open));
+		};
 
 		this.registerHeaderAvatarEvents();
 	}
@@ -221,14 +227,14 @@ class UserList extends window.L.Control {
 		if (canShowDropdown) {
 			JSDialog.OpenDropdown(
 				'userlist',
-				document.getElementById('userListSummary'),
+				document.getElementById('userListSummaryButton'),
 				JSDialog.MenuDefinitions.get('UsersListMenu'),
 			);
 		}
 	}
 
 	registerHeaderAvatarEvents() {
-		document.getElementById('userListSummary').addEventListener(
+		document.getElementById('userListSummaryButton').addEventListener(
 			'click',
 			function (e: MouseEvent) {
 				e.stopPropagation();
@@ -296,7 +302,7 @@ class UserList extends window.L.Control {
 		const userListElementBackground = document.getElementById(
 			'userListSummaryBackground',
 		);
-		const userListElement = document.getElementById('userListSummary');
+		const userListElement = document.getElementById('userListSummaryButton');
 
 		if (
 			window.mode.isSmallScreenDevice() ||
@@ -480,11 +486,18 @@ class UserList extends window.L.Control {
 
 	renderHeaderAvatarPopover(popoverElement: Element) {
 		// Popover rendering
+		const focusedInside =
+			document.activeElement && popoverElement.contains(document.activeElement)
+				? (document.activeElement as HTMLElement)
+				: null;
+		const activeViewId = focusedInside?.getAttribute('data-view-id') ?? null;
+		const focusedFollowEditor = focusedInside?.id === 'follow-editor';
+
 		const users = Array.from(this.getSortedUsers());
 
 		const following = this.getFollowedUser();
 
-		const userElements = users.map(([viewId, user]) => {
+		const userElements = users.map(([viewId, user], rowIndex) => {
 			const userLabel = window.L.DomUtil.create('div', 'user-list-item--name');
 			userLabel.innerText = user.username;
 
@@ -504,6 +517,11 @@ class UserList extends window.L.Control {
 			const listItem = window.L.DomUtil.create('div', 'user-list-item');
 			listItem.setAttribute('data-view-id', viewId);
 			listItem.setAttribute('role', 'button');
+			listItem.setAttribute('tabindex', '0');
+			// JSDialog.KeyboardGridNavigation reads row:col from `index` to move
+			// focus on ArrowUp/ArrowDown - without it getRowColumn returns
+			// [-1,-1] and arrows do nothing.
+			listItem.setAttribute('index', rowIndex + ':0');
 
 			if (following !== undefined && viewId == following[0]) {
 				$(listItem).addClass('selected-user');
@@ -516,13 +534,22 @@ class UserList extends window.L.Control {
 				user.extraInfo,
 				user.color,
 			);
+			avatar.alt = '';
+			avatar.setAttribute('aria-hidden', 'true');
 			user.cachedUserListAvatar = avatar;
 
 			listItem.appendChild(avatar);
 			listItem.appendChild(userLabelContainer);
-			listItem.addEventListener('click', () => {
+			const activate = () => {
 				this.followUser(viewId);
 				JSDialog.CloseDropdown('userlist');
+			};
+			listItem.addEventListener('click', activate);
+			listItem.addEventListener('keydown', (e: KeyboardEvent) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					activate();
+				}
 			});
 
 			return listItem;
@@ -530,6 +557,18 @@ class UserList extends window.L.Control {
 
 		const followEditorWrapper = window.L.DomUtil.create('div', '');
 		followEditorWrapper.id = 'follow-editor';
+		followEditorWrapper.setAttribute('role', 'checkbox');
+		followEditorWrapper.setAttribute('tabindex', '0');
+		followEditorWrapper.setAttribute('index', users.length + ':0');
+		followEditorWrapper.setAttribute(
+			'aria-label',
+			_('Always follow the editor'),
+		);
+		followEditorWrapper.setAttribute(
+			'aria-checked',
+			String(app.isFollowingEditor()),
+		);
+
 		const followEditorCheckbox = window.L.DomUtil.create(
 			'input',
 			'follow-editor-checkbox jsdialog ui-checkbox',
@@ -537,12 +576,21 @@ class UserList extends window.L.Control {
 		);
 		followEditorCheckbox.id = 'follow-editor-checkbox';
 		followEditorCheckbox.setAttribute('type', 'checkbox');
+		followEditorCheckbox.setAttribute('tabindex', '-1');
+		followEditorCheckbox.setAttribute('aria-hidden', 'true');
 		followEditorCheckbox.onchange = (event: Event) => {
 			(window as any).editorUpdate(event);
 			this.renderAll();
 		};
 		(followEditorCheckbox as HTMLInputElement).checked =
 			app.isFollowingEditor();
+
+		followEditorWrapper.addEventListener('keydown', (e: KeyboardEvent) => {
+			if (e.key === ' ' || e.key === 'Enter') {
+				e.preventDefault();
+				(followEditorCheckbox as HTMLInputElement).click();
+			}
+		});
 
 		const followEditorCheckboxLabel = window.L.DomUtil.create(
 			'label',
@@ -551,8 +599,18 @@ class UserList extends window.L.Control {
 		);
 		followEditorCheckboxLabel.innerText = _('Always follow the editor');
 		followEditorCheckboxLabel.setAttribute('for', 'follow-editor-checkbox');
+		followEditorCheckboxLabel.setAttribute('aria-hidden', 'true');
 
 		popoverElement.replaceChildren(...userElements, followEditorWrapper);
+
+		if (activeViewId !== null) {
+			const restored = popoverElement.querySelector(
+				'.user-list-item[data-view-id="' + activeViewId + '"]',
+			) as HTMLElement | null;
+			if (restored) restored.focus();
+		} else if (focusedFollowEditor) {
+			followEditorWrapper.focus();
+		}
 	}
 
 	renderFollowingChip() {

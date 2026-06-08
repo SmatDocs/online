@@ -41,11 +41,15 @@
 
 namespace FileUtil
 {
-    std::string createRandomDir(const std::string& path)
+    DownloadJailPath createDownloadJailPath(const std::string& jailDocRoot,
+                                            const std::string& filename)
     {
-        std::string name = Util::rng::getFilename(64);
-        createDirectory(path + '/' + name);
-        return name;
+        DownloadJailPath result;
+        result.tmpDir = Util::rng::getFilename(64);
+        createDirectory(jailDocRoot + '/' + result.tmpDir);
+        result.urlInJail = result.tmpDir + '/' + filename;
+        result.absolutePath = jailDocRoot + result.urlInJail;
+        return result;
     }
 
     namespace
@@ -59,7 +63,7 @@ namespace FileUtil
         {
             ssize_t written;
             while ((written = writeToFD(to, ptr, count)) < 0 && errno == EINTR)
-                LOG_TRC("EINTR writing to " << anonymizeUrl(toPath));
+                LOG_TRC("EINTR writing to " << Anonymizer::anonymizeUrl(toPath));
             if (written < 0)
                 return -1;
             count -= written;
@@ -77,20 +81,23 @@ namespace FileUtil
         {
             from = openFileAsFD(fromPath, O_RDONLY);
             if (from < 0)
-                throw std::runtime_error("Failed to open src " + anonymizeUrl(fromPath));
+                throw std::runtime_error("Failed to open src " +
+                                         Anonymizer::anonymizeUrl(fromPath));
 
             struct stat st;
             if (fstat(from, &st) != 0)
-                throw std::runtime_error("Failed to fstat src " + anonymizeUrl(fromPath));
+                throw std::runtime_error("Failed to fstat src " +
+                                         Anonymizer::anonymizeUrl(fromPath));
 
             to = openFileAsFD(toPath, O_CREAT | O_TRUNC | O_WRONLY, st.st_mode);
             if (to < 0)
-                throw std::runtime_error("Failed to open dest " + anonymizeUrl(toPath));
+                throw std::runtime_error("Failed to open dest " + Anonymizer::anonymizeUrl(toPath));
 
             // Logging may be redundant and/or noisy.
             if (log)
-                LOG_INF("Copying " << st.st_size << " bytes from " << anonymizeUrl(fromPath)
-                                   << " to " << anonymizeUrl(toPath));
+                LOG_INF("Copying " << st.st_size << " bytes from "
+                                   << Anonymizer::anonymizeUrl(fromPath) << " to "
+                                   << Anonymizer::anonymizeUrl(toPath));
 
             char buffer[64 * 1024];
 
@@ -99,10 +106,11 @@ namespace FileUtil
             {
                 ssize_t n;
                 while ((n = readFromFD(from, buffer, sizeof(buffer))) < 0 && errno == EINTR)
-                    LOG_TRC("EINTR reading from " << anonymizeUrl(fromPath));
+                    LOG_TRC("EINTR reading from " << Anonymizer::anonymizeUrl(fromPath));
                 if (n < 0)
-                    throw std::runtime_error("Failed to read from " + anonymizeUrl(fromPath)
-                                             + " at " + std::to_string(bytesIn) + " bytes in");
+                    throw std::runtime_error("Failed to read from " +
+                                             Anonymizer::anonymizeUrl(fromPath) + " at " +
+                                             std::to_string(bytesIn) + " bytes in");
 
                 bytesIn += n;
                 if (n == 0) // EOF
@@ -111,16 +119,18 @@ namespace FileUtil
 
                 if (writeBuffer(to, buffer, n, toPath) < 0)
                 {
-                    throw std::runtime_error("Failed to write " + std::to_string(n)
-                                             + " bytes to " + anonymizeUrl(toPath) + " at "
-                                             + std::to_string(bytesIn) + " bytes into "
-                                             + anonymizeUrl(fromPath));
+                    throw std::runtime_error("Failed to write " + std::to_string(n) + " bytes to " +
+                                             Anonymizer::anonymizeUrl(toPath) + " at " +
+                                             std::to_string(bytesIn) + " bytes into " +
+                                             Anonymizer::anonymizeUrl(fromPath));
                 }
             } while (true);
             if (bytesIn != st.st_size)
             {
-                LOG_WRN("Unusual: file " << anonymizeUrl(fromPath) << " changed size "
-                        "during copy from " << st.st_size << " to " << bytesIn);
+                LOG_WRN("Unusual: file " << Anonymizer::anonymizeUrl(fromPath)
+                                         << " changed size "
+                                            "during copy from "
+                                         << st.st_size << " to " << bytesIn);
             }
             closeFD(from);
             closeFD(to);
@@ -129,8 +139,8 @@ namespace FileUtil
         catch (const std::exception& ex)
         {
             std::ostringstream oss;
-            oss << "Error while copying from " << anonymizeUrl(fromPath) << " to "
-                << anonymizeUrl(toPath) << ": " << ex.what();
+            oss << "Error while copying from " << Anonymizer::anonymizeUrl(fromPath) << " to "
+                << Anonymizer::anonymizeUrl(toPath) << ": " << ex.what();
             const std::string err = oss.str();
             LOG_ERR(err);
             closeFD(from);
@@ -145,19 +155,7 @@ namespace FileUtil
 
     std::string createRandomTmpDir(std::string root)
     {
-        if (root.empty())
-            root = getSysTempDirectoryPath();
-
-        Poco::File(root).createDirectories();
-
-        // Don't const to allow for automatic move on return.
-        std::string newTmp = root + "/cool-" + Util::rng::getFilename(16);
-        if (makeDirectory(newTmp) < 0)
-        {
-            LOG_SYS("Failed to create random temp directory [" << newTmp << ']');
-            return root;
-        }
-        return newTmp;
+        return createTmpDir("cool-" + Util::rng::getFilename(16), std::move(root));
     }
 
     std::string createTmpDir(const std::string& dirName, std::string root)
@@ -231,7 +229,7 @@ namespace FileUtil
                           std::istreambuf_iterator<char>(lhs.rdbuf()));
     }
 
-    void copyDirectoryRecursive(const std::string& srcDir, const std::string& destDir, bool log)
+    void copyDirectoryRecursive(std::string_view srcDir, std::string_view destDir, bool log)
     {
         namespace fs = std::filesystem;
         try
@@ -457,16 +455,6 @@ namespace FileUtil
         return platformDependentCheckDiskSpace(path, ENOUGH_SPACE);
 
         return true;
-    }
-
-    /// Anonymize the basename of filenames, preserving the path and extension.
-    std::string anonymizeUrl(const std::string& url) { return Anonymizer::anonymizeUrl(url); }
-
-    /// Anonymize user names and IDs.
-    /// Will use the Obfuscated User ID if one is provided via WOPI.
-    std::string anonymizeUsername(const std::string& username)
-    {
-        return Anonymizer::anonymize(username);
     }
 
     std::string extractFileExtension(const std::string& path)

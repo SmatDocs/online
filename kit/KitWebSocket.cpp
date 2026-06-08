@@ -10,7 +10,7 @@
  */
 
 /*
- * The main entry point for the LibreOfficeKit process serving
+ * The main entry point for the COKit process serving
  * a document editing session.
  */
 
@@ -40,7 +40,6 @@
 #include <sysexits.h>
 #endif
 
-using Poco::Exception;
 
 void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
 {
@@ -67,7 +66,7 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
             std::string::size_type pos = tokenStr.find("\"Author\":{\"type\":\"string\",\"value\":\"");
             if (pos != std::string::npos) {
                 auto start = tokenStr.find("\"value\":\"", pos) + 9;
-                auto end = tokenStr.find("\"", start);
+                auto end = tokenStr.find('\"', start);
                 std::string value = tokenStr.substr(start, end - start);
                 tokenStr.replace(start, end - start, Anonymizer::anonymize(value));
             }
@@ -87,14 +86,18 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
         _docKey = tokens[2];
         const std::string& docId = tokens[3];
         const std::string url = Uri::decode(_docKey);
-        const std::string fileId = Uri::getFilenameFromURL(url);
-        Anonymizer::mapAnonymized(fileId,
-                                  fileId); // Identity mapping, since fileId is already obfuscated
+        if (Anonymizer::enabled())
+        {
+            const std::string fileId = Uri::getFilenameFromURL(url);
+            Anonymizer::mapAnonymized(
+                fileId,
+                fileId); // Identity mapping, since fileId is already obfuscated
+        }
 
         if (!_document)
         {
 #if !defined(IOS) && !defined(QTAPP) && !defined(MACOS) && !defined(_WIN32)
-            Util::setThreadName("kit" SHARED_DOC_THREADNAME_SUFFIX + docId);
+            ProcUtil::setThreadName("kit" SHARED_DOC_THREADNAME_SUFFIX + docId);
 #endif
             _document = std::make_shared<Document>(
                 _loKit, _jailId, _docKey, docId, url,
@@ -106,8 +109,8 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
             // We can do this only after creating the Document object.
             TraceEvent::emitOneRecordingIfEnabled(
                 std::string("{\"name\":\"process_name\",\"ph\":\"M\",\"args\":{\"name\":\"") +
-                "Kit-" + docId + "\"},\"pid\":" + std::to_string(Util::getProcessId()) +
-                ",\"tid\":" + std::to_string(Util::getThreadId()) + "},\n");
+                "Kit-" + docId + "\"},\"pid\":" + std::to_string(ProcUtil::getProcessId()) +
+                ",\"tid\":" + std::to_string(ProcUtil::getThreadId()) + "},\n");
         }
 
         // Validate and create session.
@@ -126,7 +129,7 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
             if (_document)
                 _document->joinThreads();
             _document.reset();
-            if (!Util::isKitInProcess())
+            if constexpr (!Util::isKitInProcess())
                 Util::forcedExit(EX_OK);
             else
                 SigUtil::setTerminationFlag();

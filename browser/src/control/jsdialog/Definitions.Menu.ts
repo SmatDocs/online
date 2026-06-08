@@ -1780,7 +1780,7 @@ menuDefinitions.set('PasteMenu', [
 	{
 		text: _UNO('.uno:Paste', 'text'),
 		action: '.uno:Paste',
-		hint: JSDialog.ShortcutsUtil.getShortcut(
+		hint: JSDialog.ShortcutsUtil.getTooltipLabel(
 			_UNO('.uno:Paste', 'text'),
 			'.uno:Paste',
 		),
@@ -1788,7 +1788,7 @@ menuDefinitions.set('PasteMenu', [
 	{
 		text: _UNO('.uno:PasteSpecial', 'text'),
 		action: '.uno:PasteSpecial',
-		hint: JSDialog.ShortcutsUtil.getShortcut(
+		hint: JSDialog.ShortcutsUtil.getTooltipLabel(
 			_UNO('.uno:PasteSpecial', 'text'),
 			'.uno:PasteSpecial',
 		),
@@ -1797,16 +1797,24 @@ menuDefinitions.set('PasteMenu', [
 
 menuDefinitions.set('ViewChangesMenu', [
 	{
-		id: 'review-show-tracked-changes',
+		id: 'viewchanges-inline',
 		img: 'showtrackedchanges',
 		text: _('Inline'),
-		uno: '.uno:ShowTrackedChanges',
+		action: 'viewchanges-inline',
+		checked: false,
 	},
 	{
-		id: 'compare-tracked-change',
+		id: 'viewchanges-sidebyside',
 		img: 'comparechanges',
 		text: _('Side by Side'),
-		action: 'comparechanges',
+		action: 'viewchanges-sidebyside',
+		checked: false,
+	},
+	{
+		id: 'viewchanges-hidden',
+		text: _('Hidden'),
+		action: 'viewchanges-hidden',
+		checked: false,
 	},
 ] as Array<MenuDefinition>);
 
@@ -2376,6 +2384,21 @@ menuDefinitions.set('PictureColorMode', [
 menuDefinitions.set('AnnotationMenu', [
 	{
 		text: _('Insert comment'),
+		action: 'insertcomment',
+	},
+	{
+		text: _('Comments list'),
+		action: 'showcommentsnavigator',
+	},
+] as Array<MenuDefinition>);
+
+menuDefinitions.set('CalcAnnotationMenu', [
+	{
+		text: _('Insert Comment'),
+		action: 'insertthreadedcomment',
+	},
+	{
+		text: _('Insert Note'),
 		action: 'insertcomment',
 	},
 	{

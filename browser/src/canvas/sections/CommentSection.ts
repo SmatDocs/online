@@ -124,6 +124,7 @@ export class Comment extends CanvasSectionObject {
 		this.sectionProperties.acceptButton = null;
 		this.sectionProperties.rejectButton = null;
 		this.sectionProperties.menu = null;
+		this.sectionProperties.menuBarCell = null;
 		this.sectionProperties.captionNode = null;
 		this.sectionProperties.captionText = null;
 
@@ -135,6 +136,7 @@ export class Comment extends CanvasSectionObject {
 		this.sectionProperties.replyButton = null;
 		this.sectionProperties.cancelReplyButton = null;
 		this.sectionProperties.contentText = null;
+		this.sectionProperties.lastContentRaw = '';
 		this.sectionProperties.nodeReply = null;
 		this.sectionProperties.nodeReplyText = null;
 		this.sectionProperties.contextMenu = false;
@@ -156,6 +158,7 @@ export class Comment extends CanvasSectionObject {
 		this.sectionProperties.childLines = [];
 		this.sectionProperties.childCommentOffset = 8;
 		this.sectionProperties.commentMarkerSubSection = null; // For Impress and Draw documents.
+		this.sectionProperties.commentAnchorAreaSubSection = null; // For comments with an explicit anchor area (PDF /Rect, drag-to-area).
 		this.sectionProperties.calcCommentAreaWidth = 40; // Calc comment area doesn't cover the whole cell, in order to allow multi-cell selections.
 
 		app.map.on('sheetgeometrychanged', this.setPositionAndSize.bind(this));
@@ -184,11 +187,11 @@ export class Comment extends CanvasSectionObject {
 		window.L.DomEvent.on(this.sectionProperties.nodeReplyText, 'input', this.textAreaInput, this);
 		window.L.DomEvent.on(this.sectionProperties.nodeModifyText, 'keydown', this.textAreaKeyDown, this);
 		window.L.DomEvent.on(this.sectionProperties.nodeReplyText, 'keydown', this.textAreaKeyDown, this);
-		this.sectionProperties.cancelButton = this.createButton(button, 'annotation-cancel-' + this.sectionProperties.data.id, 'annotation-button button-secondary', _('Cancel'), this.handleCancelCommentButton);
-		this.sectionProperties.saveButton = this.createButton(button, 'annotation-save-' + this.sectionProperties.data.id, 'annotation-button button-primary',_('Save'), this.handleSaveCommentButton);
+		this.sectionProperties.cancelButton = this.createButton(button, 'annotation-cancel-' + this.sectionProperties.data.id, 'annotation-button button', _('Cancel'), this.handleCancelCommentButton);
+		this.sectionProperties.saveButton = this.createButton(button, 'annotation-save-' + this.sectionProperties.data.id, 'annotation-button button button-primary',_('Save'), this.handleSaveCommentButton);
 		button = window.L.DomUtil.create('div', '', this.sectionProperties.nodeReply);
-		this.sectionProperties.cancelReplyButton = this.createButton(button, 'annotation-cancel-reply-' + this.sectionProperties.data.id, 'annotation-button button-secondary', _('Cancel'), this.handleCancelCommentButton);
-		this.sectionProperties.replyButton = this.createButton(button, 'annotation-reply-' + this.sectionProperties.data.id, 'annotation-button button-primary', _('Reply'), this.handleReplyCommentButton);
+		this.sectionProperties.cancelReplyButton = this.createButton(button, 'annotation-cancel-reply-' + this.sectionProperties.data.id, 'annotation-button button', _('Cancel'), this.handleCancelCommentButton);
+		this.sectionProperties.replyButton = this.createButton(button, 'annotation-reply-' + this.sectionProperties.data.id, 'annotation-button button button-primary', _('Reply'), this.handleReplyCommentButton);
 		window.L.DomEvent.disableScrollPropagation(this.sectionProperties.container);
 
 		// Since this is a late called function, if the width is enough, we shouldn't collapse the comments.
@@ -200,7 +203,7 @@ export class Comment extends CanvasSectionObject {
 
 		var events = ['click', 'dblclick', 'mousedown', 'mouseup', 'mouseover', 'mouseout', 'keydown', 'keypress', 'keyup', 'touchstart', 'touchmove', 'touchend'];
 		window.L.DomEvent.on(this.sectionProperties.container, 'click', this.onMouseClick, this);
-		window.L.DomEvent.on(this.sectionProperties.container, 'keydown', this.onEscKey, this);
+		window.L.DomEvent.on(this.sectionProperties.container, 'keydown', this.onCommentKeyDown, this);
 
 		for (var it = 0; it < events.length; it++) {
 			window.L.DomEvent.on(this.sectionProperties.container, events[it], window.L.DomEvent.stopPropagation, this);
@@ -228,7 +231,11 @@ export class Comment extends CanvasSectionObject {
 			this.createTrackChangeButtons();
 		}
 
-		if (this.sectionProperties.noMenu !== true && app.isCommentEditingAllowed()) {
+		// Always create the menu if allowed; its visibility is kept in sync with
+		// the current edit permission by updateEditability() so the Viewing/
+		// Editing toggle can show or hide the Edit/Reply/Delete affordances
+		// without re-rendering the comment.
+		if (this.sectionProperties.noMenu !== true) {
 			this.createMenu();
 		}
 
@@ -274,6 +281,35 @@ export class Comment extends CanvasSectionObject {
 
 		if (!(<any>window).mode.isSmallScreenDevice())
 			document.getElementById('document-container').appendChild(this.sectionProperties.container);
+
+		this.updateEditability();
+		this.sectionProperties.onUpdatePermissionBound = this.updateEditability.bind(this);
+		app.events.on('updatepermission', this.sectionProperties.onUpdatePermissionBound);
+	}
+
+	// Syncs visible edit affordances with the current comment-editing
+	// permission. The editable=true branch only re-shows the menubar
+	// cell: nodeModify/nodeReply remain hidden until the user explicitly
+	// triggers edit()/reply(), so we deliberately do NOT auto-reopen a
+	// previously open edit/reply pane when permission is restored.
+	private makeEditable (editable: boolean): void {
+		const props = this.sectionProperties;
+		if (props.menuBarCell?.style)
+			props.menuBarCell.style.display = editable ? '' : 'none';
+		if (editable) return;
+		if (props.nodeModify?.style) props.nodeModify.style.display = 'none';
+		if (props.nodeReply?.style) props.nodeReply.style.display = 'none';
+		if (props.contentNode?.style) props.contentNode.style.display = '';
+		props.container.classList.remove('modify-annotation-container');
+		props.container.classList.remove('reply-annotation-container');
+		this.cachedIsEdit = false;
+	}
+
+	// Invoked at init and on every updatepermission event, so toggling
+	// between Viewing and Editing mode immediately hides or restores the
+	// per-comment controls.
+	private updateEditability (): void {
+		this.makeEditable(app.isCommentEditingAllowed());
 	}
 
 	private createContainerAndWrapper (): void {
@@ -332,13 +368,20 @@ export class Comment extends CanvasSectionObject {
 
 	private createMenu (): void {
 		var tdMenu = window.L.DomUtil.create('td', 'cool-annotation-menubar', this.sectionProperties.authorRow);
-		const edit = window.L.DomUtil.create('div', 'cool-annotation-menu-edit', tdMenu);
-		edit.id = 'comment-annotation-menu-edit-' + this.sectionProperties.data.id;
-		edit.tabIndex = 0;
-		edit.onclick = this.onEditComment.bind(this);
-		edit.onkeypress = this.editOnKeyPress.bind(this);
-		edit.dataset.title = Comment.editCommentLabel;
-		edit.setAttribute('aria-label', Comment.editCommentLabel);
+		this.sectionProperties.menuBarCell = tdMenu;
+		if (this.isAuthor()) {
+			const edit = window.L.DomUtil.create('div', 'cool-annotation-menu-edit', tdMenu);
+			edit.id = 'comment-annotation-menu-edit-' + this.sectionProperties.data.id;
+			// Honor an earlier Hide_Command for .uno:EditAnnotation; the class
+			// is toggled symmetrically by UIManager.showCommand later.
+			if (!app.map.uiManager.isCommandVisible('.uno:EditAnnotation'))
+				edit.classList.add('hidden-by-command');
+			edit.tabIndex = 0;
+			edit.onclick = this.onEditComment.bind(this);
+			edit.onkeypress = this.editOnKeyPress.bind(this);
+			edit.dataset.title = Comment.editCommentLabel;
+			edit.setAttribute('aria-label', Comment.editCommentLabel);
+		}
 
 		this.sectionProperties.menu = window.L.DomUtil.create('div', this.sectionProperties.data.trackchange ? 'cool-annotation-menu-redline' : 'cool-annotation-menu', tdMenu);
 		this.sectionProperties.menu.id = 'comment-annotation-menu-' + this.sectionProperties.data.id;
@@ -347,7 +390,6 @@ export class Comment extends CanvasSectionObject {
 		this.sectionProperties.menu.onkeypress = this.menuOnKeyPress.bind(this);
 		this.sectionProperties.menu.dataset.title = Comment.openMenuLabel;
 		this.sectionProperties.menu.setAttribute('aria-label', Comment.openMenuLabel);
-		this.sectionProperties.menu.annotation = this;
 	}
 
 	public setContainerPos(forceUpdate: boolean, canvasContainerBounds?: DOMRect, left?: number, top?: number): void {
@@ -465,11 +507,9 @@ export class Comment extends CanvasSectionObject {
 			this.sectionProperties.childLines[i].style.height = (childPositions[i].posY + 24 - lastPosY) + 'px';
 			lastPosY = childPositions[i].posY + 24;
 		}
-		if (i < this.sectionProperties.childLines.length) {
-			for (let j = i; j < this.sectionProperties.childLines.length; j++) {
-				this.sectionProperties.childLinesNode.removeChild(this.sectionProperties.childLines[i]);
-				this.sectionProperties.childLines.splice(i);
-			}
+		while (i < this.sectionProperties.childLines.length) {
+			this.sectionProperties.childLinesNode.removeChild(this.sectionProperties.childLines[i]);
+			this.sectionProperties.childLines.splice(i, 1);
 		}
 
 	}
@@ -566,29 +606,31 @@ export class Comment extends CanvasSectionObject {
 
 	private handleKeyDownForPopup (ev: any, id: string): void {
 		var popup = this.map._textInput._handleKeyDownForPopup(ev, id);
-		// Block Esc from propogating if it closes the comment mention Popup
+		// Block Esc from propagating if it closes the comment mention Popup
 		if (popup && id === 'mentionPopup' && ev.key === 'Escape') {
 			ev.preventDefault();
 			ev.stopPropagation();
 		}
 	}
 
-	private textAreaKeyDown (ev: any): void {
+	private isCtrlEnter(ev: KeyboardEvent): boolean {
+		return !!ev && ev.ctrlKey && ev.key === "Enter";
+	}
+
+	private handleCommentCtrlEnter(ev: KeyboardEvent): void {
+		this.map.mention?.closeMentionPopup(false);
+		const targetId = (ev.target as HTMLElement).id;
+		if (this.sectionProperties.nodeReplyText.id === targetId) {
+			this.handleReplyCommentButton(ev);
+		} else {
+			this.handleSaveCommentButton(ev);
+		}
+	}
+
+	private textAreaKeyDown(ev: KeyboardEvent): void {
 		if (window.KeyboardShortcuts.processEvent(app.UI.language.fromURL, ev)) {
 			return;
 		}
-
-		if (ev && ev.ctrlKey && ev.key === "Enter") {
-			this.map.mention?.closeMentionPopup(false);
-
-			if (this.sectionProperties.nodeReplyText.id == ev.srcElement.id) {
-				this.handleReplyCommentButton(ev);
-			} else {
-				this.handleSaveCommentButton(ev);
-			}
-			return;
-		}
-
 		this.handleKeyDownForPopup(ev, 'mentionPopup');
 	}
 
@@ -601,7 +643,22 @@ export class Comment extends CanvasSectionObject {
 	}
 
 	private updateContent (): void {
-		if(this.sectionProperties.data.html)
+		let contentModified = true;
+		let contentRaw = '';
+
+		if (this.sectionProperties.data.html)
+			contentRaw = app.LOUtil.sanitize(this.sectionProperties.data.html);
+		else
+			contentRaw = this.sectionProperties.data.text ? this.sectionProperties.data.text: '';
+
+		if (this.sectionProperties.lastContentRaw === contentRaw) contentModified = false;
+
+		// happens when comment anchor is moved due to typing in the same paragraph
+		if (!contentModified) return;
+
+		this.sectionProperties.lastContentRaw = contentRaw;
+
+		if (this.sectionProperties.data.html)
 			this.sectionProperties.contentText.innerHTML = app.LOUtil.sanitize(this.sectionProperties.data.html);
 		else
 			this.sectionProperties.contentText.innerText = this.sectionProperties.data.text ? this.sectionProperties.data.text: '';
@@ -615,6 +672,9 @@ export class Comment extends CanvasSectionObject {
 		if (this.sectionProperties.data.html) {
 			this.sectionProperties.nodeModifyText.innerHTML = app.LOUtil.sanitize(this.sectionProperties.data.html);
 		}
+	}
+
+	private updateMetadata (): void {
 		this.sectionProperties.contentAuthor.innerText = this.sectionProperties.data.author;
 
 		this.updateResolvedField(this.sectionProperties.data.resolved);
@@ -727,11 +787,6 @@ export class Comment extends CanvasSectionObject {
 			var y: number = Math.round(this.position[1] / app.dpiScale);
 			(this.containerObject.getSectionWithName(app.CSections.Scroll.name) as any as cool.ScrollSection).onScrollTo({x: x, y: y});
 		}
-		else if (app.map._docLayer._docType === 'presentation' || app.map._docLayer._docType === 'drawing') {
-			var x: number = Math.round(this.position[0] / app.dpiScale);
-			var y: number = Math.round(this.position[1] / app.dpiScale);
-			(this.containerObject.getSectionWithName(app.CSections.Scroll.name) as any as cool.ScrollSection).onScrollTo({x: x, y: y});
-		}
 
 		this.containerObject.requestReDraw();
 		this.sectionProperties.isHighlighted = true;
@@ -815,6 +870,21 @@ export class Comment extends CanvasSectionObject {
 					this.sectionProperties.data.anchorPos[1] * app.twipsToPixels
 				);
 			}
+			if (this.sectionProperties.commentAnchorAreaSubSection !== null) {
+				const data = this.sectionProperties.data;
+				this.sectionProperties.commentAnchorAreaSubSection.sectionProperties.data = data;
+				this.sectionProperties.commentAnchorAreaSubSection.setPosition(
+					data.anchorPos[0] * app.twipsToPixels,
+					data.anchorPos[1] * app.twipsToPixels
+				);
+				// rectangle = [x, y, width, height] in twips (ImpressTileLayer.newAnnotation
+				// builds it from the data; the JSON form coming back from core uses the
+				// same shape via tools::Rectangle::toString()).
+				this.sectionProperties.commentAnchorAreaSubSection.resize(
+					data.rectangle[2] * app.twipsToPixels / app.dpiScale,
+					data.rectangle[3] * app.twipsToPixels / app.dpiScale
+				);
+			}
 		}
 	}
 
@@ -824,6 +894,30 @@ export class Comment extends CanvasSectionObject {
 
 		const showMarker = app.impress.partList[app.map._docLayer._selectedPart].hash === this.sectionProperties.data.parthash ||
 							app.file.fileBasedView;
+
+		// Anchor-area outline: only when the comment carries an explicit
+		// area (set by core via the hasArea JSON field for PDF /Rect or
+		// the Width/Height args of .uno:InsertAnnotation). Added before
+		// the marker sub-section so findSectionContainingPoint, which
+		// iterates last-to-first, lets the smaller marker icon take a
+		// click at the rectangle's top-left while the area catches
+		// clicks elsewhere inside the rectangle.
+		if (this.sectionProperties.data.hasArea) {
+			const widthCssPx = this.sectionProperties.data.rectangle[2]
+				* app.twipsToPixels / app.dpiScale;
+			const heightCssPx = this.sectionProperties.data.rectangle[3]
+				* app.twipsToPixels / app.dpiScale;
+			this.sectionProperties.commentAnchorAreaSubSection = new CommentAnchorAreaSubSection(
+				this.name + this.sectionProperties.data.id + '-area' + String(Math.random()),
+				widthCssPx,
+				heightCssPx,
+				new SimplePoint(this.sectionProperties.data.anchorPos[0], this.sectionProperties.data.anchorPos[1]),
+				showMarker,
+				this,
+				this.sectionProperties.data
+			);
+			app.sectionContainer.addSection(this.sectionProperties.commentAnchorAreaSubSection);
+		}
 
 		this.sectionProperties.commentMarkerSubSection = new CommentMarkerSubSection(
 			this.name + this.sectionProperties.data.id + String(Math.random()), // Section name - only as a placeholder.
@@ -849,6 +943,7 @@ export class Comment extends CanvasSectionObject {
 
 	public update (): void {
 		this.updateContent();
+		this.updateMetadata();
 		this.updateLayout();
 		this.updatePosition();
 	}
@@ -858,12 +953,20 @@ export class Comment extends CanvasSectionObject {
 			this.sectionProperties.commentMarkerSubSection.showSection = true;
 			this.sectionProperties.commentMarkerSubSection.onSectionShowStatusChange();
 		}
+		if (this.sectionProperties.commentAnchorAreaSubSection != null) {
+			this.sectionProperties.commentAnchorAreaSubSection.showSection = true;
+			this.sectionProperties.commentAnchorAreaSubSection.onSectionShowStatusChange();
+		}
 	}
 
 	private hideMarker (): void {
 		if (this.sectionProperties.commentMarkerSubSection != null) {
 			this.sectionProperties.commentMarkerSubSection.showSection = false;
 			this.sectionProperties.commentMarkerSubSection.onSectionShowStatusChange();
+		}
+		if (this.sectionProperties.commentAnchorAreaSubSection != null) {
+			this.sectionProperties.commentAnchorAreaSubSection.showSection = false;
+			this.sectionProperties.commentAnchorAreaSubSection.onSectionShowStatusChange();
 		}
 	}
 
@@ -1010,6 +1113,18 @@ export class Comment extends CanvasSectionObject {
 		this.hidden = true;
 	}
 
+	public isAuthor(): boolean {
+		return this.map.getViewName(app.map._docLayer._viewId) === this.sectionProperties.data.author;
+	}
+
+	public canRemove(): boolean {
+		return this.isAuthor() || !this.map.isReadOnlyMode();
+	}
+
+	public canModerate(): boolean {
+		return this.isAuthor() || app.isCommentEditingAllowed();
+	}
+
 	// check if this is "our" autosaved comment
 	// core is not aware it's autosaved one so use this simplified detection based on content
 	public isAutoSaved (): boolean {
@@ -1017,8 +1132,7 @@ export class Comment extends CanvasSectionObject {
 		if (!autoSavedComment)
 			return false;
 
-		var authorMatch = this.sectionProperties.data.author === this.map.getViewName(app.map._docLayer._viewId);
-		return authorMatch;
+		return this.isAuthor();
 	}
 
 	public hide (): void {
@@ -1046,7 +1160,7 @@ export class Comment extends CanvasSectionObject {
 
 	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
 	private menuOnMouseClick (e: any): void {
-		$(this.sectionProperties.menu).contextMenu();
+		this.openContextMenu();
 		window.L.DomEvent.stopPropagation(e);
 	}
 
@@ -1066,8 +1180,146 @@ export class Comment extends CanvasSectionObject {
 	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
 	private menuOnKeyPress (e: any): void {
 		if (e.code === 'Space' || e.code === 'Enter')
-			$(this.sectionProperties.menu).contextMenu();
+			this.openContextMenu();
 		window.L.DomEvent.stopPropagation(e);
+	}
+
+	private openContextMenu (): void {
+		const listSection = this.sectionProperties.commentListSection;
+		const data = this.sectionProperties.data;
+		const docLayer = app.map._docLayer;
+		const entries: Array<any> = [];
+		let pos = 0;
+		// Honor Hide_Command for entries that map to a UNO command, so a host
+		// can suppress comment-dialog actions the same way it suppresses
+		// menubar / toolbar items.
+		const isShown = (uno: string): boolean =>
+			app.map.uiManager.isCommandVisible(uno);
+
+		if (data.trackchange) {
+			entries.push({ text: _('Comment'), type: 'action', id: 'modify', pos: String(pos++) });
+		} else {
+			const isAuthor = this.isAuthor();
+			const canRemove = this.canRemove();
+			const canModerate = this.canModerate();
+			const removeUno = docLayer._docType === 'text' ? '.uno:DeleteComment'
+				: (docLayer._docType === 'spreadsheet' ? '.uno:DeleteNote'
+					: '.uno:DeleteAnnotation');
+
+			if (isAuthor && isShown('.uno:EditAnnotation'))
+				entries.push({ text: _('Modify'), type: 'action', id: 'modify', pos: String(pos++) });
+
+			if (docLayer._docType === 'text' && isShown('.uno:ReplyComment'))
+				entries.push({ text: _('Reply'), type: 'action', id: 'reply', pos: String(pos++) });
+
+			if (canRemove && isShown(removeUno))
+				entries.push({ text: _('Remove'), type: 'action', id: 'remove', pos: String(pos++) });
+
+			if (docLayer._docType === 'text' && this.isRootComment() && canRemove
+				&& isShown('.uno:DeleteCommentThread'))
+				entries.push({ text: _('Remove Thread'), type: 'action', id: 'removeThread', pos: String(pos++) });
+
+			const isNonWriterComponent = ['spreadsheet', 'drawing', 'presentation'].includes(docLayer._docType);
+			if (canModerate
+				&& (docLayer._docType === 'text' || (isNonWriterComponent && data.threaded))
+				&& isShown('.uno:ResolveComment'))
+				entries.push({
+					text: data.resolved === 'false' ? _('Resolve') : _('Unresolve'),
+					type: 'action', id: 'resolve', pos: String(pos++),
+				});
+
+			if (docLayer._docType === 'text' && this.isRootComment() && canModerate
+				&& isShown('.uno:ResolveCommentThread'))
+				entries.push({
+					text: listSection.isThreadResolved(this) ? _('Unresolve Thread') : _('Resolve Thread'),
+					type: 'action', id: 'resolveThread', pos: String(pos++),
+				});
+
+			if (docLayer._docType === 'text' && !this.isRootComment() && isAuthor
+				&& isShown('.uno:PromoteComment'))
+				entries.push({ text: _('Promote to top comment'), type: 'action', id: 'promote', pos: String(pos++) });
+
+			if (docLayer._docType === 'text' && !window.mode.isSmallScreenDevice()) {
+				const isShownBig = listSection.isShownBig(this);
+				entries.push({
+					text: isShownBig ? _('Show on the side') : _('Open in full view'),
+					type: 'action', id: 'showBigger', pos: String(pos++),
+				});
+			}
+
+			if ((docLayer._docType === 'text' || docLayer._docType === 'spreadsheet')
+				&& !window.mode.isSmallScreenDevice())
+				entries.push({ text: _('Show in navigator'), type: 'action', id: 'showInNavigator', pos: String(pos++) });
+		}
+
+		if (entries.length === 0)
+			return;
+
+		const menuEl = this.sectionProperties.menu;
+		menuEl._onDropDown = function (open: boolean) {
+			this.sectionProperties.contextMenu = open;
+		}.bind(this);
+
+		if (window.mode.isSmallScreenDevice()) {
+			const menu: any[] = [];
+			entries.forEach((entry: any) => {
+				menu.push({
+					name: entry.text,
+					command: entry.text,
+					callback: () => {
+						this.handleMenuAction(entry.id);
+						if (entry.id !== 'reply' && entry.id !== 'modify')
+							app.map.fire('mobilewizardback');
+					},
+				});
+			});
+			const menuData =
+				window.L.Control.JSDialogBuilder.getMenuStructureForMobileWizard(
+					menu,
+					true,
+					'',
+				);
+			app.map.fire('mobilewizard', { data: menuData });
+			return;
+		}
+
+		const dropdownId = 'comment-menu-' + data.id;
+		const callback = function (_objectType: string, eventType: string, _object: any, _data: any, entry: any) {
+			if (eventType !== 'selected')
+				return false;
+			// reply and modify set focus on the comment textbox
+			// tell the dropdown not to restore focus in those cases
+			const focusHandled = entry?.id === 'reply' || entry?.id === 'modify';
+			JSDialog.CloseDropdown(dropdownId, focusHandled);
+			this.handleMenuAction(entry?.id);
+			return true;
+		}.bind(this);
+
+		JSDialog.OpenDropdown(
+			dropdownId,
+			menuEl,
+			entries,
+			callback,
+			'',
+			false,
+			false,
+			true,
+		);
+	}
+
+	private handleMenuAction (id: string): void {
+		const listSection = this.sectionProperties.commentListSection;
+		switch (id) {
+		case 'modify': listSection.modify(this); break;
+		case 'reply': listSection.reply(this); break;
+		case 'remove': listSection.remove(this.sectionProperties.data.id); break;
+		case 'removeThread': listSection.removeThread(this.sectionProperties.data.id); break;
+		case 'resolve': listSection.resolve(this); break;
+		case 'resolveThread': listSection.resolveThread(this); break;
+		case 'promote': listSection.promote(this); break;
+		case 'showBigger': listSection.toggleShowBigger(this); break;
+		case 'showInNavigator': listSection.showInNavigator(this); break;
+		}
 	}
 
 	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
@@ -1082,30 +1334,57 @@ export class Comment extends CanvasSectionObject {
 	}
 
 	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-	private onEscKey (e: any): void {
-		if ((<any>window).mode.isDesktop()) {
-			// When a comment is being edited and focus is in comment textbox,
-			// Esc should not close the comment being edited, but should just mark it with an attention.
-			if (e.keyCode === 27) {
-				const editingComment = Comment.isAnyEdit();
-				if (editingComment) {
-					this.sectionProperties.commentListSection.addCommentAttention(editingComment);
-					return;
-				}
-			} else if (e.keyCode === 33 /*PageUp*/ || e.keyCode === 34 /*PageDown*/) {
-				// work around for a chrome issue https://issues.chromium.org/issues/41417806
-				window.L.DomEvent.preventDefault(e);
-				var pos = e.keyCode === 33 ? 0 : e.target.textLength;
-				var currentPos = e.target.selectionStart;
-				if (e.shiftKey) {
-					var [start, end] = currentPos <= pos ? [currentPos, pos] : [pos, currentPos];
-					e.target.setSelectionRange(start, end, currentPos > pos ? 'backward' : 'forward');
-				} else {
-					e.target.setSelectionRange(pos, pos);
-				}
-			}
+	public onCommentKeyDown(e: KeyboardEvent): void {
+		if (!(<any>window).mode.isDesktop()) {
+			return;
 		}
 
+		if (this.isCtrlEnter(e)) {
+			e.preventDefault();
+			e.stopPropagation();
+			this.handleCommentCtrlEnter(e);
+			return;
+		}
+
+		if (e.keyCode === 27 /* Esc */) {
+			// When a comment is being edited and focus is in the textbox,
+			// Esc should not close it but mark it with attention.
+			const editingComment = Comment.isAnyEdit();
+			if (editingComment) {
+				e.preventDefault();
+				e.stopPropagation();
+				this.sectionProperties.commentListSection
+					.addCommentAttention(editingComment);
+			}
+			return;
+		}
+
+		if (e.keyCode === 33 || e.keyCode === 34) {
+			this.handleCommentPageNav(e);
+			return;
+		}
+	}
+
+	/**
+	 * Workaround for Chrome desktop bug where PageUp/PageDown in a textarea
+	 * scrolls the page instead of moving the caret.
+	 * https://issues.chromium.org/issues/41417806
+	 */
+	private handleCommentPageNav(e: KeyboardEvent): void {
+		window.L.DomEvent.preventDefault(e);
+		const target = e.target as HTMLTextAreaElement;
+		const pos = e.keyCode === 33 ? 0 : target.textLength;
+		const currentPos = target.selectionStart;
+		if (e.shiftKey) {
+			const [start, end] = currentPos <= pos
+				? [currentPos, pos]
+				: [pos, currentPos];
+			target.setSelectionRange(
+				start, end,
+				currentPos > pos ? 'backward' : 'forward');
+		} else {
+			target.setSelectionRange(pos, pos);
+		}
 	}
 
 	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
@@ -1204,6 +1483,7 @@ export class Comment extends CanvasSectionObject {
 		this.sectionProperties.data.text = this.sectionProperties.nodeModifyText.innerText;
 		this.sectionProperties.data.html = this.sectionProperties.nodeModifyText.innerHTML;
 		this.updateContent();
+		this.updateMetadata();
 		if (!cool.CommentSection.autoSavedComment)
 			this.show();
 		this.sectionProperties.commentListSection.save(this);
@@ -1435,16 +1715,6 @@ export class Comment extends CanvasSectionObject {
 		return this.sectionProperties.commentListSection.sectionProperties.selectedComment === this;
 	}
 
-	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-	private doesRectangleContainPoint (rectangle: any, point: Array<number>): boolean {
-		if (point[0] >= rectangle[0] && point[0] <= rectangle[0] + rectangle[2]) {
-			if (point[1] >= rectangle[1] && point[1] <= rectangle[1] + rectangle[3]) {
-				return true;
-			}
-		}
-		return false;
-	}
-
 	/*
 		point is the core pixel coordinate of the cursor.
 		Not adjusted according to the view.
@@ -1489,8 +1759,10 @@ export class Comment extends CanvasSectionObject {
 			if (this.sectionProperties.data.rectangles[0].containsPoint(app.calc.cellCursorRectangle.center))
 				this.sectionProperties.commentListSection.sectionProperties.calcCurrentComment = this;
 			else if (this.isSelected()) {
-				this.hide();
-				this.sectionProperties.commentListSection.sectionProperties.calcCurrentComment = null;
+				if (!this.sectionProperties.commentListSection.sectionProperties.doNotHideCommentTimer) {
+					this.hide();
+					this.sectionProperties.commentListSection.sectionProperties.calcCurrentComment = null;
+				}
 			}
 			else if (this.sectionProperties.commentListSection.sectionProperties.calcCurrentComment == this)
 				this.sectionProperties.commentListSection.sectionProperties.calcCurrentComment = null;
@@ -1515,10 +1787,7 @@ export class Comment extends CanvasSectionObject {
 			this.sectionProperties.commentListSection.selectById(this.sectionProperties.data.id);
 		}
 		else if (docType === 'text') {
-			const mousePoint = point.clone();
-			mousePoint.pX += this.myTopLeft[0];
-			mousePoint.pY += this.myTopLeft[1];
-			app.activeDocument.mouseControl.onClick(mousePoint, e);
+			app.activeDocument.mouseControl.onClick(this.toMouseControlLocal(point), e);
 		}
 		else if (docType === 'spreadsheet') {
 			point.pX += this.position[0];
@@ -1592,7 +1861,53 @@ export class Comment extends CanvasSectionObject {
 		}
 	}
 
+	// Comment-local + this.myTopLeft is the canvas-pixel coordinate; MouseControl
+	// is bound to the tiles section and expects its argument in that section's
+	// local frame, which is offset from canvas by the document anchor (e.g. the
+	// ruler height in Writer). Without removing the anchor, forwarded events
+	// drift by that amount.
+	private toMouseControlLocal(point: cool.SimplePoint): cool.SimplePoint {
+		const docAnchor = app.sectionContainer.getDocumentAnchor();
+		const result = point.clone();
+		result.pX += this.myTopLeft[0] - docAnchor[0];
+		result.pY += this.myTopLeft[1] - docAnchor[1];
+		return result;
+	}
+
+	// In Writer, a comment-highlighted region overlays the document. By default
+	// this section would swallow mouse events, so a text selection drag started
+	// on top of a commented passage never reaches core. Forward the drag
+	// lifecycle (down/move/up) to MouseControl while leaving click handling
+	// to the existing onClick path.
+	private forwardWriterMouseEventToCore(handler: 'onMouseDown' | 'onMouseMove' | 'onMouseUp', point: cool.SimplePoint, dragDistance: Array<number>, e: MouseEvent): void {
+		const mousePoint = this.toMouseControlLocal(point);
+		const mouseControl = app.activeDocument.mouseControl;
+		if (handler === 'onMouseMove')
+			mouseControl.onMouseMove(mousePoint, dragDistance, e);
+		else if (handler === 'onMouseDown')
+			mouseControl.onMouseDown(mousePoint, e);
+		else
+			mouseControl.onMouseUp(mousePoint, e);
+	}
+
+	public onMouseDown(point: cool.SimplePoint, e: MouseEvent): void {
+		if (app.map._docLayer._docType === 'text')
+			this.forwardWriterMouseEventToCore('onMouseDown', point, [0, 0], e);
+	}
+
+	public onMouseMove(point: cool.SimplePoint, dragDistance: Array<number>, e: MouseEvent): void {
+		if (app.map._docLayer._docType === 'text' && this.containerObject.isDraggingSomething())
+			this.forwardWriterMouseEventToCore('onMouseMove', point, dragDistance, e);
+	}
+
 	public onMouseUp (point: cool.SimplePoint, e: MouseEvent): void {
+		// A drag finishing on top of a commented region: let MouseControl
+		// send the matching buttonup so core completes the selection.
+		if (this.containerObject.isDraggingSomething() && app.map._docLayer._docType === 'text') {
+			this.forwardWriterMouseEventToCore('onMouseUp', point, [0, 0], e);
+			return;
+		}
+
 		// Hammer.js doesn't fire onClick event after touchEnd event.
 		// CanvasSectionContainer fires the onClick event. But since Hammer.js is used for map, it disables the onClick for SectionContainer.
 		// We will use this event as click event on touch devices, until we remove Hammer.js (then this code will be removed from here).
@@ -1682,6 +1997,11 @@ export class Comment extends CanvasSectionObject {
 	public onRemove (): void {
 		this.sectionProperties.commentContainerRemoved = true;
 
+		if (this.sectionProperties.onUpdatePermissionBound) {
+			app.events.off('updatepermission', this.sectionProperties.onUpdatePermissionBound);
+			this.sectionProperties.onUpdatePermissionBound = null;
+		}
+
 		if (this.sectionProperties.commentListSection.sectionProperties.selectedComment === this)
 			this.sectionProperties.commentListSection.sectionProperties.selectedComment = null;
 
@@ -1690,6 +2010,9 @@ export class Comment extends CanvasSectionObject {
 
 		if (this.sectionProperties.commentMarkerSubSection !== null)
 			app.sectionContainer.removeSection(this.sectionProperties.commentMarkerSubSection.name);
+
+		if (this.sectionProperties.commentAnchorAreaSubSection !== null)
+			app.sectionContainer.removeSection(this.sectionProperties.commentAnchorAreaSubSection.name);
 
 		if (container && container.parentElement) {
 			var c: number = 0;
@@ -1793,9 +2116,10 @@ export class Comment extends CanvasSectionObject {
 		if (this.sectionProperties.collapsedInfoNode.innerText != innerText)
 			this.sectionProperties.collapsedInfoNode.innerText = innerText;
 
-		if (innerText === '' || this.isContainerVisible())
+		const containerVisible = this.isContainerVisible();
+		if (innerText === '' || containerVisible)
 			this.sectionProperties.collapsedInfoNode.style.display = 'none';
-		else if ((!this.isContainerVisible() && this.sectionProperties.collapsedInfoNode.innerText !== ''))
+		else if (!containerVisible && innerText !== '')
 			this.sectionProperties.collapsedInfoNode.style.display = '';
 	}
 

@@ -12,7 +12,18 @@
  * Impress tile layer is used to display a presentation document
  */
 
-/* global app $ cool TileManager */
+/* global app $ cool TileManager ViewLayoutBase ViewLayoutFileBased */
+
+// Single source of truth for Impress view modes. Keyed by the core
+// 'contextchange' context. 'mode' is the persisted string, 'uno' enters the
+// mode, 'activeMode' is the app.activeDocument.activeModes number. Note: the
+// Master activeMode (1) is applied from the .uno:SlideMasterPage state change
+// in Map.StateChanges.js, not here.
+const IMPRESS_VIEW_MODES = {
+	DrawPage:   { mode: 'normal', uno: '.uno:NormalMultiPaneGUI', activeMode: 0 },
+	NotesPage:  { mode: 'notes',  uno: '.uno:NotesMode',          activeMode: 2 },
+	MasterPage: { mode: 'master', uno: '.uno:SlideMasterPage',    activeMode: 1 },
+};
 
 window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 
@@ -24,6 +35,11 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		}
 
 		this._preview = window.L.control.partsPreview();
+
+		// Vector rendered slide thumbnails.
+		this._vectorThumbnails = cool.VectorRenderingConfig.isEnabled()
+			? new cool.VectorThumbnailHandler(this)
+			: null;
 
 		if (window.mode.isSmallScreenDevice()) {
 			this._addButton = window.L.control.mobileSlide();
@@ -38,15 +54,23 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		// Before this instance is created, app.file.readOnly and app.file.editComments variables are set.
 		// If document is on read only mode, we will draw all parts at once.
 		// Let's call default view the "part based view" and new view the "file based view".
-		if (app.file.readOnly)
-			app.file.fileBasedView = true;
-		else
-			app.file.partBasedView = true; // For Writer and Calc, this one should always be "true".
+		// On small-screen devices and tablets, Permission.js sets the UI in read-only mode
+		// until the user taps #mobile-edit-button. Start in fileBasedView so the user gets
+		// endless slide scrolling while viewing.
+		var mobileViewing =
+			window.mode.isSmallScreenDevice() || window.mode.isTablet();
+		if (app.file.readOnly || mobileViewing) app.file.fileBasedView = true;
 
 		this._partHeightTwips = 0; // Single part's height.
 		this._partWidthTwips = 0; // Single part's width. These values are equal to app.activeDocument.fileSize.x & app.activeDocument.fileSize.y when app.file.partBasedView is true.
 
 		this._partDimensions = []; // Width & Height of all the parts
+		this._fbCachedFileSize = null; // Cached filebased fileSize from the last status that carried partdimensions; used to prevent shrinking when a later message omits the field.
+
+		// View-mode persistence state machine (see _handleViewModeState).
+		this._viewModeRestored = false;
+		this._restoringViewMode = false;
+		this._lastReportedViewMode = null;
 
 		app.events.on('contextchange', this._onContextChange.bind(this));
 	},
@@ -61,24 +85,22 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 
 		const newContext = e.detail.context;
 		const oldContext = e.detail.oldContext;
-		const isDrawOrNotesPage = ['DrawPage', 'NotesPage'].includes(newContext);
+		const viewMode = IMPRESS_VIEW_MODES[newContext];
+		const isDrawOrNotesPage = newContext === 'DrawPage' || newContext === 'NotesPage';
 
 		if (isDrawOrNotesPage)
 			app.impress.notesMode = newContext === 'NotesPage';
 
 		if (app.map.uiManager.getCurrentMode() === 'notebookbar' && isDrawOrNotesPage) {
 			const targetElement = document.getElementById('notesmode');
-			if (!targetElement) return;
-
-			if (newContext === 'NotesPage')
-				targetElement.classList.add('selected');
-			else
-				targetElement.classList.remove('selected');
+			// Guard rather than return: a missing button must not skip the
+			// activeModes update, master handling or view-mode persistence below.
+			if (targetElement)
+				targetElement.classList.toggle('selected', newContext === 'NotesPage');
 		}
 
 		if (isDrawOrNotesPage) {
-			const mode = newContext === 'NotesPage' ? 2 : 0;
-			app.activeDocument.activeModes = [mode];
+			app.activeDocument.activeModes = [viewMode.activeMode];
 			TileManager.refreshTilesInBackground();
 			TileManager.update();
 		}
@@ -86,6 +108,49 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		if (newContext === 'MasterPage' || oldContext === 'MasterPage') {
 			app.socket.sendMessage('status');
 			this.invalidatePreviewsUponContextChange = true;
+		}
+
+		// Persist/restore the view mode for all three view contexts. Master
+		// view's activeModes=[1] is set from the .uno:SlideMasterPage state
+		// change (Map.StateChanges.js), so we don't touch activeModes here.
+		if (viewMode)
+			this._handleViewModeState(viewMode.mode);
+	},
+
+	// Restore the remembered view mode on first load, then report later user
+	// switches so they are persisted per user per document. We key off the
+	// first authoritative view context change ('normal'|'notes'|'master'),
+	// which means the view is live and a UNO mode command will take effect.
+	_handleViewModeState: function(mode) {
+		if (!this._viewModeRestored) {
+			this._viewModeRestored = true;
+			this._lastReportedViewMode = mode;
+
+			const saved = app.impress.savedViewMode;
+			// Documents always open in Normal, so restoring only ever enters a
+			// mode. Master view is an editing context, so skip restoring it on
+			// read-only documents - the UNO command would no-op, no echo would
+			// arrive, and the restore guard would stay stuck.
+			const canRestore = saved !== 'master' || !app.file.readOnly;
+			const target = Object.values(IMPRESS_VIEW_MODES).find((v) => v.mode === saved);
+			if (target && saved !== mode && canRestore) {
+				// Apply once; the resulting context change is our own echo and
+				// must not be reported back as a user action.
+				this._restoringViewMode = true;
+				this._lastReportedViewMode = saved;
+				app.map.sendUnoCommand(target.uno);
+			}
+			return;
+		}
+
+		if (this._restoringViewMode) {
+			this._restoringViewMode = false;
+			return;
+		}
+
+		if (mode !== this._lastReportedViewMode) {
+			this._lastReportedViewMode = mode;
+			app.socket.sendMessage('updateviewmode mode=' + mode);
 		}
 	},
 
@@ -125,8 +190,22 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 	},
 
 	newAnnotation: function (commentData) {
-		commentData.anchorPos = [app.activeDocument.activeLayout.viewedRectangle.x1, app.activeDocument.activeLayout.viewedRectangle.y1];
-		commentData.rectangle = [app.activeDocument.activeLayout.viewedRectangle.x1, app.activeDocument.activeLayout.viewedRectangle.y1, 566, 566];
+		// commentData.position (twips, top-left) lets the caller pin the new
+		// comment to a specific document point; used by the PDF click-to-place
+		// flow. Without it the marker lands at the current viewport top-left.
+		// commentData.size (twips, [w,h]) further pins the marker rectangle
+		// to a user-dragged area; without it the marker stays at the default
+		// 566x566 twips placeholder.
+		const anchorX = commentData.position
+			? commentData.position[0]
+			: app.activeDocument.activeLayout.viewedRectangle.x1;
+		const anchorY = commentData.position
+			? commentData.position[1]
+			: app.activeDocument.activeLayout.viewedRectangle.y1;
+		const w = commentData.size ? commentData.size[0] : 566;
+		const h = commentData.size ? commentData.size[1] : 566;
+		commentData.anchorPos = [anchorX, anchorY];
+		commentData.rectangle = [anchorX, anchorY, w, h];
 
 		commentData.parthash = app.impress.partList[this._selectedPart].hash;
 
@@ -141,12 +220,35 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		this._map = map;
 		map.addControl(this._preview);
 		map.on('updateparts', this.onUpdateParts, this);
+		map.on('commandstatechanged', this._onSlideSectionsCommandState, this);
 		app.events.on('updatepermission', this.onUpdatePermission.bind(this));
 
 		if (!map._docPreviews)
 			map._docPreviews = {};
 
 		map.uiManager.initializeSpecializedUI(this._docType);
+	},
+
+	// Sections arrive as a .uno:SlideSections state-change pushed by core, so
+	// the panel stays consistent with the async UNO dispatch.
+	_onSlideSectionsCommandState: function (e) {
+		if (!e || e.commandName !== '.uno:SlideSections')
+			return;
+
+		var sections = e.state;
+		if (typeof sections === 'string') {
+			try {
+				sections = JSON.parse(sections);
+			} catch (ex) {
+				console.warn('Failed to parse .uno:SlideSections state: ' + ex);
+				sections = [];
+			}
+		}
+		if (!Array.isArray(sections))
+			sections = [];
+
+		app.impress.sections = sections;
+		this._map.fire('updatesections', { sections: sections });
 	},
 
 	onResizeImpress: function () {
@@ -178,6 +280,7 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 
 	onRemove: function () {
 		clearTimeout(this._previewInvalidator);
+		this._map.off('commandstatechanged', this._onSlideSectionsCommandState, this);
 	},
 
 	_openMobileWizard: function(data) {
@@ -199,6 +302,78 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 				this._addButton.remove();
 			}
 		}
+
+		// Mobile Impress starts in fileBasedView for endless slide scrolling
+		// during the read-only UI phase. Flip back to partBasedView when the user enters
+		// edit mode
+		if (app.file.readOnly) return;
+		var mobile = window.mode.isSmallScreenDevice() || window.mode.isTablet();
+		if (!mobile) return;
+
+		if (e.detail.perm === 'edit' && app.file.fileBasedView)
+			this._switchToPartBasedView();
+		else if (
+			(e.detail.perm === 'readonly' || e.detail.perm === 'view') &&
+			!app.file.fileBasedView
+		)
+			this._switchToFileBasedView();
+	},
+
+	_switchToPartBasedView: function () {
+		app.file.fileBasedView = false;
+		this._fbCachedFileSize = null;
+
+		// Collapse the stacked canvas back to a single slide
+		app.activeDocument.fileSize = new cool.SimplePoint(
+			this._partWidthTwips,
+			this._partHeightTwips,
+		);
+		app.activeDocument.swapLayout(new ViewLayoutBase());
+		app.activeDocument.activeLayout.viewSize =
+			app.activeDocument.fileSize.clone();
+		this._updateMaxBounds(true, true);
+	},
+
+	// Total fileSize for filebased view: width = max width across parts (so
+	// landscape pages aren't clipped by Leaflet's maxBounds), height = sum of
+	// per-part heights plus _spaceBetweenParts between each pair.
+	_computeFileBasedFileSize: function () {
+		// Prefer per-part dimensions when available. _partWidthTwips and
+		// _partHeightTwips reflect the current selected page (the caller in
+		// _onStatusMsg overwrites them from statusJSON.width/height) and must
+		// not seed maxWidth here - otherwise switching to a narrower page
+		// would shrink fileSize.x and clip wider pages.
+		if (this._partDimensions.length === this._parts && this._parts > 0) {
+			var maxWidth = 0;
+			var totalHeight = 0;
+			for (var i = 0; i < this._parts; i++) {
+				maxWidth = Math.max(maxWidth, this.getPartWidth(i));
+				totalHeight += this.getPartHeight(i);
+			}
+			totalHeight += this._parts * this._spaceBetweenParts;
+			this._fbCachedFileSize = new cool.SimplePoint(maxWidth, totalHeight);
+			return this._fbCachedFileSize.clone();
+		}
+		if (this._fbCachedFileSize)
+			return this._fbCachedFileSize.clone();
+		// First message before partdimensions from statusMsg ever arrives.
+		return new cool.SimplePoint(
+			this._partWidthTwips,
+			this._parts * (this._partHeightTwips + this._spaceBetweenParts),
+		);
+	},
+
+	_switchToFileBasedView: function () {
+		// fileSize stays as the canonical "total document extent" in twips for
+		// the consumers that still read it directly. The new ViewLayoutFileBased
+		// owns its own viewSize, computed from the per-part rectangles.
+		app.activeDocument.fileSize = this._computeFileBasedFileSize();
+		app.activeDocument.swapLayout(new ViewLayoutFileBased());
+		// Flip the flag after swapLayout so paint code never sees the flag true
+		// while activeLayout still points at the previous ViewLayoutBase.
+		app.file.fileBasedView = true;
+		this._updateMaxBounds(true, true);
+		TileManager.updateFileBasedView();
 	},
 
 	_onCommandValuesMsg: function (textMsg) {
@@ -213,8 +388,23 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			return;
 		}
 
+		if (values.type === 'vectortile') {
+			if (this._vectorThumbnails) {
+				this._vectorThumbnails.handleVectorTileResponse(values);
+			}
+			return;
+		}
+
 		if (values.comments) {
-			app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).importComments(values.comments);
+			var comments = Array.isArray(values.comments)
+				? values.comments
+				: Object.values(values.comments);
+			comments.forEach(function(comment) {
+				comment.id = String(comment.id);
+				if (comment.parentId !== undefined)
+					comment.parentId = String(comment.parentId);
+			});
+			app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).importComments(comments);
 		} else {
 			window.L.CanvasTileLayer.prototype._onCommandValuesMsg.call(this, textMsg);
 		}
@@ -225,8 +415,15 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		if (part !== this._selectedPart) {
 			this._map.deselectAll(); // Deselect all first. This is a single selection.
 			this._map.setPart(part, true);
-			this._map.fire('setpart', {selectedPart: this._selectedPart});
 		}
+		// Fire 'setpart' even when the local _selectedPart was already updated
+		// synchronously by Parts.js setPart (fileBasedView path), so listeners
+		// waiting on server confirmation are not stuck.
+		this._map.fire('setpart', {
+			selectedPart: this._selectedPart,
+			parts: this._parts,
+			docType: this._docType
+		});
 	},
 
 	_onStatusMsg: function (textMsg) {
@@ -237,10 +434,23 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		textMsg = textMsg.replace('status: ', '');
 		textMsg = textMsg.replace('statusupdate: ', '');
 		if (statusJSON.width && statusJSON.height && this._documentInfo !== textMsg) {
+			let dimensionsChanged = false;
 			if (statusJSON.partdimensions) {
+				const oldDims = this._partDimensions;
 				this._partDimensions = [];
 				for (let i = 0; i < statusJSON.partdimensions.length; i++) {
 					this._partDimensions.push(new cool.SimplePoint(statusJSON.partdimensions[i].width, statusJSON.partdimensions[i].height));
+				}
+				if (!oldDims || oldDims.length !== this._partDimensions.length) {
+					dimensionsChanged = true;
+				} else {
+					for (let i = 0; i < oldDims.length; i++) {
+						if (oldDims[i].x !== this._partDimensions[i].x ||
+							oldDims[i].y !== this._partDimensions[i].y) {
+							dimensionsChanged = true;
+							break;
+						}
+					}
 				}
 			}
 
@@ -258,19 +468,23 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			this._partWidthTwips = app.activeDocument.fileSize.x;
 
 			if (app.file.fileBasedView) {
-				let totalHeight = 0; // Total height in twips.
-				if (this._partDimensions.length === this._parts) {
-					for (let i = 0; i < this._parts; i++) {
-						totalHeight += this.getPartHeight(i);
-					}
-				}
-				else
-					totalHeight = this._parts * app.activeDocument.fileSize.y;
-				totalHeight += (this._parts) * this._spaceBetweenParts; // Space between parts.
-				app.activeDocument.fileSize.y = totalHeight;
+				// Rebuild the full filebased fileSize: max width across parts
+				// and the stacked total height. Both must be set before
+				// _updateMaxBounds below so Leaflet's max bounds cover the
+				// widest page.
+				app.activeDocument.fileSize = this._computeFileBasedFileSize();
 			}
 
 			app.activeDocument.activeLayout.viewSize = app.activeDocument.fileSize.clone();
+
+			// Rebuild the per-part rectangles in the filebased layout whenever
+			// part dimensions arrive (or any status update reshapes the parts).
+			if (
+				app.file.fileBasedView &&
+				app.activeDocument.activeLayout.type === 'ViewLayoutFileBased'
+			) {
+				app.activeDocument.activeLayout.reset();
+			}
 
 			let allPagesResized = !statusJSON.currentpageresized;
 			this._updateMaxBounds(true, allPagesResized);
@@ -308,13 +522,24 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 				app.activeDocument.activeModes = [mode];
 				this._map.fire('impressmodechanged', {mode: mode});
 
-				this._map.fire('updateparts', {});
+				this._map.fire('updateparts', {
+					selectedPart: this._selectedPart,
+					parts: this._parts,
+					docType: this._docType
+				});
 
 				if (refreshAnnotation)
 					app.socket.sendMessage('commandvalues command=.uno:ViewAnnotations');
+
+				// Fetch slide sections data
+				app.socket.sendMessage('getslidesections');
 			}
 
 			this._documentInfo = textMsg;
+
+			if (dimensionsChanged) {
+				this._invalidateAllPreviews();
+			}
 		}
 
 		if (app.file.fileBasedView)

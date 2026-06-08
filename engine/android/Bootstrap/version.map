@@ -1,0 +1,11 @@
+dummy {
+     global:
+        Java_*;
+        JNI_OnLoad;
+        _ZTI*; _ZTS*; # weak RTTI symbols for C++ exceptions
+        cokit_*;
+        cok_*;
+        kit_open_urandom;
+    local:
+        *;
+};

@@ -1,18 +1,23 @@
-<p align="right"><a href="#gitpod"><img alt="Open in Gitpod" src="https://gitpod.io/button/open-in-gitpod.svg"></a></p>
-
 # Collabora Online
-<!--
-[![Main: Pull request policy](https://img.shields.io/badge/Main-PRs%20can%20be%20merge%20without%20approval-42BC00?logoColor=42BC00&logo=git "Main release is still distant. Thanks for your support and contributions! :)")](https://github.com/CollaboraOnline/online/blob/main/CONTRIBUTING.md#contributing-to-source-code)
--->
-[![Main: Pull request policy](https://img.shields.io/badge/Main-protected%2C%20PRs%20need%20approval-red?logoColor=lightred&logo=git "Collabora Team is preparing for the next release, therefore 'main' branch is protected now, PRs need 1 review before merging. Thanks for your support and contributions! :)")](https://github.com/CollaboraOnline/online/blob/main/CONTRIBUTING.md#contributing-to-source-code)
+
+> [!IMPORTANT]
+> **The CollaboraOnline/online.mirror repository on GitHub is a read-only mirror.**
+> Collabora Online is developed on our Gerrit
+> instance at **https://gerrit.collaboraoffice.com**; the GitHub repository only mirrors that
+> source code.
+>
+> - **Code contributions** go through Gerrit, not GitHub. Pull requests are disabled here; see
+>   [CONTRIBUTING.md](CONTRIBUTING.md#contributing-to-source-code) for how to submit a patch.
+> - **Report issues** at the [CollaboraOnline/online issue tracker](https://github.com/CollaboraOnline/online/issues/new/choose).
+
+[![Development: Gerrit](https://img.shields.io/badge/Development-Gerrit-orange?logo=git "Code development and review happen on Gerrit. GitHub pull requests are disabled.")](https://gerrit.collaboraoffice.com)
 
 
 [![Matrix](https://img.shields.io/badge/Matrix-%23cool--dev-turquoise.svg)](https://matrix.to/#/#cool-dev:matrix.org)
 [![Telegram](https://img.shields.io/badge/Telegram-Collabora%20Online-green.svg)](https://t.me/CollaboraOnline)
 [![Forum](https://img.shields.io/badge/Forum-Discourse-blue.svg)](https://forum.collaboraonline.com/)
-[![Website](https://img.shields.io/badge/Website-collaboraonline.github.io-blueviolet.svg)](https://collaboraonline.github.io/)
+[![Website](https://img.shields.io/badge/Website-www.collaboraoffice.org-blueviolet.svg)](https://www.collaboraoffice.org/)
 [![L10n](https://img.shields.io/badge/L10n-Weblate-lightgrey.svg)](https://hosted.weblate.org/projects/collabora-online/)
-[![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/CollaboraOnline/online)
 
 
 **Secure Document Collaboration. Controlled by You.**
@@ -24,7 +29,7 @@
 * [Collabora Online](https://www.collaboraonline.com/collabora-online/)
 * [Collabora Office](https://www.collaboraonline.com/collabora-office/)
 * [Collabora Office for iOS and Android](https://www.collaboraonline.com/collabora-office-android-ios/)
-* For additional details, build instructions, downloads, and more, please visit [collaboraonline.github.io](https://collaboraonline.github.io/). You can also explore the [SDK Documentation](https://sdk.collaboraonline.com/).
+* For additional details, build instructions, downloads, and more, please visit [www.collaboraoffice.org](https://www.collaboraoffice.org/). You can also explore the [SDK Documentation](https://sdk.collaboraonline.com/).
 
 ## Key features
 * View and edit text documents, spreadsheets, presentations & more
@@ -102,15 +107,15 @@ This project has several components:
 
 ## Further recommended reading with build details
 
-* **[Build Collabora online](https://collaboraonline.github.io/post/build-code/)**
+* **[Build Collabora online](https://www.collaboraoffice.org/post/build-code/)**
 
 ## iOS and Android apps
 
 ### Building
 
 See the corresponding web pages:
-* **[Build for iOS](https://collaboraonline.github.io/post/build-code-ios/)**
-* **[Build for Android](https://collaboraonline.github.io/post/build-code-android/)**
+* **[Build for iOS](https://www.collaboraoffice.org/post/build-code-ios/)**
+* **[Build for Android](https://www.collaboraoffice.org/post/build-code-android/)**
 
 ### Releases and pre-releases
 
@@ -137,10 +142,6 @@ into `main`, you should make a backport pull request against
 `distro/collabora/co-25.04-mobile`. Please don't make pull requests directly
 against `distro/collabora/co-25.04-mobile` (i.e. without the change first being
 merged into `main`).
-
-## GitPod
-
-Head over to https://collaboraonline.github.io/post/build-code/#build-code-on-gitpod and follow the steps.
 
 ## Admin Panel
 

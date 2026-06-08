@@ -16,10 +16,11 @@
 
 #pragma once
 
+#include <common/ContainerUtil.hpp>
+
 #include <chrono>
 #include <memory>
 #include <string>
-#include <unordered_map>
 
 class StreamSocket;
 namespace http
@@ -33,15 +34,10 @@ public:
     static void handleRequest(const std::string& relPath,
                               const std::shared_ptr<StreamSocket>& socket,
                               const std::string& serverUri);
-    static const std::string& getProxyRatingServer()
-    {
-        static const std::string ProxyRatingServer = "https://rating.collaboraonline.com";
-        return ProxyRatingServer;
-    }
 
 private:
     static std::chrono::system_clock::time_point MaxAge;
-    static std::unordered_map<std::string, std::shared_ptr<http::Response>> CacheFileHash;
+    static Util::UnorderedStringMap<std::shared_ptr<http::Response>> CacheFileHash;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

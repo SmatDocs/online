@@ -13,6 +13,9 @@
 
 #include "ContentType.hpp"
 
+#include <common/Util.hpp>
+
+#include <string>
 #include <string_view>
 #include <unordered_map>
 
@@ -156,7 +159,7 @@ std::string_view fromFileName(const std::string_view fileName)
         { "png", "image/png" },
         { "gif", "image/gif" },
         { "tiff", "image/tiff" },
-        { "jpg", "image/jpg" },
+        { "jpg", "image/jpeg" },
         { "jpeg", "image/jpeg" },
         { "pdf", "application/pdf" },
     };
@@ -166,12 +169,12 @@ std::string_view fromFileName(const std::string_view fileName)
         return "application/octet-stream";
 
     // Extension only (after the last dot, no path separators).
-    auto ext = fileName.substr(dotPos + 1);
+    std::string ext(fileName.substr(dotPos + 1));
     const auto slashPos = ext.rfind('/');
-    if (slashPos != std::string_view::npos)
+    if (slashPos != std::string::npos)
         return "application/octet-stream";
 
-    const auto it = contentTypes.find(ext);
+    const auto it = contentTypes.find(Util::toLowerInplace(ext));
     if (it != contentTypes.end())
         return it->second;
 

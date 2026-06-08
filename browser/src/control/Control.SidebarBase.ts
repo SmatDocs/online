@@ -25,6 +25,7 @@ enum SidebarType {
 
 abstract class SidebarBase extends JSDialogComponent {
 	type: SidebarType;
+	resizeTaskId: TaskId | null = null;
 
 	documentContainer: HTMLDivElement;
 	wrapper: HTMLElement;
@@ -40,7 +41,7 @@ abstract class SidebarBase extends JSDialogComponent {
 			mobileWizard: this,
 			map: this.map,
 			windowId: WindowId.Sidebar,
-			cssClass: `jsdialog sidebar`, // use sidebar css for now, maybe have seperate css for navigator later
+			cssClass: `jsdialog sidebar`, // use sidebar css for now, maybe have separate css for navigator later
 			useScrollAnimation: false, // icon views cause jump on sidebar open
 			suffix: 'sidebar',
 			callback: this.callback.bind(this),
@@ -170,12 +171,18 @@ abstract class SidebarBase extends JSDialogComponent {
 		return false;
 	}
 	onResize() {
-		this.wrapper.style.maxHeight =
-			this.documentContainer.getBoundingClientRect().height + 'px';
-		if (this.container) {
-			(this.container as HTMLElement).style.height =
+		if (this.resizeTaskId)
+			app.layoutingService.cancelLayoutingTask(this.resizeTaskId);
+
+		this.resizeTaskId = app.layoutingService.appendLayoutingTask(() => {
+			this.wrapper.style.maxHeight =
 				this.documentContainer.getBoundingClientRect().height + 'px';
-		}
+			if (this.container) {
+				(this.container as HTMLElement).style.height =
+					this.documentContainer.getBoundingClientRect().height + 'px';
+			}
+			this.resizeTaskId = null;
+		});
 	}
 
 	callback(

@@ -24,11 +24,13 @@
  * customEntryRenderer - specifies if entries have custom content which is rendered by the core
  */
 
-/* global JSDialog app _ $ _UNO */
+/* global JSDialog app _ $ */
 
 JSDialog.comboboxEntry = function (parentContainer, data, builder) {
 	var entry = window.L.DomUtil.create('div', 'ui-combobox-entry ' + builder.options.cssClass, parentContainer);
 	entry.id = data.id;
+	if (data.class)
+		entry.classList.add(data.class);
 	entry.setAttribute('role', 'option');
 	entry.setAttribute('tabindex', '-1');
 	entry.setAttribute('data-filter-text', data.text.toLowerCase());
@@ -44,7 +46,10 @@ JSDialog.comboboxEntry = function (parentContainer, data, builder) {
 	if (data.icon) {
 		var icon = window.L.DomUtil.create('img', 'ui-combobox-icon', entry);
 		icon.alt = '';
-		builder._isStringCloseToURL(data.icon) ? icon.src = data.icon : app.LOUtil.setImage(icon,  app.LOUtil.getIconNameOfCommand(data.icon), builder.map);
+		builder._isStringCloseToURL(data.icon) ? icon.src = data.icon : app.LOUtil.setImage(icon,  app.LOUtil.getIconNameOfCommand(data.icon), builder.map, true);
+		if (data.hasSubMenu) {
+			window.L.DomUtil.addClass(entry, 'ui-has-img');
+		}
 	}
 
 	if (data.hint) {
@@ -53,6 +58,11 @@ JSDialog.comboboxEntry = function (parentContainer, data, builder) {
 
 	var content = window.L.DomUtil.create('span', '', entry);
 	content.innerText = data.text;
+
+	if (data.shortcut) {
+		var shortcut = window.L.DomUtil.create('span', 'shortcut', entry);
+		shortcut.innerText = data.shortcut;
+	}
 
     if (data.selected) {
         entry.setAttribute('aria-selected', 'true');
@@ -106,7 +116,7 @@ JSDialog.comboboxEntry = function (parentContainer, data, builder) {
 };
 
 JSDialog.mobileComboboxEntry = function(parentContainer, data, builder) {
-	var comboboxEntry = window.L.DomUtil.create('p', builder.options.cssClass, parentContainer);
+	var comboboxEntry = window.L.DomUtil.create('p', builder.options.cssClass + ' .ui-mobile-combobox-entry', parentContainer);
 	comboboxEntry.textContent = builder._cleanText(data.text);
 
 	comboboxEntry.parent = data.parent;
@@ -115,7 +125,6 @@ JSDialog.mobileComboboxEntry = function(parentContainer, data, builder) {
 		window.L.DomUtil.addClass(comboboxEntry, data.style);
 
 	comboboxEntry.addEventListener('click', function () {
-		builder.refreshSidebar = true;
 		if (builder.wizard)
 			builder.wizard.goLevelUp();
 		builder.callback('combobox', 'selected', comboboxEntry.parent, data.pos + ';' + comboboxEntry.textContent, builder);
@@ -184,11 +193,23 @@ JSDialog.mobileCombobox = function (parentContainer, data, builder) {
 		$(container).hide();
 
 	container.onSelect = function (pos) {
-		console.error('Not implemented: select entry: ' + pos);
+		var nodeEntries = contentDiv.querySelectorAll('.ui-mobile-combobox-entry');
+		for (var i = 0; i < nodeEntries.length; i++)
+			window.L.DomUtil.removeClass(nodeEntries[i], 'selected');
+		if (nodeEntries[pos])
+			window.L.DomUtil.addClass(nodeEntries[pos], 'selected');
+	};
+
+	container.onUnSelect = function (pos) {
+		var nodeEntries = contentDiv.querySelectorAll('.ui-mobile-combobox-entry');
+		if (nodeEntries[pos])
+			window.L.DomUtil.removeClass(nodeEntries[pos], 'selected');
 	};
 
 	container.onSetText = function (text) {
-		console.error('Not implemented: setText: ' + text);
+		var input = leftDiv.querySelector('input.ui-edit');
+		if (input && document.activeElement !== input)
+			input.value = text;
 	};
 };
 
@@ -203,18 +224,9 @@ function _extractText(selectCommandData) {
 JSDialog.combobox = function (parentContainer, data, builder) {
 	var container = window.L.DomUtil.create('div', 'ui-combobox ' + builder.options.cssClass, parentContainer);
 	container.id = data.id;
-	var inputId = data.id + '-input-' + builder.options.suffix;
 
-	var labelText = data.label ? data.label : (data.command ? _UNO(data.command, 'label', true) : null);
-	if (labelText) {
-		var label = L.DomUtil.create('label', 'ui-combobox-label ' + builder.options.cssClass, container);
-		label.textContent = labelText + ':';
-		label.htmlFor = inputId;
-	}
-
-	var wrapper = window.L.DomUtil.create('div', 'ui-combobox-wrapper ' + builder.options.cssClass, container);
-	var content = window.L.DomUtil.create('input', 'ui-combobox-content ' + builder.options.cssClass, wrapper);
-	content.id = inputId;
+	var content = window.L.DomUtil.create('input', 'ui-combobox-content ' + builder.options.cssClass, container);
+	content.id = data.id + '-input-' + builder.options.suffix;
 	content.value = data.text;
 	content.role = 'combobox';
 	content.setAttribute('autocomplete', 'off');
@@ -225,7 +237,7 @@ JSDialog.combobox = function (parentContainer, data, builder) {
 	var dropDownId = JSDialog.CreateDropdownEntriesId(data.id);
 	content.setAttribute('aria-expanded', false);
 
-	var button = window.L.DomUtil.create('button', 'ui-combobox-button ' + builder.options.cssClass, wrapper);
+	var button = window.L.DomUtil.create('button', 'ui-combobox-button ' + builder.options.cssClass, container);
 	button.setAttribute('aria-expanded', false);
 
 	const dataAriaLabel = data.aria && data.aria.label ? data.aria.label : '';

@@ -22,6 +22,7 @@
 #include <common/Log.hpp>
 #include <common/NumUtil.hpp>
 #include <common/SigUtil.hpp>
+#include <common/Unit.hpp>
 #include <common/Util.hpp>
 
 #include <csignal>
@@ -290,6 +291,7 @@ static bool safeRemoveDir(const std::string& path)
 void removeAuxFolders(const std::string &root)
 {
     FileUtil::removeFile(Poco::Path(root, "tmp").toString(), true);
+    FileUtil::removeFile(Poco::Path(root, "systmp").toString(), true);
     FileUtil::removeFile(Poco::Path(root, "linkable").toString(), true);
 }
 #endif
@@ -310,9 +312,16 @@ void removeAssocTmpOfJail(const std::string &root)
 
     jailPath.popDirectory();
     jailPath.pushDirectory("tmp");
-    jailPath.pushDirectory(std::string("cool-") + jailId);
 
-    FileUtil::removeFile(jailPath.toString(), true);
+    Poco::Path coolTmpPath(jailPath);
+    coolTmpPath.pushDirectory(std::string("cool-") + jailId);
+    FileUtil::removeFile(coolTmpPath.toString(), true);
+
+    // Also remove the per-jail systemplate copy created when
+    // sysTemplateIncomplete is true (read-only systemplate).
+    Poco::Path sysTemplatePath(jailPath);
+    sysTemplatePath.pushDirectory(std::string("systemplate-") + jailId);
+    FileUtil::removeFile(sysTemplatePath.toString(), true);
 #endif
 }
 
@@ -386,7 +395,9 @@ void cleanupJails(const std::string& root)
             // Modern jails should look like this:
             //   jails/<coolwsd-pid>-<random>/<random>/
             size_t pidSepPos = jail.find('-');
-            if (pidSepPos != std::string::npos)
+            // Unit-tests remove their jails, unless they fail.
+            // Here, we don't remove orphaned jails while unit-testing to aid debugging.
+            if (!UnitWSD::isUnitTesting() && pidSepPos != std::string::npos)
             {
                 bool skip = false;
                 const std::string_view pidStr = std::string_view(jail).substr(0, pidSepPos);
@@ -431,15 +442,13 @@ void cleanupJails(const std::string& root)
             // Remove legacy things that look like jails
             else if (tryRemoveJail(childDir))
             {
-                static size_t warned = 0;
-                if (!(warned++))
-                    LOG_WRN("Cleaned legacy jail without pid prefix after upgrade " << childDir);
+                LOG_WRN_ONCE("Cleaned legacy jail without pid prefix after upgrade " << childDir);
             }
             // else legacy tmp or linkable
         }
     }
 
-    // Cleanup legacy top-level 'tmp' and 'linkable' directories if empty
+    // Cleanup top-level 'tmp', 'systmp', and 'linkable' directories unconditionally.
     removeAuxFolders(root);
 
     // Cleanup top-level 'jails' directory if empty

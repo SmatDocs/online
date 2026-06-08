@@ -20,6 +20,10 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 		impressHelper.removeShapeSelection();
 
 		helper.typeIntoDocument('{ctrl}{a}');
+
+		cy.getFrameWindow().then(function(win) {
+			helper.processToIdle(win);
+		});
 	}
 
 	function selectFullTable() {
@@ -90,7 +94,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 			.should('have.attr', 'x', '7290');
 
 		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
-			.should('have.attr', 'y', '5644');
+			.should('have.attr', 'y', '5597');
 	});
 
 	it.skip('Insert column before.', function() {
@@ -123,7 +127,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 			.should('have.attr', 'x', '14339');
 
 		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
-			.should('have.attr', 'y', '5644');
+			.should('have.attr', 'y', '5597');
 	});
 
 	it('Insert column after.', function() {
@@ -154,7 +158,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 			.should('have.attr', 'x', '7290');
 
 		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
-			.should('have.attr', 'y', '5644');
+			.should('have.attr', 'y', '5597');
 	});
 
 	it('Delete row.', function() {
@@ -208,7 +212,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 			.should('have.attr', 'x', '7290');
 
 		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
-			.should('have.attr', 'y', '5644');
+			.should('have.attr', 'y', '5597');
 	});
 
 	it('Merge Row', function() {
@@ -238,7 +242,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 			.should('have.attr', 'x', '7290');
 
 		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
-			.should('have.attr', 'y', '5644');
+			.should('have.attr', 'y', '5597');
 	});
 
 	it('Merge Column', function() {
@@ -268,7 +272,7 @@ describe.skip(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Table Operation', func
 			.should('have.attr', 'x', '7290');
 
 		cy.cGet('#document-container g.Page .TextParagraph .TextPosition')
-			.should('have.attr', 'y', '5644');
+			.should('have.attr', 'y', '5597');
 	});
 
 	it('Delete Table', function() {

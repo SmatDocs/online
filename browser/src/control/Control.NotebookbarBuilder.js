@@ -399,20 +399,21 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 					'action': !window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf',
 					'text': _('PDF Document (.pdf)'),
 					'command': !window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf'
+				},
+				{
+					'action': 'exportpdf' ,
+					'text': _('PDF Document (.pdf) with options'),
+					'command': 'exportpdf'
+				},
+				{
+					'action': 'downloadas-html',
+					'text': _('HTML File (.html)')
+				},
+				{
+					'action': 'downloadas-md',
+					'text': _('Markdown (.md)')
 				}
 			];
-			submenuOpts.push({
-				'action': 'downloadas-html',
-				'text': _('HTML File (.html)')
-			});
-			if (!window.ThisIsTheAndroidApp)
-				submenuOpts.push({
-					'action': 'exportpdf' ,
-					'text': !window.mode.isCODesktop ?
-						_('PDF Document (.pdf) as...') :
-						_('PDF Document (.pdf) with options'),
-					'command': 'exportpdf'
-				});
 		} else if (docType === 'spreadsheet') {
 			submenuOpts = [
 				{
@@ -439,16 +440,13 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 					'action': !window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf',
 					'text': _('PDF Document (.pdf)'),
 					'command': !window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf'
+				},
+				{
+					'action': 'exportpdf' ,
+					'text': _('PDF Document (.pdf) with options'),
+					'command': 'exportpdf'
 				}
 			];
-			if (!window.ThisIsTheAndroidApp)
-				submenuOpts.push({
-					'action': 'exportpdf' ,
-					'text': !window.mode.isCODesktop ?
-						_('PDF Document (.pdf) as...') :
-						_('PDF Document (.pdf) with options'),
-					'command': 'exportpdf'
-				});
 		} else if (docType === 'presentation') {
 			submenuOpts = [
 				{
@@ -475,21 +473,13 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 					'action': !window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf',
 					'text': _('PDF Document (.pdf)'),
 					'command': !window.ThisIsAMobileApp ? 'exportdirectpdf' : 'downloadas-pdf',
+				},
+				{
+					'action': 'exportpdf',
+					'text': _('PDF Document (.pdf) with options'),
+					'command': 'exportpdf'
 				}
 			];
-			if (!window.ThisIsTheAndroidApp)
-				submenuOpts.push({
-					'action': 'exportpdf',
-					'text': !window.mode.isCODesktop ?
-						_('PDF Document (.pdf) as...') :
-						_('PDF Document (.pdf) with options'),
-					'command': 'exportpdf'
-				});
-			if (window.extraExportFormats.includes('impress_swf'))
-				submenuOpts.push({
-					'action': 'downloadas-swf',
-					'text': _('Shockwave Flash (.swf)')
-				});
 			if (window.extraExportFormats.includes('impress_svg'))
 				submenuOpts.push({
 					'action': 'downloadas-svg',
@@ -608,6 +598,10 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 				{
 					'action': 'exportas-epub',
 					'text': _('EPUB (.epub)')
+				},
+				{
+					'action': 'exportas-md',
+					'text': _('Markdown (.md)')
 				}
 			];
 		} else if (docType === 'spreadsheet') {
@@ -666,7 +660,6 @@ window.L.Control.NotebookbarBuilder = window.L.Control.JSDialogBuilder.extend({
 		$(control.label).unbind('click');
 		$(control.container).click(function () {
 			if (!$(control.container).hasClass('disabled')) {
-				builder.refreshSidebar = true;
 				var command = data.command + '?On:bool=true';
 				builder.callback('toolbutton', 'click', control.button, command, builder);
 			}

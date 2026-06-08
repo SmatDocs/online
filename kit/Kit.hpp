@@ -20,26 +20,12 @@
 #include <net/Socket.hpp>
 #include <wsd/TileDesc.hpp>
 
-#include <LibreOfficeKit/LibreOfficeKitTypes.h>
+#include <COKit/COKitTypes.h>
 
 #include <Poco/Util/XMLConfiguration.h>
 
 #include <map>
 #include <string>
-
-#include <common/Util.hpp>
-#include <common/StateEnum.hpp>
-#include <common/Session.hpp>
-#include <common/ThreadPool.hpp>
-#include <kit/KitQueue.hpp>
-#include <kit/LogUI.hpp>
-
-#include <wsd/TileDesc.hpp>
-
-#include <Socket.hpp>
-
-#define LOK_USE_UNSTABLE_API
-#include <LibreOfficeKit/LibreOfficeKit.hxx>
 
 #if MOBILEAPP
 
@@ -54,11 +40,13 @@
 void runKitLoopInAThread();
 #endif
 
-namespace lok
+namespace kit
 {
 class Document;
 class Office;
 }
+struct COKitStruct;
+using COKit = COKitStruct;
 
 void lokit_main(
 #if !MOBILEAPP
@@ -78,7 +66,7 @@ void documentViewCallback(int type, const char* p, void* data);
 class Document;
 class DeltaGenerator;
 
-/// Descriptor class used to link a LOK
+/// Descriptor class used to link a COKit
 /// callback to a specific view.
 struct CallbackDescriptor
 {
@@ -149,7 +137,7 @@ enum class DocumentPasswordType : std::uint8_t
 };
 
 /// Check the ForkCounter, and if non-zero, fork more of them accordingly.
-void forkLibreOfficeKit(const std::string& childRoot, const std::string& sysTemplate,
+void forkCOKit(const std::string& childRoot, const std::string& sysTemplate,
                         const std::string& loTemplate, bool useMountNamespaces);
 
 class Document;
@@ -202,8 +190,8 @@ public:
     void setDocument(std::shared_ptr<Document> document) { _document = std::move(document); }
     const std::shared_ptr<Document>& getDocument() const { return _document; }
 
-    // unusual LOK event from another thread, push into our loop to process.
-    static bool pushToMainThread(LibreOfficeKitCallback callback, int type, const char* p,
+    // unusual COKit event from another thread, push into our loop to process.
+    static bool pushToMainThread(COKitCallback callback, int type, const char* p,
                                  void* data);
 
 #if defined(IOS) || defined(QTAPP) || defined(MACOS) || defined(_WIN32)
@@ -233,7 +221,7 @@ class ChildSession;
 class Document final : public std::enable_shared_from_this<Document>, private TilePrioritizer
 {
 public:
-    Document(const std::shared_ptr<lok::Office>& loKit, const std::string& jailId,
+    Document(const std::shared_ptr<kit::Office>& loKit, const std::string& jailId,
              const std::string& docKey, const std::string& docId, const std::string& url,
              const std::shared_ptr<WebSocketHandler>& websocketHandler, unsigned mobileAppDocId);
     ~Document() final;
@@ -284,7 +272,7 @@ public:
     void trimIfInactive();
     void trimAfterInactivity();
 
-    // LibreOfficeKit callback entry points
+    // COKit callback entry points
     static void GlobalCallback(int type, const char* p, void* data);
     static void ViewCallback(int type, const char* p, void* data);
 
@@ -384,7 +372,7 @@ private:
 
     std::string getDefaultBackgroundTheme(const std::shared_ptr<ChildSession>& session) const;
 
-    std::shared_ptr<lok::Document> load(const std::shared_ptr<ChildSession>& session,
+    std::shared_ptr<kit::Document> load(const std::shared_ptr<ChildSession>& session,
                                         const std::string& renderOpts);
 
     bool forwardToChild(std::string_view prefix, const std::vector<char>& payload);
@@ -432,11 +420,11 @@ public:
     /// Returns true iff we have a LOKit Document instance.
     bool isLoaded() const { return !!_loKitDocument; }
 
-    /// Return access to the lok::Office instance.
-    std::shared_ptr<lok::Office> getLOKit() const { return _loKit; }
+    /// Return access to the kit::Office instance.
+    std::shared_ptr<kit::Office> getLOKit() const { return _loKit; }
 
-    /// Return access to the lok::Document instance.
-    std::shared_ptr<lok::Document> getLOKitDocument();
+    /// Return access to the kit::Document instance.
+    std::shared_ptr<kit::Document> getLOKitDocument();
 
     const std::string& getObfuscatedFileId() const { return _obfuscatedFileId; }
 
@@ -487,7 +475,7 @@ private:
     void flushAndExit(int code);
 
 private:
-    std::shared_ptr<lok::Office> _loKit;
+    std::shared_ptr<kit::Office> _loKit;
     const std::string _jailId;
     /// URL-based key. May be repeated during the lifetime of WSD.
     const std::string _docKey;
@@ -498,9 +486,9 @@ private:
     std::string _jailedUrl;
     std::string _renderOpts;
 
-    std::shared_ptr<lok::Document> _loKitDocument;
+    std::shared_ptr<kit::Document> _loKitDocument;
 #ifdef __ANDROID__
-    static std::shared_ptr<lok::Document> _loKitDocumentForAndroidOnly;
+    static std::shared_ptr<kit::Document> _loKitDocumentForAndroidOnly;
     static std::weak_ptr<DocumentBroker> _documentBrokerForAndroidOnly;
 #endif
     std::unique_ptr<KitQueue> _queue;
@@ -542,7 +530,7 @@ private:
     /// For showing disconnected user info in the doc repair dialog.
     std::map<int, UserInfo> _sessionUserInfo;
 #ifdef __ANDROID__
-    friend std::shared_ptr<lok::Document> getLOKDocumentForAndroidOnly();
+    friend std::shared_ptr<kit::Document> getLOKDocumentForAndroidOnly();
     friend std::shared_ptr<DocumentBroker> getDocumentBrokerForAndroidOnly();
 #endif
 
@@ -573,17 +561,19 @@ TileWireId getCurrentWireId(bool increment = false);
 
 #ifdef __ANDROID__
 /// For the Android app, for now, we need access to the one and only document open to perform eg. saveAs() for printing.
-std::shared_ptr<lok::Document> getLOKDocumentForAndroidOnly();
+std::shared_ptr<kit::Document> getLOKDocumentForAndroidOnly();
 std::shared_ptr<DocumentBroker> getDocumentBrokerForAndroidOnly();
 #endif
 
-extern LibreOfficeKit* loKitPtr;
+extern COKit* loKitPtr;
 
 /// Check if URP is enabled
 bool isURPEnabled();
 
+extern Util::LoadTimings KitLoadTimings;
+
 /// Start a URP connection, checking if URP is enabled and there is not already an active URP session
-bool startURP(const std::shared_ptr<lok::Office>& LOKit, void** ppURPContext);
+bool startURP(const std::shared_ptr<kit::Office>& LOKit, void** ppURPContext);
 
 /// Ensure all recorded traces hit the disk
 void flushTraceEventRecordings();

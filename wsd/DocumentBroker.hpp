@@ -323,6 +323,11 @@ public:
     /// Returns an error message in case of failure, otherwise an empty string.
     std::string handleRenameFileCommand(std::string sessionId, std::string newFilename);
 
+    /// Server-side debug-overlay timing checkpoints; broadcast to all
+    /// clients as "serverloadtimings:" once the first tile flows.
+    Util::LoadTimings& loadTimings() { return _loadTimings; }
+    void recordFirstTileSent();
+
     /// Get whether the next save operation is an autosave.
     bool isNextSaveAutosave() const;
 
@@ -334,6 +339,10 @@ public:
     /// Check if uploading is needed, and start uploading.
     /// The current state of uploading must be introspected separately.
     void checkAndUploadToStorage(const std::shared_ptr<ClientSession>& session, bool justSaved);
+
+    /// Called when a session receives a fresh access token.
+    /// If a save is pending retry after 401, retries the upload.
+    void onTokenRefreshed(const std::shared_ptr<ClientSession>& session);
 
     /// Upload the document to Storage if it needs persisting.
     /// Results are logged and broadcast to users.
@@ -367,7 +376,7 @@ public:
 
     bool isAsyncUploading() const;
 
-    Poco::URI getPublicUri() const { return _uriPublic; }
+    const Poco::URI& getPublicUri() const { return _uriPublic; }
     const AdditionalFilePaths& getAdditionalFileUrisJailed() const { return _additionalFileUrisJailed; }
     const std::string& getJailId() const { return _jailId; }
     const std::string& getDocKey() const { return _docKey; }
@@ -1847,6 +1856,10 @@ private:
     std::chrono::steady_clock::time_point _createTime;
     std::chrono::milliseconds _loadDuration;
     std::chrono::milliseconds _wopiDownloadDuration;
+
+    Util::LoadTimings _loadTimings;
+    bool _firstTileSent = false;
+    bool _loadStampsSent = false;
 
     /// Versioning is used to prevent races between
     /// painting and invalidation.

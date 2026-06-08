@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <common/ContainerUtil.hpp>
 #include <net/Socket.hpp>
 #include <wsd/RequestDetails.hpp>
 #include <wsd/RequestVettingStation.hpp>
@@ -30,6 +31,8 @@
 /// Handles incoming connections and dispatches to the appropriate handler.
 class ClientRequestDispatcher final : public SimpleSocketHandler
 {
+    static constexpr int MaxInMemoryHttpRequestSize = 16 * 1024;
+
 public:
     static void InitStaticFileContentCache()
     {
@@ -58,6 +61,10 @@ private:
     /// Called after successful socket reads.
     void handleIncomingMessage(SocketDisposition& disposition) override;
 
+    /// Read the HTTP Header and create an HTTP Request.
+    ssize_t readHeader(const std::shared_ptr<StreamSocket>& socket, Poco::Net::HTTPRequest& request,
+                       std::chrono::duration<float, std::milli> delayMs);
+
     int getPollEvents(std::chrono::steady_clock::time_point /* now */,
                       int64_t& /* timeoutMaxMs */) override
     {
@@ -71,7 +78,7 @@ private:
     static bool allowPostFrom(const std::string& address);
 
     static bool allowConvertTo(const std::string& address, const Poco::Net::HTTPRequest& request,
-                               bool capabilityQuery, AsyncFn asyncCb);
+                               bool capabilityQuery, const AsyncFn& asyncCb);
 
     /// @return true if request has been handled synchronously and response sent, otherwise false
     bool handleRootRequest(const RequestDetails& requestDetails,
@@ -136,7 +143,7 @@ private:
                                 std::istream& message,
                                 SocketDisposition& disposition,
                                 const std::shared_ptr<StreamSocket>& socket,
-                                ssize_t headerSize);
+                                size_t headerSize);
 
     void finishedMessage(const Poco::Net::HTTPRequest& request,
                          const std::shared_ptr<StreamSocket>& socket,
@@ -146,8 +153,8 @@ private:
                            std::istream& message,
                            SocketDisposition& disposition,
                            const std::shared_ptr<StreamSocket>& socket,
-                           ssize_t headerSize,
-                           ssize_t contentSize,
+                           size_t headerSize,
+                           size_t contentSize,
                            bool eraseMessageFromSocket,
                            std::chrono::steady_clock::time_point now);
 #endif // !MOBILEAPP
@@ -202,6 +209,9 @@ private:
     std::streamsize _postContentPending = 0;
 #endif // !MOBILEAPP
 
+    /// The current position while reading the header.
+    std::size_t _headerPos = 0;
+
     /// The minimum number of RVS instances in flight to trigger cleanup.
     static constexpr std::size_t RvsLowWatermark = 1 * 1024;
 
@@ -221,8 +231,7 @@ private:
     /// This is a temporary storage until we get the WS upgrade. If we don't, we purge.
     /// Note: this is accessed exclusively from websrv_poll, through
     /// handleIncomingMessage and handleClientWsUpgrade. Do *not* access in the ctor/dtor!
-    static std::unordered_map<std::string, std::shared_ptr<RequestVettingStation>>
-        RequestVettingStations;
+    static Util::UnorderedStringMap<std::shared_ptr<RequestVettingStation>> RequestVettingStations;
 
     /// Cache for static files, to avoid reading and processing from disk.
     static std::map<std::string, std::string> StaticFileContentCache;

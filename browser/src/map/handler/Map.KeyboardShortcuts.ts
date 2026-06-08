@@ -149,6 +149,18 @@ class ShortcutDescriptor {
     }) {
         app.console.assert(keyCode !== null || key !== null, 'registering a keyboard shortcut without specifying either a key or a keyCode - this will result in an untriggerable shortcut');
 
+        // Layout independence: a single letter or digit key always has a
+        // fixed keyCode (the US-layout ASCII value), even though event.key
+        // changes by layout (physical F is event.key === 'а' on Russian).
+        // Auto-deriving keyCode from key here means a binding with just
+        // key:'f' still fires on the physical F key everywhere.
+        if (keyCode === null && key !== null && key.length === 1) {
+            const code = key.charCodeAt(0);
+            if (code >= 0x41 && code <= 0x5A) keyCode = code;            // A-Z
+            else if (code >= 0x61 && code <= 0x7A) keyCode = code - 0x20; // a-z
+            else if (code >= 0x30 && code <= 0x39) keyCode = code;        // 0-9
+        }
+
         this.docType = docType;
         this.eventType = eventType;
         this.modifier = modifier;
@@ -240,6 +252,8 @@ class KeyboardShortcuts {
                 shortcut.unoAction !== '.uno:CloseWin' &&
                 shortcut.viewType !== ViewType.ReadOnly) {
                 event.preventDefault();
+                this.map.uiManager.showViewModeAttention();
+
                 return true;
             }
 
@@ -338,6 +352,10 @@ keyboardShortcuts.definitions.set('default', new Array<ShortcutDescriptor>(
         Disable F2 in Writer, formula bar is unsupported, and messes with further input.
         Disable CTRL+SHIFT+N because core side template dialog is not supported on Online.
     */
+    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'b', unoAction: '.uno:Bold' }),
+    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'i', unoAction: '.uno:Italic' }),
+    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'u', unoAction: '.uno:Underline' }),
+
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL | Mod.SHIFT, key: 'N' }),
     new ShortcutDescriptor({ eventType: 'keydown', key: 'F1', dispatchAction: 'showhelp' }),
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.ALT, key: 'F1', dispatchAction: 'focustonotebookbar' }),
@@ -345,6 +363,7 @@ keyboardShortcuts.definitions.set('default', new Array<ShortcutDescriptor>(
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'p', dispatchAction: 'print' }),
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 's', dispatchAction: 'save', dispatchData: 'keyboard' }),
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL | Mod.SHIFT | Mod.ALT, key: 'V', unoAction: '.uno:PasteSpecial', platform: Platform.WINDOWS | Platform.LINUX | Platform.MAC | Platform.CHROMEOSAPP}),
+    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL | Mod.SHIFT, key: 'V', dispatchAction: '.uno:PasteSpecial', platform: Platform.CODAQT | Platform.CODAWINDOWS | Platform.CODAMAC }),
 
     // Calc.
     new ShortcutDescriptor({ docType: 'spreadsheet', eventType: 'keydown', modifier: Mod.CTRL | Mod.SHIFT, key: 'PageUp' }),
@@ -386,40 +405,62 @@ keyboardShortcuts.definitions.set('default', new Array<ShortcutDescriptor>(
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'm', preventDefault: false, platform: Platform.MAC }), // On MacOS, minimize window
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'q', preventDefault: false, platform: Platform.MAC }), // On MacOS, quit browser
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'w', platform: Platform.LINUX | Platform.WINDOWS | Platform.MAC, preventDefault: false }), // Close current tab
-    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'n', preventDefault: false }), // Open new browser window
+    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'n', dispatchAction: 'backstage-new', platform: Platform.CODAWINDOWS | Platform.CODAMAC | Platform.CODAQT }), // Open backstage "New" tab in desktop apps
+    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'n', preventDefault: false, platform: ~(Platform.CODAWINDOWS | Platform.CODAMAC | Platform.CODAQT) }), // Open new browser window (everywhere except desktop apps)
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 't', preventDefault: false }), // Open new browser tab
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: '`', preventDefault: false, platform: Platform.MAC }), // Cycle through windows
 ));
 
-// German shortcuts.
+// German shortcuts: only online-specific dispatchAction entries and
+// passthrough shortcuts.  UNO command bindings are generated from
+// Accelerators.xcu (see below).
 keyboardShortcuts.definitions.set('de', new Array<ShortcutDescriptor>(
     new ShortcutDescriptor({ eventType: 'keydown', key: 'F12', dispatchAction: 'saveas' }),
-
-    new ShortcutDescriptor({ docType: 'presentation', eventType: 'keydown', modifier: Mod.SHIFT, key: 'F9', unoAction: '.uno:GridVisible' }),
-    new ShortcutDescriptor({ docType: 'presentation', eventType: 'keydown', modifier: Mod.SHIFT, key: 'F3', unoAction: '.uno:ChangeCaseRotateCase' }),
-    new ShortcutDescriptor({ docType: 'presentation', eventType: 'keydown', modifier: Mod.SHIFT, key: 'F5', dispatchAction: 'presentation' }), // Already available without this shortcut.
-    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.SHIFT | Mod.CTRL, key: 'F', unoAction: '.uno:Bold' }),
-    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.SHIFT | Mod.CTRL, key: 'K', unoAction: '.uno:Italic' }),
-    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.SHIFT | Mod.CTRL, key: 'U', unoAction: '.uno:Underline' }),
-
-    new ShortcutDescriptor({ docType: 'text', eventType: 'keydown', modifier: Mod.SHIFT, key: 'F3', unoAction: '.uno:ChangeCaseRotateCase' }),
-    new ShortcutDescriptor({ docType: 'text', eventType: 'keydown', key: 'F5', unoAction: '.uno:GoToPage' }),
-    new ShortcutDescriptor({ docType: 'text', eventType: 'keydown',  modifier: Mod.ALT | Mod.CTRL, key: 's', dispatchAction: 'home-search' }),
-
-    new ShortcutDescriptor({ docType: 'spreadsheet', eventType: 'keydown', modifier: Mod.SHIFT, key: 'F3', unoAction: '.uno:FunctionDialog' }),
+    new ShortcutDescriptor({ docType: 'presentation', eventType: 'keydown', modifier: Mod.SHIFT, key: 'F5', dispatchAction: 'presentation' }),
+    new ShortcutDescriptor({ docType: 'text', eventType: 'keydown', modifier: Mod.ALT | Mod.CTRL, key: 's', dispatchAction: 'home-search' }),
     new ShortcutDescriptor({ docType: 'spreadsheet', eventType: 'keydown', modifier: Mod.SHIFT, key: 'F2', dispatchAction: 'insertcomment' }),
     new ShortcutDescriptor({ docType: 'spreadsheet', eventType: 'keydown', key: 'F4', dispatchAction: 'togglerelative' }),
-    new ShortcutDescriptor({ docType: 'spreadsheet', eventType: 'keydown', key: 'F9', unoAction: '.uno:Calculate' }),
     new ShortcutDescriptor({ docType: 'spreadsheet', eventType: 'keydown', key: 'F5', dispatchAction: 'focusonaddressinput' }),
-    new ShortcutDescriptor({ docType: 'spreadsheet', eventType: 'keydown', modifier: Mod.ALT, key: '0', unoAction: '.uno:FormatCellDialog' }),
-
     // Passthrough some system shortcuts
     new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL | Mod.SHIFT, key: '`', preventDefault: false, platform: Platform.MAC }), // Cycle through windows
 ));
 
-// French shortcuts.
-keyboardShortcuts.definitions.set('fr', new Array<ShortcutDescriptor>(
-    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'g', unoAction: '.uno:Bold' }),
+// Danish shortcuts: same caveats as for german
+keyboardShortcuts.definitions.set('da', new Array<ShortcutDescriptor>(
+    new ShortcutDescriptor({ eventType: 'keydown', modifier: Mod.CTRL, key: 'b', dispatchAction: 'home-search' }),
 ));
+
+// Register per-language keyboard shortcuts generated from core's
+// Accelerators.xcu by scripts/unoshortcuts.py.
+if (typeof unoShortcutsL10NKeyBindings !== 'undefined') {
+    for (const [lang, bindings] of Object.entries(unoShortcutsL10NKeyBindings)) {
+        let existing = keyboardShortcuts.definitions.get(lang);
+        if (!existing) {
+            existing = new Array<ShortcutDescriptor>();
+            keyboardShortcuts.definitions.set(lang, existing);
+        }
+
+        // Track key+modifier combos already defined manually so we
+        // don't create duplicates (which would throw in findShortcut).
+        const existingKeys = new Set<string>();
+        for (const d of existing) {
+            existingKeys.add(d.key + '|' + d.modifier);
+        }
+
+        for (const b of bindings) {
+            const k = b.key + '|' + b.modifier;
+            if (!existingKeys.has(k)) {
+                existing.push(new ShortcutDescriptor({
+                    eventType: 'keydown',
+                    key: b.key,
+                    modifier: b.modifier,
+                    unoAction: b.unoAction,
+                    docType: b.docType,
+                }));
+                existingKeys.add(k);
+            }
+        }
+    }
+}
 
 window.KeyboardShortcuts = keyboardShortcuts;

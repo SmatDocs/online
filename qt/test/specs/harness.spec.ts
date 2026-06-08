@@ -17,11 +17,12 @@ describe('Test harness', () => {
 			);
 		});
 
-		it('should report QtWebEngine user agent', async function () {
+		it('should report a known engine user agent', async function () {
 			const userAgent = await browser.webEngine.execute(
 				() => navigator.userAgent,
 			);
-			expect(userAgent).toContain('QtWebEngine');
+			const known = userAgent.includes('QtWebEngine') || userAgent.includes('AppleWebKit');
+			expect(known).toBe(true);
 		});
 
 		it('should report non-zero page dimensions', async function () {
@@ -34,10 +35,14 @@ describe('Test harness', () => {
 		});
 	});
 
-	describe('native (AT-SPI) driver', () => {
-		it('should connect and retrieve the accessibility tree', async function () {
+	describe('native (accessibility) driver', () => {
+		it('should return an accessibility tree', async function () {
 			const source = await browser.native.getPageSource();
-			expect(source).toBeTruthy();
+			expect(source).toMatch(/^<desktop_frame\b/);
+			expect(source).toContain('accessibility-id="QApplication"');
+			expect(source).toContain(
+				'accessibility-id="QApplication.QMainWindow.QWebEngineView"',
+			);
 		});
 	});
 });

@@ -9,6 +9,11 @@
 #
 ETAGS=ctags -e
 
+# Default to one make job per CPU. An explicit -j on the command line
+# wins. On platforms without nproc leave MAKEFLAGS alone.
+NPROC := $(if $(findstring j,$(MAKEFLAGS)),,$(shell nproc 2>/dev/null))
+MAKEFLAGS := $(MAKEFLAGS) $(if $(NPROC),-j$(NPROC))
+
 build-samples:
 	$(QUIET_MKDIRP) mkdir -p $(abs_top_builddir)/test/samples
 	$(QUIET_SAMPLES) $(abs_top_srcdir)/scripts/build-samples.py $(abs_top_srcdir)/test/samples $(abs_top_srcdir)/test/samples
@@ -17,7 +22,7 @@ if ENABLE_MOBILEAPP
 
 if ENABLE_MACOS
 SUBDIRS = macos browser
-else
+else !ENABLE_MACOS
 if ENABLE_QTAPP
 SUBDIRS = qt browser
 
@@ -26,7 +31,7 @@ check-qtapp:
 	$(MAKE) $(AM_MAKEFLAGS) -C qt check-qtapp
 endif ENABLE_QTAPP_TESTS
 
-else
+else !ENABLE_QTAPP
 if ENABLE_WASM
 SUBDIRS = wasm browser
 else !ENABLE_WASM
@@ -35,7 +40,17 @@ endif !ENABLE_WASM
 endif
 endif
 
-else
+else !ENABLE_MOBILEAPP
+
+if ENABLE_FUZZERS
+# Fuzzers link against libsimd.a, which is a noinst_LIBRARIES
+# built at the top level, so '.' must be in SUBDIRS. The unit
+# tests in test/ scan browser/dist via TDIST, so 'browser' must
+# be built too.
+SUBDIRS = . browser test fuzzer
+bin_PROGRAMS =
+
+else !ENABLE_FUZZERS
 
 SUBDIRS = browser .
 
@@ -47,27 +62,25 @@ if ENABLE_CYPRESS
 SUBDIRS += cypress_test
 endif
 
-export ENABLE_DEBUG
-
-QUIET_MKDIRP = $(QUIET_MKDIRP_$(V))
-QUIET_MKDIRP_ = $(QUIET_MKDIRP_$(AM_DEFAULT_VERBOSITY))
-QUIET_MKDIRP_0 = @echo "  MKDIRP  " $@;
-
 bin_PROGRAMS = \
 	coolconvert \
 	coolforkit-caps \
 	coolforkit-ns \
 	coolmount \
 	coolstress \
-	coolconfig
-
-if ENABLE_LIBFUZZER
-else
-bin_PROGRAMS += coolwsd
+	coolconfig \
+	coolwsd
 if ENABLE_DEBUG
 bin_PROGRAMS += coolwsd-inproc
 endif
-endif
+
+endif !ENABLE_FUZZERS
+
+export ENABLE_DEBUG
+
+QUIET_MKDIRP = $(QUIET_MKDIRP_$(V))
+QUIET_MKDIRP_ = $(QUIET_MKDIRP_$(AM_DEFAULT_VERBOSITY))
+QUIET_MKDIRP_0 = @echo "  MKDIRP  " $@;
 
 dist_bin_SCRIPTS = coolwsd-systemplate-setup
 
@@ -86,7 +99,12 @@ dist_doc_DATA = wsd/README.vars \
                 wsd/metrics.txt \
                 THIRDPARTYLICENSES
 
+if !ENABLE_FUZZERS
+# The SBOM rule pulls in coolforkit-ns (via collabora-online-sbom.spdx.json:
+# coolforkit-ns), so gate it out of fuzzer builds where the binary is not
+# wanted.
 doc_DATA = collabora-online-sbom.spdx.json
+endif
 
 coolwsddatadir = @COOLWSD_DATADIR@
 
@@ -107,6 +125,8 @@ nginxconfigdir = ${sysconfdir}/nginx/snippets
 nginxconfig_DATA = etc/nginx/coolwsd.conf
 
 ACLOCAL_AMFLAGS = -I m4
+
+CLEANFILES = clang/plugin.o clang/plugin.so
 
 # quick and easy for now.
 include_paths = -I${top_srcdir}/common -I${top_srcdir}/net -I${top_srcdir}/wsd -I${top_srcdir}/kit ${ZLIB_CFLAGS} ${ZSTD_CFLAGS} ${PNG_CFLAGS}
@@ -152,6 +172,7 @@ AM_CTAGSFLAGS = $(AM_ETAGSFLAGS)
 
 shared_sources = \
                  $(util_platform_cpp) \
+                 common/AIHttpTransport.cpp \
                  common/Authorization.cpp \
                  common/CommandControl.cpp \
                  common/ConfigUtil.cpp \
@@ -162,6 +183,7 @@ shared_sources = \
                  common/Log-common.cpp \
                  common/Log-poco.cpp \
                  common/MobileApp.cpp \
+                 common/ProcUtil.cpp \
                  common/Protocol.cpp \
                  common/RegexUtil.cpp \
                  common/Seccomp.cpp \
@@ -180,7 +202,6 @@ shared_sources = \
                  common/Util.cpp \
                  kit/KitQueue.cpp \
                  kit/LogUI.cpp \
-                 net/DelaySocket.cpp \
                  net/HttpHelper.cpp \
                  net/HttpRequest.cpp \
                  net/NetUtil.cpp \
@@ -194,6 +215,8 @@ coolwsd_sources = \
                   common/Crypto.cpp \
                   wsd/Admin.cpp \
                   wsd/AdminModel.cpp \
+                  wsd/AIChatSession.cpp \
+                  wsd/AIUtil.cpp \
                   wsd/Auth.cpp \
                   wsd/COOLWSD.cpp \
                   wsd/CacheUtil.cpp \
@@ -228,6 +251,9 @@ coolwsd_SOURCES = $(coolwsd_sources) \
 
 EXTRA_coolwsd_DEPENDENCIES = browser/node_modules
 
+if ENABLE_FUZZERS
+noinst_PROGRAMS =
+else
 noinst_PROGRAMS = \
                   clientnb \
                   connect \
@@ -235,13 +261,6 @@ noinst_PROGRAMS = \
                   coolmap \
                   coolsocketdump \
                   lokitclient
-
-if ENABLE_LIBFUZZER
-noinst_PROGRAMS += \
-		   admin_fuzzer \
-		   clientsession_fuzzer \
-		   httpresponse_fuzzer \
-		   httpecho_fuzzer
 endif
 
 connect_SOURCES = \
@@ -249,6 +268,7 @@ connect_SOURCES = \
                   common/DummyTraceEventEmitter.cpp \
                   common/Log-common.cpp \
                   common/Log-poco.cpp \
+                  common/ProcUtil.cpp \
                   common/Protocol.cpp \
                   common/StringVector.cpp \
                   common/Util-server.cpp \
@@ -264,6 +284,7 @@ lokitclient_SOURCES = \
                       common/Log-common.cpp \
                       common/Log-poco.cpp \
                       common/Protocol.cpp \
+                      common/ProcUtil.cpp \
                       common/StringVector.cpp \
                       common/TraceEvent.cpp \
                       common/Util-server.cpp \
@@ -318,6 +339,7 @@ coolwsd_inproc_SOURCES = $(coolwsd_sources) \
                          $(coolforkit_sources) \
                          wsd/coolwsd-inproc.cpp
 
+coolwsd_inproc_CPPFLAGS = $(AM_CPPFLAGS) -DENABLE_INPROC=1
 coolwsd_inproc_LDADD = libsimd.a libkitwsdglobals.a
 
 if !ENABLE_SSL
@@ -326,61 +348,12 @@ endif
 
 endif
 
-if ENABLE_LIBFUZZER
-coolforkit_caps_SOURCES += \
-		       common/DummyTraceEventEmitter.cpp
-coolforkit_ns_SOURCES += \
-		       common/DummyTraceEventEmitter.cpp
-
-common_fuzzer_sources = \
-		       fuzzer/Common.cpp \
-		       common/DummyTraceEventEmitter.cpp \
-		       $(coolwsd_sources) \
-		       wsd/coolwsd-inproc.cpp \
-		       wsd/KitWSDGlobals.cpp \
-		       $(coolforkit_sources) \
-		       $(shared_sources)
-
-admin_fuzzer_CPPFLAGS = \
-			$(AM_CPPFLAGS)
-admin_fuzzer_SOURCES = \
-		       $(common_fuzzer_sources) \
-		       fuzzer/Admin.cpp
-admin_fuzzer_LDFLAGS = -fsanitize=fuzzer $(AM_LDFLAGS)
-admin_fuzzer_LDADD = libsimd.a
-
-clientsession_fuzzer_CPPFLAGS = \
-				$(AM_CPPFLAGS)
-clientsession_fuzzer_SOURCES = \
-			       $(common_fuzzer_sources) \
-			       fuzzer/ClientSession.cpp
-clientsession_fuzzer_LDFLAGS = -fsanitize=fuzzer $(AM_LDFLAGS)
-clientsession_fuzzer_LDADD = libsimd.a
-
-httpresponse_fuzzer_CPPFLAGS = \
-				$(AM_CPPFLAGS)
-httpresponse_fuzzer_SOURCES = \
-			       $(common_fuzzer_sources) \
-			       fuzzer/HttpResponse.cpp
-httpresponse_fuzzer_LDFLAGS = -fsanitize=fuzzer $(AM_LDFLAGS)
-httpresponse_fuzzer_LDADD = libsimd.a
-
-httpecho_fuzzer_CPPFLAGS = \
-				$(AM_CPPFLAGS) \
-        -I${top_srcdir}/test
-httpecho_fuzzer_SOURCES = \
-			       $(common_fuzzer_sources) \
-			       fuzzer/HttpEcho.cpp
-httpecho_fuzzer_LDFLAGS = -fsanitize=fuzzer $(AM_LDFLAGS)
-httpecho_fuzzer_LDADD = libsimd.a
-
-endif # ENABLE_LIBFUZZER
-
 clientnb_SOURCES = \
                    $(util_platform_cpp) \
                    common/DummyTraceEventEmitter.cpp \
                    common/Log-common.cpp \
                    common/Log-poco.cpp \
+                   common/ProcUtil.cpp \
                    common/StringVector.cpp \
                    common/Util-server.cpp \
                    common/Util-unix.cpp \
@@ -399,6 +372,7 @@ coolbench_SOURCES = \
                     common/DummyTraceEventEmitter.cpp \
                     common/Log-common.cpp \
                     common/Log-poco.cpp \
+                    common/ProcUtil.cpp \
                     common/Simd.cpp \
                     common/StringVector.cpp \
                     common/Util-server.cpp \
@@ -425,6 +399,7 @@ coolconfig_SOURCES = \
                     common/DummyTraceEventEmitter.cpp \
                     common/Log-common.cpp \
                     common/Log-poco.cpp \
+                    common/ProcUtil.cpp \
                     common/StringVector.cpp \
                     common/Util-server.cpp \
                     common/Util-unix.cpp \
@@ -441,6 +416,8 @@ coolsocketdump_LDADD = libglobals.a
 wsd_headers = \
               wsd/Admin.hpp \
               wsd/AdminModel.hpp \
+              wsd/AIChatSession.hpp \
+              wsd/AIUtil.hpp \
               wsd/Auth.hpp \
               wsd/COOLWSD.hpp \
               wsd/COOLWSDServer.hpp \
@@ -449,6 +426,7 @@ wsd_headers = \
               wsd/ClientSession.hpp \
               wsd/ContentSecurityPolicy.hpp \
               wsd/ContentType.hpp \
+              wsd/DocumentToolDescriptions.hpp \
               wsd/DocumentBroker.hpp \
               wsd/Exceptions.hpp \
               wsd/FileServer.hpp \
@@ -483,6 +461,7 @@ wsd_headers = \
               wsd/wopi/WopiStorage.hpp
 
 shared_headers = \
+                 common/AIHttpTransport.hpp \
                  common/Anonymizer.hpp \
                  common/Authorization.hpp \
                  common/CharacterConverter.hpp \
@@ -491,6 +470,7 @@ shared_headers = \
                  common/CommandControl.hpp \
                  common/Common.hpp \
                  common/ConfigUtil.hpp \
+                 common/ContainerUtil.hpp \
                  common/Crypto.hpp \
                  common/FileUtil.hpp \
                  common/Globals.hpp \
@@ -503,6 +483,7 @@ shared_headers = \
                  common/MobileApp.hpp \
                  common/NumUtil.hpp \
                  common/Png.hpp \
+                 common/ProcUtil.hpp \
                  common/Protocol.hpp \
                  common/Rectangle.hpp \
                  common/RegexUtil.hpp \
@@ -532,7 +513,6 @@ shared_headers = \
                  kit/LogUI.hpp \
                  net/AsyncDNS.hpp \
                  net/Buffer.hpp \
-                 net/DelaySocket.hpp \
                  net/FakeSocket.hpp \
                  net/HttpHelper.hpp \
                  net/HttpRequest.hpp \
@@ -552,7 +532,7 @@ kit_headers = \
               kit/ChildSession.hpp \
               kit/Delta.hpp \
               kit/DeltaSimd.h \
-              kit/DummyLibreOfficeKit.hpp \
+              kit/DummyCOKit.hpp \
               kit/Kit.hpp \
               kit/KitHelper.hpp \
               kit/KitWebSocket.hpp \
@@ -580,13 +560,13 @@ noinst_HEADERS = \
 
 dist-hook:
 	git log -1 --format=%h --abbrev=10 > $(distdir)/dist_git_hash 2> /dev/null || rm $(distdir)/dist_git_hash
-	$(QUIET_MKDIRP) mkdir -p $(distdir)/bundled/include/LibreOfficeKit/
-	cp @LOKIT_PATH@/LibreOfficeKit/LibreOfficeKit.h \
-	   @LOKIT_PATH@/LibreOfficeKit/LibreOfficeKit.hxx \
-	   @LOKIT_PATH@/LibreOfficeKit/LibreOfficeKitEnums.h \
-	   @LOKIT_PATH@/LibreOfficeKit/LibreOfficeKitInit.h \
-	   @LOKIT_PATH@/LibreOfficeKit/LibreOfficeKitTypes.h \
-	   $(distdir)/bundled/include/LibreOfficeKit/
+	$(QUIET_MKDIRP) mkdir -p $(distdir)/bundled/include/COKit/
+	cp @LOKIT_PATH@/COKit/COKit.h \
+	   @LOKIT_PATH@/COKit/COKit.hxx \
+	   @LOKIT_PATH@/COKit/COKitEnums.h \
+	   @LOKIT_PATH@/COKit/COKitInit.h \
+	   @LOKIT_PATH@/COKit/COKitTypes.h \
+	   $(distdir)/bundled/include/COKit/
 
 EXTRA_DIST = \
              $(man_MANS) \
@@ -620,9 +600,10 @@ EXTRA_DIST = \
              favicon.ico \
              scripts/create-sbom.py \
              scripts/refresh-git-hooks \
-             scripts/unocommands.py
+             scripts/unocommands.py \
+             scripts/unoshortcuts.py
 
-if ENABLE_LIBFUZZER
+if ENABLE_FUZZERS
 CLEANUP_COMMAND=true
 else
 # Use coolwsd to cleanup jails, if any. If it fails, we may have a broken/old coolwsd binary, remove it to rebuild.
@@ -640,7 +621,7 @@ RUN_GDB = $(if $(GDB_FRONTEND),$(GDB_FRONTEND),gdb --tui --args)
 TEST_APPARMOR=$(shell if test 1 -eq `cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2> /dev/null || echo 0`; then echo "enabled"; fi)
 ENABLE_NAMESPACE = $(if $(TEST_APPARMOR),podman unshare,)
 
-if ENABLE_LIBFUZZER
+if ENABLE_FUZZERS
 CLEANUP_DEPS=
 else
 CLEANUP_DEPS=coolwsd coolmount coolforkit-caps coolforkit-ns
@@ -675,7 +656,7 @@ cleanup:
 
 # Always cleanup before removing the binaries.
 # Note: this can break with -j option!
-clean-am: cleanup clean-binPROGRAMS clean-generic clean-libtool clean-local clean-noinstPROGRAMS mostlyclean-am
+clean-am: cleanup clean-binPROGRAMS clean-generic clean-libtool clean-local clean-noinstLIBRARIES clean-noinstPROGRAMS mostlyclean-am
 
 clean-local:
 	$(CLEANUP_COMMAND)
@@ -686,6 +667,8 @@ clean-local:
 	rm -rf loolconfig loolconvert loolforkit loolmap loolmount # kill old binaries
 	rm -rf loolwsd loolwsd_fuzzer coolwsd_fuzzer loolstress loolsocketdump
 	rm -rf collabora-online-sbom.spdx.json
+	rm -rf test/data/presets
+	rm -f test/samples/calc-edit.fods test/samples/draw-edit.odg test/samples/impress-edit.fodp test/samples/writer-edit.fodt test/samples/writer-large-edit.fodt
 	$(CLEANUP_COVERAGE)
 
 if ENABLE_DEBUG
@@ -727,17 +710,20 @@ COMMON_PARAMS = \
 	--o:child_root_path="@JAILS_PATH@" \
 	--o:cache_files.path="@CACHE_PATH@" \
 	--o:storage.filesystem[@allow]=true \
+	--o:security.enable_macros_execution=true \
 	--o:ssl.cert_file_path="$(abs_top_srcdir)/etc/cert.pem" \
 	--o:ssl.key_file_path="$(abs_top_srcdir)/etc/key.pem" \
 	--o:ssl.ca_file_path="$(abs_top_srcdir)/etc/ca-chain.cert.pem" \
 	--o:admin_console.username=admin --o:admin_console.password=admin
 
-run: setup-wsd
+check-apparmour-namespaces:
 	@if test "${TEST_APPARMOR}" = "enabled"; then \
 		echo apparmor_restrict_unprivileged_userns is enabled, which blocks user namespaces; \
 	        (which podman > /dev/null 2>&1 && echo "Using podman unshare to workaround") || \
-		(echo "WARNING: install podman to workaround this" && false); \
+		(echo "WARNING: to workaround this, either (a) disable with sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 or (b) install podman" && false); \
 	fi
+
+run: setup-wsd check-apparmour-namespaces
 	$(ENABLE_NAMESPACE) ./coolwsd $(COMMON_PARAMS) \
 			--o:logging.file[@enable]=${RUN_FAST_LOG_FILE} --o:logging.level=${RUN_FAST_LOG_LEVEL} \
 			--o:logging.level_startup=${RUN_FAST_LOG_LEVEL_STARTUP} \
@@ -747,12 +733,7 @@ run: setup-wsd
 			--o:browser_logging=${RUN_FAST_BROWSER_LOGGING} \
 			--o:num_prespawn_children=${RUN_FAST_PRESPAWN_CHILDREN}
 
-run-debug: setup-wsd
-	@if test "${TEST_APPARMOR}" = "enabled"; then \
-		echo apparmor_restrict_unprivileged_userns is enabled, which blocks user namespaces; \
-	        (which podman > /dev/null 2>&1 && echo "Using podman unshare to workaround") || \
-		(echo "WARNING: install podman to workaround this" && false); \
-	fi
+run-debug: setup-wsd check-apparmour-namespaces
 	$(ENABLE_NAMESPACE) ./coolwsd $(COMMON_PARAMS) \
 			--o:logging.file[@enable]=${OUTPUT_TO_FILE} --o:logging.level=trace \
 			--o:logging_ui_cmd.file[@enable]=${OUTPUT_TO_FILE} \
@@ -850,19 +831,48 @@ endif
 
 .PHONY: cleanup setup-wsd
 
-if ENABLE_LIBFUZZER
+if ENABLE_FUZZERS
 ALL_LOCAL_DEPS=
 else
 ALL_LOCAL_DEPS=coolwsd
 endif
 
 all-local: $(ALL_LOCAL_DEPS) @JAILS_PATH@ @CACHE_PATH@ $(SYSTEM_STAMP)
-	@$(abs_top_srcdir)/scripts/refresh-git-hooks
+	@abs_srcdir='$(abs_top_srcdir)' $(abs_top_srcdir)/scripts/refresh-git-hooks
 
 # just run the build without any tests
 build-nocheck: all-am
 
 endif
+
+distclean-local:
+	rm -rf $(top_srcdir)/scripts/__pycache__
+
+# Override automake's distclean and maintainer-clean to defer cleanup of files and directories that
+# must not disappear during the recursive descent through SUBDIRS (which lists "." in the middle):
+
+EMPTY_DEPDIRS = \
+	common/.deps \
+	fuzzer/.deps \
+	kit/.deps \
+	net/.deps \
+	tools/.deps \
+	wasm/.deps \
+	wsd/.deps \
+	wsd/wopi/.deps
+
+distclean: distclean-recursive
+	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
+	-rm -f Makefile
+	rm -rf $(EMPTY_DEPDIRS)
+
+maintainer-clean: maintainer-clean-recursive
+	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
+	-rm -rf $(top_srcdir)/autom4te.cache
+	-rm -f Makefile
+	rm -rf $(EMPTY_DEPDIRS)
+	rm -f $(top_srcdir)/Makefile.in $(top_srcdir)/aclocal.m4 $(top_srcdir)/compile $(top_srcdir)/config.guess $(top_srcdir)/config.sub $(top_srcdir)/config_unused.h.in $(top_srcdir)/configure $(top_srcdir)/configure~ $(top_srcdir)/depcomp $(top_srcdir)/install-sh $(top_srcdir)/ltmain.sh $(top_srcdir)/missing
+	rm -rf $(top_srcdir)/m4
 
 define file_target
 $(1): $(2)
@@ -913,18 +923,15 @@ $(eval $(call file_targets,$(JSON_COMPILE_SRC)))
 $(abs_srcdir)/compile_commands.json: $(JSON_COMPILE_SRC)
 	@$(MAKE) -C test compile_commands
 	@echo -n "[" > $@
-	@for file in $(JSON_COMPILE_SRC) ; \
+	@sep=""; \
+	for file in $(JSON_COMPILE_SRC) $$(find test -name '*.cmd' 2>/dev/null) ; \
 	do \
+		printf '%s\n' "$$sep"; \
 		cat $$file; \
-		echo ","; \
 		rm -f $$file; \
+		sep=","; \
 	done >> $@
-	@for file in $$(find test -name '*.cmd' 2>/dev/null) ; \
-	do \
-		cat $$file; \
-		echo ","; \
-		rm -f $$file; \
-	done >> $@
+	@echo "" >> $@
 	@echo -n "]" >> $@
 
 compile_commands: $(abs_srcdir)/compile_commands.json
@@ -1015,9 +1022,43 @@ check-for-system-nss:
 		fi \
 	fi
 
+# engine/distro-configs/Langs.conf and the flatpak manifest's --with-lang=
+# line both feed --with-lang to the same configure run; keep them in lockstep.
+check-flatpak-langs:
+	@distro_lang=`grep -h '^--with-lang=' $(top_srcdir)/engine/distro-configs/Langs.conf | sed 's/^--with-lang=//'`; \
+	flatpak_lang=`grep -h '"--with-lang=' $(top_srcdir)/qt/flatpak/com.collaboraoffice.Office.json | sed 's/.*"--with-lang=//; s/",$$//'`; \
+	if test -z "$$distro_lang" || test -z "$$flatpak_lang"; then \
+		echo "ERROR: failed to extract --with-lang= from Langs.conf or the flatpak manifest" >&2; \
+		exit 1; \
+	fi; \
+	if test "$$distro_lang" != "$$flatpak_lang"; then \
+		echo "ERROR: --with-lang= lists in Langs.conf and the flatpak manifest differ:" >&2; \
+		echo "  engine/distro-configs/Langs.conf:           $$distro_lang" >&2; \
+		echo "  qt/flatpak/com.collaboraoffice.Office.json: $$flatpak_lang" >&2; \
+		echo "Update one to match the other." >&2; \
+		exit 1; \
+	fi
+
+# Same idea for the snap manifest: the --with-lang= line in
+# snap/snapcraft.yaml must match Langs.conf.
+check-snap-langs:
+	@distro_lang=`grep -h '^--with-lang=' $(top_srcdir)/engine/distro-configs/Langs.conf | sed 's/^--with-lang=//'`; \
+	snap_lang=`grep -h '"--with-lang=' $(top_srcdir)/snap/snapcraft.yaml | sed 's/.*"--with-lang=//; s/".*//'`; \
+	if test -z "$$distro_lang" || test -z "$$snap_lang"; then \
+		echo "ERROR: failed to extract --with-lang= from Langs.conf or the snap manifest" >&2; \
+		exit 1; \
+	fi; \
+	if test "$$distro_lang" != "$$snap_lang"; then \
+		echo "ERROR: --with-lang= lists in Langs.conf and the snap manifest differ:" >&2; \
+		echo "  engine/distro-configs/Langs.conf: $$distro_lang" >&2; \
+		echo "  snap/snapcraft.yaml:              $$snap_lang" >&2; \
+		echo "Update one to match the other." >&2; \
+		exit 1; \
+	fi
+
 check-recursive: eslint
 
-check: all-local check-for-system-nss prettier eslint presets-dir check-recursive
+check: all-local check-for-system-nss check-flatpak-langs check-snap-langs prettier eslint presets-dir check-apparmour-namespaces check-recursive
 	$(GEN_COVERAGE_COMMAND)
 
 coverage-report:
@@ -1041,6 +1082,7 @@ check-struct-packing:
 	@echo coolwsd struct packing is acceptably optimal
 
 czech: all-local
+	@test -f browser/dist/cool.html || $(MAKE) -C browser
 	@echo "Running unit-tests only"
 	$(MAKE) check -C test
 

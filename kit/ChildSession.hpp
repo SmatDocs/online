@@ -19,7 +19,7 @@
 #include <chrono>
 #include <queue>
 
-namespace lok
+namespace kit
 {
 class Document;
 class Office;
@@ -47,7 +47,7 @@ public:
     ~LogUiCommands();
     void logSaveLoad(std::string cmd, const std::string & path, std::chrono::steady_clock::time_point timeStart);
 private:
-    std::weak_ptr<lok::Document> _document;
+    std::weak_ptr<kit::Document> _document;
     // list the commands to log here.
     std::set<std::string> _cmdToLog = {
         "uno", "key", "mouse", "textinput", "removetextcontext",
@@ -177,7 +177,6 @@ private:
     bool loadDocument(const StringVector& tokens);
     bool saveDocumentBackground(const StringVector &tokens);
 
-    bool sendFontRendering(const StringVector& tokens);
     bool getCommandValues(const StringVector& tokens);
 
     bool clientZoom(const StringVector& tokens);
@@ -230,6 +229,9 @@ private:
     bool getA11yFocusedParagraph();
     bool getA11yCaretPosition();
     bool getPresentationInfo();
+    bool executeScript(char const * buffer, int length, StringVector const & tokens);
+    bool proxyReturn(char const * buffer, int length);
+    bool getSlideSections();
 
     void rememberEventsForInactiveUser(int type, const std::string& payload);
 
@@ -238,12 +240,12 @@ private:
 
     static void dumpRecordedUnoCommands();
 
-    std::shared_ptr<lok::Document> getLOKitDocument() const
+    std::shared_ptr<kit::Document> getLOKitDocument() const
     {
         return _docManager->getLOKitDocument();
     }
 
-    std::shared_ptr<lok::Office> getLOKit() const
+    std::shared_ptr<kit::Office> getLOKit() const
     {
         return _docManager->getLOKit();
     }

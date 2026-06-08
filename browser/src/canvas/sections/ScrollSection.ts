@@ -60,7 +60,9 @@ export class ScrollSection extends CanvasSectionObject {
 		this.sectionProperties.drawScrollBarRailway = true;
 		this.sectionProperties.scrollBarRailwayThickness = 6 * app.roundedDpiScale;
 		this.sectionProperties.scrollBarRailwayAlpha = this.map._docLayer._docType === 'spreadsheet' ? 1.0 : 0.5;
-		this.sectionProperties.scrollBarRailwayColor = '#EFEFEF';
+
+		this.refreshScrollBarColors();
+		this.map.on('darkmodechanged', this.refreshScrollBarColors, this);
 
 		this.sectionProperties.drawVerticalScrollBar = ((<any>window).mode.isDesktop() ? true: false);
 		this.sectionProperties.drawHorizontalScrollBar = ((<any>window).mode.isDesktop() ? true: false);
@@ -97,10 +99,6 @@ export class ScrollSection extends CanvasSectionObject {
 		this.sectionProperties.scrollAnimationDisableTimeout = null;
 		this.sectionProperties.scrollWheelDelta = [0, 0];	// Used for non-animated scrolling
 
-		this.sectionProperties.pointerSyncWithVerticalScrollBar = true;
-		this.sectionProperties.pointerSyncWithHorizontalScrollBar = true;
-		this.sectionProperties.pointerReCaptureSpacer = null; // Clicked point of the scroll bar.
-
 		// Step by step scrolling interval in ms
 		this.sectionProperties.stepDuration = 50;
 		this.sectionProperties.quickScrollHorizontalTimer = null;
@@ -121,6 +119,14 @@ export class ScrollSection extends CanvasSectionObject {
 			this.onScrollTo(this.pendingScrollEvent);
 			this.pendingScrollEvent = null;
 		}
+	}
+
+	private refreshScrollBarColors(): void {
+		const style = getComputedStyle(document.documentElement);
+		this.sectionProperties.scrollBarThumbColor =
+			style.getPropertyValue('--color-scrollbar-thumb').trim() || '#7E8182';
+		this.sectionProperties.scrollBarRailwayColor =
+			style.getPropertyValue('--color-scrollbar-railway').trim() || '#EFEFEF';
 	}
 
 	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
@@ -262,7 +268,7 @@ export class ScrollSection extends CanvasSectionObject {
 
 		this.context.globalAlpha = this.sectionProperties.clickScrollVertical ? this.sectionProperties.alphaWhenBeingUsed: this.sectionProperties.alphaWhenVisible;
 
-		this.context.fillStyle = '#7E8182';
+		this.context.fillStyle = this.sectionProperties.scrollBarThumbColor;
 
 
 		this.context.fillRect(startX, scrollProps.startY, this.sectionProperties.scrollBarThickness, scrollProps.verticalScrollSize - this.sectionProperties.scrollBarThickness);
@@ -305,7 +311,7 @@ export class ScrollSection extends CanvasSectionObject {
 
 		this.context.globalAlpha = this.sectionProperties.clickScrollHorizontal ? this.sectionProperties.alphaWhenBeingUsed: this.sectionProperties.alphaWhenVisible;
 
-		this.context.fillStyle = '#7E8182';
+		this.context.fillStyle = this.sectionProperties.scrollBarThumbColor;
 
 		this.context.fillRect(startX, startY, sizeX, this.sectionProperties.scrollBarThickness);
 
@@ -338,16 +344,14 @@ export class ScrollSection extends CanvasSectionObject {
 	private doMove() {
 		const scrollProps: ScrollProperties = (app.activeDocument as DocumentBase).activeLayout.scrollProperties;
 
-		app.layoutingService.appendLayoutingTask(() => {
-			this.map.panBy(new cool.Point(scrollProps.moveBy[0] / app.dpiScale, scrollProps.moveBy[1] / app.dpiScale));
-			scrollProps.moveBy = null;
-			this.onUpdateScrollOffset();
+		this.map.panBy(new cool.Point(scrollProps.moveBy[0] / app.dpiScale, scrollProps.moveBy[1] / app.dpiScale));
+		scrollProps.moveBy = null;
+		this.onUpdateScrollOffset();
 
-			if (app && app.file.fileBasedView === true)
-				app.map._docLayer._checkSelectedPart();
+		if (app && app.file.fileBasedView === true)
+			app.map._docLayer._checkSelectedPart();
 
-			app.activeDocument.activeLayout.refreshScrollProperties();
-		});
+		app.activeDocument.activeLayout.refreshScrollProperties();
 	}
 
 	public onDraw(frameCount: number, elapsedTime: number): void {
@@ -548,7 +552,8 @@ export class ScrollSection extends CanvasSectionObject {
 		if (!app.activeDocument.activeLayout.canScrollVertical(app.sectionContainer.getSectionWithName(app.CSections.Tiles.name)))
 			return;
 
-		app.activeDocument.activeLayout.scroll(0, offset);
+		const userIsScrolling: boolean = true;
+		app.activeDocument.activeLayout.scroll(0, offset, userIsScrolling);
 
 		if (app.file.fileBasedView) this.map._docLayer._checkSelectedPart();
 
@@ -559,81 +564,10 @@ export class ScrollSection extends CanvasSectionObject {
 		if (!app.activeDocument.activeLayout.canScrollHorizontal(app.sectionContainer.getSectionWithName(app.CSections.Tiles.name)))
 			return;
 
-		app.activeDocument.activeLayout.scroll(offset,0 );
+		const userIsScrolling: boolean = true;
+		app.activeDocument.activeLayout.scroll(offset, 0, userIsScrolling);
 
 		return true;
-	}
-
-	private isMouseInsideDocumentAnchor (point: cool.SimplePoint): boolean {
-		var docSection = this.containerObject.getDocumentAnchorSection();
-		return this.containerObject.doesSectionIncludePoint(docSection, point.pToArray());
-	}
-
-	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-	private isMousePointerSyncedWithVerticalScrollBar (scrollProps: any, position: cool.SimplePoint): boolean {
-		// Keep this desktop-only for now.
-		if (!(<any>window).mode.isDesktop())
-			return true;
-
-		var spacer = 0;
-		if (!this.sectionProperties.pointerSyncWithVerticalScrollBar) {
-			spacer = this.sectionProperties.pointerReCaptureSpacer;
-		}
-
-		var pointerIsSyncWithScrollBar = false;
-		if (this.sectionProperties.pointerSyncWithVerticalScrollBar) {
-			pointerIsSyncWithScrollBar = scrollProps.startY < position.pX && scrollProps.startY + scrollProps.scrollSize - this.sectionProperties.scrollBarThickness > position.pY;
-			pointerIsSyncWithScrollBar = pointerIsSyncWithScrollBar || (this.isMouseInsideDocumentAnchor(position) && spacer === 0);
-		}
-		else {
-			// See if the scroll bar is on top or bottom.
-			var docAncSectionY = this.containerObject.getDocumentAnchorSection().myTopLeft[1];
-			if (scrollProps.startY < 30 * window.app.roundedDpiScale + docAncSectionY) {
-				pointerIsSyncWithScrollBar = scrollProps.startY + spacer < position.pY;
-			}
-			else {
-				pointerIsSyncWithScrollBar = scrollProps.startY + spacer > position.pY;
-			}
-		}
-
-		this.sectionProperties.pointerSyncWithVerticalScrollBar = pointerIsSyncWithScrollBar;
-		return pointerIsSyncWithScrollBar;
-	}
-
-	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-	private isMousePointerSyncedWithHorizontalScrollBar (scrollProps: any, position: cool.SimplePoint): boolean {
-		// Keep this desktop-only for now.
-		if (!(<any>window).mode.isDesktop())
-			return true;
-
-		var spacer = 0;
-		if (!this.sectionProperties.pointerSyncWithHorizontalScrollBar) {
-			spacer = this.sectionProperties.pointerReCaptureSpacer;
-		}
-
-		const sizeX = scrollProps.scrollSize - this.sectionProperties.scrollBarThickness;
-		const docWidth: number =  app.sectionContainer.getWidth();
-		const startX = this.isRTL() ? docWidth - scrollProps.startX - sizeX : scrollProps.startX;
-		const endX = startX + sizeX;
-
-		var pointerIsSyncWithScrollBar = false;
-		if (this.sectionProperties.pointerSyncWithHorizontalScrollBar) {
-			pointerIsSyncWithScrollBar = position.pX > startX && position.pX < endX;
-			pointerIsSyncWithScrollBar = pointerIsSyncWithScrollBar || (this.isMouseInsideDocumentAnchor(position) && spacer === 0);
-		}
-		else {
-			// See if the scroll bar is on left or right.
-			var docAncSectionX = this.containerObject.getDocumentAnchorSection().myTopLeft[0];
-			if (startX < 30 * window.app.roundedDpiScale + docAncSectionX) {
-				pointerIsSyncWithScrollBar = startX + spacer < position.pX;
-			}
-			else {
-				pointerIsSyncWithScrollBar = startX + spacer > position.pX;
-			}
-		}
-
-		this.sectionProperties.pointerSyncWithHorizontalScrollBar = pointerIsSyncWithScrollBar;
-		return pointerIsSyncWithScrollBar;
 	}
 
 	public onMouseMove (position: cool.SimplePoint, dragDistance: Array<number>, e: MouseEvent): void {
@@ -649,9 +583,7 @@ export class ScrollSection extends CanvasSectionObject {
 			this.showVerticalScrollBar();
 
 			var diffY: number = dragDistance[1] - this.sectionProperties.previousDragDistance[1];
-
-			if (this.isMousePointerSyncedWithVerticalScrollBar(scrollProps, position))
-				this.scrollVerticalWithOffset(diffY * scrollProps.verticalScrollRatio);
+			this.scrollVerticalWithOffset(diffY * scrollProps.verticalScrollRatio);
 
 			this.sectionProperties.previousDragDistance[1] = dragDistance[1];
 
@@ -665,10 +597,7 @@ export class ScrollSection extends CanvasSectionObject {
 			this.showHorizontalScrollBar();
 
 			var diffX: number = dragDistance[0] - this.sectionProperties.previousDragDistance[0];
-			var actualDistance = scrollProps.horizontalScrollRatio * diffX;
-
-			if (this.isMousePointerSyncedWithHorizontalScrollBar(scrollProps, position))
-				this.scrollHorizontalWithOffset(actualDistance);
+			this.scrollHorizontalWithOffset(scrollProps.horizontalScrollRatio * diffX);
 
 			this.sectionProperties.previousDragDistance[0] = dragDistance[0];
 			this.stopPropagating(); // Don't propagate to other sections.
@@ -752,14 +681,6 @@ export class ScrollSection extends CanvasSectionObject {
 		this.scrollHorizontalWithOffset(offset);
 	}
 
-	private getLocalYOnVerticalScrollBar (point: cool.SimplePoint): number {
-		return point.pY - app.activeDocument.activeLayout.scrollProperties.startY;
-	}
-
-	private getLocalXOnHorizontalScrollBar (point: cool.SimplePoint): number {
-		return point.pX - app.activeDocument.activeLayout.scrollProperties.startX;
-	}
-
 	private clearQuickScrollTimeout() {
 		if (this.sectionProperties.quickScrollVerticalTimer) {
 			clearTimeout(this.sectionProperties.quickScrollVerticalTimer);
@@ -782,20 +703,17 @@ export class ScrollSection extends CanvasSectionObject {
 		const mirrorX = this.isRTL();
 		const documentAnchor = app.sectionContainer.getSectionWithName(app.CSections.Tiles.name);
 
-		// For CompareChanges view, viewedRectangle.pY1 can be negative (due to
-		// yStart offset) even when scrolling is possible, so use canScrollVertical instead.
-		const canScrollV = layout.type === 'ViewLayoutCompareChanges'
-			? layout.canScrollVertical(documentAnchor)
-			: layout.viewedRectangle.pY1 >= 0;
+		// For CompareChanges view, viewedRectangle.pY1 can be negative while scrolling is possible.
+		const initialVerticalCheck = layout.type === 'ViewLayoutCompareChanges' ? true : layout.viewedRectangle.pY1 >= 0;
 
-		if (canScrollV) {
+		if (initialVerticalCheck) {
 			if ((!mirrorX && point.pX >= this.size[0] - scrollProps.usableThickness)
 				|| (mirrorX && point.pY <= scrollProps.usableThickness)) {
 				if (point.pY > scrollProps.yOffset) {
 					this.sectionProperties.clickScrollVertical = true;
 					this.map.scrollingIsHandled = true;
+					this.containerObject.capturePointerForDrag();
 					this.quickScrollVertical(point);
-					this.sectionProperties.pointerReCaptureSpacer = this.getLocalYOnVerticalScrollBar(point);
 					e.stopPropagation(); // Don't propagate to map.
 					this.stopPropagating(); // Don't propagate to bound sections.
 				}
@@ -819,8 +737,8 @@ export class ScrollSection extends CanvasSectionObject {
 					|| (mirrorX && point.pX >= scrollProps.xOffset && point.pX >= scrollProps.horizontalScrollRightOffset)) {
 					this.sectionProperties.clickScrollHorizontal = true;
 					this.map.scrollingIsHandled = true;
+					this.containerObject.capturePointerForDrag();
 					this.quickScrollHorizontal(point);
-					this.sectionProperties.pointerReCaptureSpacer = this.getLocalXOnHorizontalScrollBar(point);
 					e.stopPropagation(); // Don't propagate to map.
 					this.stopPropagating(); // Don't propagate to bound sections.
 				}
@@ -840,16 +758,16 @@ export class ScrollSection extends CanvasSectionObject {
 		this.clearQuickScrollTimeout();
 
 		if (this.sectionProperties.clickScrollVertical) {
+			this.containerObject.releasePointerForDrag();
 			e.stopPropagation(); // Don't propagate to map.
 			this.stopPropagating(); // Don't propagate to bound sections.
 			this.sectionProperties.clickScrollVertical = false;
-			this.sectionProperties.pointerSyncWithVerticalScrollBar = true; // Default.
 		}
 		else if (this.sectionProperties.clickScrollHorizontal) {
+			this.containerObject.releasePointerForDrag();
 			e.stopPropagation(); // Don't propagate to map.
 			this.stopPropagating(); // Don't propagate to bound sections.
 			this.sectionProperties.clickScrollHorizontal = false;
-			this.sectionProperties.pointerSyncWithHorizontalScrollBar = true; // Default.
 		}
 
 		this.sectionProperties.previousDragDistance = null;

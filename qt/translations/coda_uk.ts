@@ -26,37 +26,37 @@
     <message>
         <location filename="../DocumentOperations.cpp" line="58"/>
         <source>ODF spreadsheet (.ods)</source>
-        <translation>таблиця ODF (.ods)</translation>
+        <translation>Таблиця ODF (.ods)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="59"/>
         <source>Excel Spreadsheet (.xlsx)</source>
-        <translation type="unfinished"></translation>
+        <translation>Таблиця Excel (.xlsx)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="60"/>
         <source>Excel 2003 Spreadsheet (.xls)</source>
-        <translation type="unfinished"></translation>
+        <translation>Таблиця Excel 2003 (.xlsx)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="66"/>
         <source>ODF presentation (.odp)</source>
-        <translation type="unfinished"></translation>
+        <translation>Презентація ODF (.odp)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="67"/>
         <source>PowerPoint Presentation (.pptx)</source>
-        <translation type="unfinished"></translation>
+        <translation>Презентація PowerPoint (.pptx)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="68"/>
         <source>PowerPoint 2003 Presentation (.ppt)</source>
-        <translation type="unfinished"></translation>
+        <translation>Презентація PowerPoint 2003 (.ppt)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="74"/>
         <source>ODF drawing (.odg)</source>
-        <translation type="unfinished"></translation>
+        <translation>Малюнок ODF (.odg)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="106"/>
@@ -137,71 +137,75 @@
         <translation type="vanished">Презентації (*.odp);;Усі файли (*)</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="739"/>
+        <location filename="../Bridge.cpp" line="737"/>
+        <location filename="../Bridge.cpp" line="805"/>
         <source>All Files (*)</source>
         <translation>Усі файли (*)</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="249"/>
+        <location filename="../Bridge.cpp" line="228"/>
         <source>Save Document</source>
         <translation>Зберегти документ</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="625"/>
+        <location filename="../Bridge.cpp" line="637"/>
         <source>Open File</source>
         <translation>Відкрити файл</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="626"/>
+        <location filename="../Bridge.cpp" line="638"/>
         <source>All Files (*);;Text Documents (*.odt *.ott *.doc *.docx *.rtf *.txt);;Spreadsheets (*.ods *.ots *.xls *.xlsx *.csv);;Presentations (*.odp *.otp *.ppt *.pptx)</source>
         <translation>Усі файли (*);;Текстові документи (*.odt *.ott *.doc *.docx *.rtf *.txt);;Електронні таблиці (*.ods *.ots *.xls *.xlsx *.csv);;Презентації (*.odp *.otp *.ppt *.pptx)</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="737"/>
+        <location filename="../Bridge.cpp" line="735"/>
         <source>Export As</source>
         <translation>Експортувати як</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="156"/>
+        <location filename="../Bridge.cpp" line="803"/>
+        <source>Save File</source>
+        <translation>Зберегти Файл</translation>
+    </message>
+    <message>
+        <location filename="../WebView.cpp" line="158"/>
         <source>Presentation</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../WebView.cpp" line="161"/>
-        <location filename="../WebView.cpp" line="177"/>
-        <source>Text Document</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../WebView.cpp" line="166"/>
-        <source>Spreadsheet</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../WebView.cpp" line="171"/>
-        <source>Drawing</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../WebView.cpp" line="317"/>
-        <source>Presenting</source>
         <translation>Презентація</translation>
+    </message>
+    <message>
+        <location filename="../WebView.cpp" line="163"/>
+        <location filename="../WebView.cpp" line="179"/>
+        <source>Text Document</source>
+        <translation>Текстовий Документ</translation>
+    </message>
+    <message>
+        <location filename="../WebView.cpp" line="168"/>
+        <source>Spreadsheet</source>
+        <translation>Електронна Таблиця</translation>
+    </message>
+    <message>
+        <location filename="../WebView.cpp" line="173"/>
+        <source>Drawing</source>
+        <translation>Малюнок</translation>
+    </message>
+    <message>
+        <location filename="../WebView.cpp" line="304"/>
+        <source>Presenting</source>
+        <translation type="unfinished">Презентація</translation>
     </message>
 </context>
 <context>
     <name>WebView</name>
     <message>
-        <location filename="../WebView.cpp" line="233"/>
         <source>Unsaved Changes</source>
-        <translation>Незбережені зміни</translation>
+        <translation type="vanished">Незбережені зміни</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="234"/>
         <source>The document has unsaved changes. Do you want to close anyway?</source>
-        <translation>У документі є незбережені зміни. Ви все одно хочете його закрити?</translation>
+        <translation type="vanished">У документі є незбережені зміни. Ви все одно хочете його закрити?</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="609"/>
+        <location filename="../WebView.cpp" line="599"/>
         <source>Start</source>
         <translation>Старт</translation>
     </message>

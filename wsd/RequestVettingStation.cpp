@@ -16,20 +16,20 @@
 
 #include <config.h>
 
-#include <RequestVettingStation.hpp>
+#include "RequestVettingStation.hpp"
 
 #include <common/Anonymizer.hpp>
-#include <COOLWSD.hpp>
-#include <RequestDetails.hpp>
-#include <TraceEvent.hpp>
-#include <Exceptions.hpp>
-#include <common/Log.hpp>
-#include <DocumentBroker.hpp>
-#include <ClientSession.hpp>
 #include <common/JsonUtil.hpp>
-#include <CacheUtil.hpp>
+#include <common/Log.hpp>
+#include <common/TraceEvent.hpp>
 #include <common/Util.hpp>
-#include <ServerAuditUtil.hpp>
+#include <wsd/COOLWSD.hpp>
+#include <wsd/CacheUtil.hpp>
+#include <wsd/ClientSession.hpp>
+#include <wsd/DocumentBroker.hpp>
+#include <wsd/Exceptions.hpp>
+#include <wsd/RequestDetails.hpp>
+#include <wsd/ServerAuditUtil.hpp>
 #include <wsd/Storage.hpp>
 
 #if !MOBILEAPP
@@ -71,15 +71,18 @@ void RequestVettingStation::handleRequest(const std::string& id)
     const auto uriPublic = RequestDetails::sanitizeURI(url);
     const auto docKey = RequestDetails::getDocKey(uriPublic);
     const std::string fileId = Uri::getFilenameFromURL(Uri::decode(docKey));
-    Anonymizer::mapAnonymized(fileId,
-                              fileId); // Identity mapping, since fileId is already obfuscated
+    if (Anonymizer::enabled())
+    {
+        Anonymizer::mapAnonymized(fileId,
+                                  fileId); // Identity mapping, since fileId is already obfuscated
+    }
 
     // Check if readonly session is required.
     const bool isReadOnly = Uri::hasReadonlyPermission(uriPublic.toString());
 
-    LOG_INF("URL [" << COOLWSD::anonymizeUrl(url)
+    LOG_INF("URL [" << Anonymizer::anonymizeUrl(url)
                     << "] will be proactively vetted. Sanitized uriPublic: ["
-                    << COOLWSD::anonymizeUrl(uriPublic.toString()) << "], docKey: [" << docKey
+                    << Anonymizer::anonymizeUrl(uriPublic.toString()) << "], docKey: [" << docKey
                     << "], session: [" << _id << "], fileId: [" << fileId << "] "
                     << (isReadOnly ? "(readonly)" : "(writable)"));
 
@@ -91,10 +94,10 @@ void RequestVettingStation::handleRequest(const std::string& id)
     switch (storageType)
     {
         case StorageBase::StorageType::Unsupported:
-            LOG_ERR("Unsupported URI [" << COOLWSD::anonymizeUrl(uriPublic.toString())
+            LOG_ERR("Unsupported URI [" << Anonymizer::anonymizeUrl(uriPublic.toString())
                                         << "] or no storage configured");
             throw BadRequestException("No Storage configured or invalid URI " +
-                                      COOLWSD::anonymizeUrl(uriPublic.toString()) + ']');
+                                      Anonymizer::anonymizeUrl(uriPublic.toString()) + ']');
 
             break;
         case StorageBase::StorageType::Unauthorized:
@@ -104,20 +107,20 @@ void RequestVettingStation::handleRequest(const std::string& id)
             break;
 
         case StorageBase::StorageType::Conversion:
-            LOG_INF("URI [" << COOLWSD::anonymizeUrl(uriPublic.toString()) << "] on docKey ["
+            LOG_INF("URI [" << Anonymizer::anonymizeUrl(uriPublic.toString()) << "] on docKey ["
                             << docKey << "] is for a document conversion");
             break;
 
 #if ENABLE_LOCAL_FILESYSTEM
         case StorageBase::StorageType::FileSystem:
-            LOG_INF("URI [" << COOLWSD::anonymizeUrl(uriPublic.toString()) << "] on docKey ["
+            LOG_INF("URI [" << Anonymizer::anonymizeUrl(uriPublic.toString()) << "] on docKey ["
                             << docKey << "] is for a FileSystem document");
             break;
 #endif // ENABLE_LOCAL_FILESYSTEM
 
 #if !MOBILEAPP
         case StorageBase::StorageType::Wopi:
-            LOG_INF("URI [" << COOLWSD::anonymizeUrl(uriPublic.toString()) << "] on docKey ["
+            LOG_INF("URI [" << Anonymizer::anonymizeUrl(uriPublic.toString()) << "] on docKey ["
                             << docKey << "] is for a WOPI document");
 
             // CheckFileInfo asynchronously.
@@ -238,14 +241,17 @@ void RequestVettingStation::handleRequest(const std::string& id,
     const auto uriPublic = RequestDetails::sanitizeURI(url);
     std::string docKey = RequestDetails::getDocKey(uriPublic);
     const std::string fileId = Uri::getFilenameFromURL(Uri::decode(docKey));
-    Anonymizer::mapAnonymized(fileId,
-                              fileId); // Identity mapping, since fileId is already obfuscated
+    if (Anonymizer::enabled())
+    {
+        Anonymizer::mapAnonymized(fileId,
+                                  fileId); // Identity mapping, since fileId is already obfuscated
+    }
 
     // Check if readonly session is required.
     const bool isReadOnly = Uri::hasReadonlyPermission(uriPublic.toString());
 
-    LOG_INF("URL [" << COOLWSD::anonymizeUrl(url) << "] for WS Request. Sanitized uriPublic: ["
-                    << COOLWSD::anonymizeUrl(uriPublic.toString()) << "], docKey: [" << docKey
+    LOG_INF("URL [" << Anonymizer::anonymizeUrl(url) << "] for WS Request. Sanitized uriPublic: ["
+                    << Anonymizer::anonymizeUrl(uriPublic.toString()) << "], docKey: [" << docKey
                     << "], session: [" << _id << "], fileId: [" << fileId << "] "
                     << (isReadOnly ? "(readonly)" : "(writable)"));
 
@@ -257,10 +263,10 @@ void RequestVettingStation::handleRequest(const std::string& id,
     switch (storageType)
     {
         case StorageBase::StorageType::Unsupported:
-            LOG_ERR("Unsupported URI [" << COOLWSD::anonymizeUrl(uriPublic.toString())
+            LOG_ERR("Unsupported URI [" << Anonymizer::anonymizeUrl(uriPublic.toString())
                                         << "] or no storage configured");
             throw BadRequestException("No Storage configured or invalid URI " +
-                                      COOLWSD::anonymizeUrl(uriPublic.toString()) + ']');
+                                      Anonymizer::anonymizeUrl(uriPublic.toString()) + ']');
 
             break;
         case StorageBase::StorageType::Unauthorized:
@@ -270,7 +276,7 @@ void RequestVettingStation::handleRequest(const std::string& id,
             break;
 
         case StorageBase::StorageType::Conversion:
-            LOG_INF("URI [" << COOLWSD::anonymizeUrl(uriPublic.toString()) << "] on docKey ["
+            LOG_INF("URI [" << Anonymizer::anonymizeUrl(uriPublic.toString()) << "] on docKey ["
                             << docKey << "] is for a document conversion");
 
             LOG_TRC("Dissociating client socket from "
@@ -287,7 +293,7 @@ void RequestVettingStation::handleRequest(const std::string& id,
 
 #if ENABLE_LOCAL_FILESYSTEM
         case StorageBase::StorageType::FileSystem:
-            LOG_INF("URI [" << COOLWSD::anonymizeUrl(uriPublic.toString()) << "] on docKey ["
+            LOG_INF("URI [" << Anonymizer::anonymizeUrl(uriPublic.toString()) << "] on docKey ["
                             << docKey << "] is for a FileSystem document");
 
             LOG_TRC("Dissociating client socket from "
@@ -305,7 +311,7 @@ void RequestVettingStation::handleRequest(const std::string& id,
 
 #if !MOBILEAPP
         case StorageBase::StorageType::Wopi:
-            LOG_INF("URI [" << COOLWSD::anonymizeUrl(uriPublic.toString()) << "] on docKey ["
+            LOG_INF("URI [" << Anonymizer::anonymizeUrl(uriPublic.toString()) << "] on docKey ["
                             << docKey << "] is for a WOPI document");
             // Remove from the current poll and transfer.
             LOG_TRC("Dissociating client socket from "
@@ -396,6 +402,7 @@ void RequestVettingStation::checkFileInfo(const Poco::URI& uri, int redirectLimi
 {
     auto cfiContinuation = [this](CheckFileInfo& checkFileInfo)
     {
+        _checkFileInfoEnd = std::chrono::steady_clock::now();
         assert(&checkFileInfo == _checkFileInfo.get() && "Unknown CheckFileInfo instance");
         if (_checkFileInfo && _checkFileInfo->state() == CheckFileInfo::State::Pass &&
             _checkFileInfo->wopiInfo())
@@ -422,6 +429,7 @@ void RequestVettingStation::checkFileInfo(const Poco::URI& uri, int redirectLimi
     // CheckFileInfo asynchronously.
     assert(_checkFileInfo == nullptr);
     _checkFileInfo = std::make_shared<CheckFileInfo>(_poll, uri, std::move(cfiContinuation));
+    _checkFileInfoStart = std::chrono::steady_clock::now();
     _checkFileInfo->checkFileInfo(redirectLimit);
 }
 #endif //!MOBILEAPP
@@ -437,6 +445,12 @@ std::shared_ptr<DocumentBroker> RequestVettingStation::createDocBroker(
 
     if (docBroker)
     {
+        docBroker->loadTimings().record("wopiPostReceived", _wopiPostReceived);
+        if (_checkFileInfoStart.time_since_epoch().count() != 0)
+            docBroker->loadTimings().record("checkFileInfoStart", _checkFileInfoStart);
+        if (_checkFileInfoEnd.time_since_epoch().count() != 0)
+            docBroker->loadTimings().record("checkFileInfoEnd", _checkFileInfoEnd);
+
         // Indicate to the client that we're connecting to the docbroker.
         if (_ws)
         {

@@ -11,9 +11,11 @@
 
 #pragma once
 
+#include <typeinfo>
 #include <Poco/Path.h>
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,7 +39,15 @@ namespace Desktop
 
     void syncSettings(const std::function<void(const std::vector<char>&)>& sendFileCallback);
 
-    void processIntegratorAdminFile(const std::string& payload);
+    // Native-owned per-user UI preferences (preferences.json in the config dir).
+    // getDarkMode() returns nullopt when the user has not chosen yet.
+    std::optional<bool> getDarkMode();
+    void setDarkMode(bool value);
+
+    // Fetch the AI provider's model list (proxy for the desktop, which has no
+    // server). payload is {"provider","apiKey","baseUrl"}; returns the provider's
+    // JSON body or {"error":...}.
+    std::string fetchAIModels(const std::string& payload);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

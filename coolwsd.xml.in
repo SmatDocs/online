@@ -28,6 +28,17 @@
         <rest_protocol desc="REST API protocol. For LanguageTool leave it blank, for Duden Korrekturserver use the string 'duden'." type="string" default=""></rest_protocol>
     </languagetool>
 
+    <ai desc="AI assistant configuration. When enabled with credentials, all users on this instance get AI features without needing to configure them individually. Works with any OpenAI-compatible endpoint, including local/self-hosted models (Ollama, vLLM, LM Studio, etc.). No data is sent anywhere unless explicitly configured. Per-user WOPI settings and View Settings override these defaults.">
+        <enabled desc="Master switch for AI features. When false, AI is disabled server-wide regardless of WOPI or per-user settings." type="bool" default="false">true</enabled>
+        <api_url desc="Default AI provider base URL (e.g. http://localhost:11434 for local Ollama, https://api.openai.com for OpenAI, or https://generativelanguage.googleapis.com/v1beta/openai for Gemini). Must support the OpenAI-compatible chat completions endpoint." type="string" default="">https://generativelanguage.googleapis.com/v1beta/openai</api_url>
+        <api_key desc="Default API key for the AI provider." type="string" default=""></api_key>
+        <model desc="Default AI model name. For tool use (inspecting and editing the document) the model must support native function/tool calling - e.g. gemini-3-flash-preview, gpt-4o, llama3.1, qwen2.5. Models without it (e.g. base llama3, gemma) can still chat but cannot drive document tools." type="string" default="">gemini-3-flash-preview</model>
+        <image_api_url desc="Default AI image-generation provider base URL (e.g. https://api.openai.com). Leave empty to reuse the text-AI endpoint if the same provider is used. Must support the OpenAI-compatible image generation endpoint." type="string" default=""></image_api_url>
+        <image_api_key desc="Default API key for the image-generation provider. Leave empty to reuse the text-AI key if the same provider is used." type="string" default=""></image_api_key>
+        <image_model desc="Default image-generation model name (e.g. dall-e-3, stable-diffusion-3, flux-schnell)." type="string" default=""></image_model>
+        <image_size desc="Default generated image size in WxH pixels (e.g. 1024x1024). Provider-specific - leave empty to let the provider pick." type="string" default=""></image_size>
+    </ai>
+
     <deepl desc="DeepL API settings for translation service">
         <enabled desc="If true, shows translate option as a menu entry in the compact view and as an icon in the tabbed view." type="bool" default="false">false</enabled>
         <api_url desc="URL for the API" type="string" default=""></api_url>
@@ -53,7 +64,6 @@
         <bgsave_priority desc="A (lower) priority for use by background save processes to free time for interactive ones" type="uint" default="5">5</bgsave_priority>
         <bgsave_timeout_secs desc="The default maximum number of seconds to wait for the background save processes to finish before giving up and reverting to synchronous saving" type="uint" default="120">120</bgsave_timeout_secs>
         <redlining_as_comments desc="If true show red-lines as comments" type="bool" default="false">false</redlining_as_comments>
-        <pdf_resolution_dpi desc="The resolution, in DPI, used to render PDF documents as image. Memory consumption grows proportionally. Must be a positive value less than 385. Defaults to 96." type="uint" default="96">96</pdf_resolution_dpi>
         <idle_timeout_secs desc="The maximum number of seconds before unloading an idle document. Defaults to 1 hour." type="uint" default="3600">3600</idle_timeout_secs>
         <idlesave_duration_secs desc="The number of idle seconds after which document, if modified, should be saved. Disabled when 0. Defaults to 30 seconds." type="uint" default="30">30</idlesave_duration_secs>
         <autosave_duration_secs desc="The number of seconds after which document, if modified, should be saved. Disabled when 0. Defaults to 5 minutes." type="uint" default="300">300</autosave_duration_secs>
@@ -62,8 +72,8 @@
         <always_save_on_exit desc="On exiting the last editor, always perform a save and upload if the document had been modified. This is to allow the storage to store the document, if it had skipped doing so, previously, as an optimization." type="bool" default="false">false</always_save_on_exit>
         <limit_virt_mem_mb desc="The maximum virtual memory allowed to each document process. 0 for unlimited." type="uint">0</limit_virt_mem_mb>
         <limit_stack_mem_kb desc="The maximum stack size allowed to each document process. 0 for unlimited." type="uint">8000</limit_stack_mem_kb>
-        <limit_file_size_mb desc="The maximum file size allowed to each document process to write. 0 for unlimited." type="uint">0</limit_file_size_mb>
-        <limit_num_open_files desc="The maximum number of files allowed to each document process to open. 0 for unlimited." type="uint">0</limit_num_open_files>
+        <limit_file_size_mb desc="The maximum file size allowed to each document process to write. Should accomodate the largest log file, if logging to file is enabled. 0 for unlimited." type="uint">0</limit_file_size_mb>
+        <limit_num_open_files desc="The maximum number of files allowed to each document process to open. Minimum, 4096. 0 for unlimited." type="uint">0</limit_num_open_files>
         <limit_load_secs desc="Maximum number of seconds to wait for a document load to succeed. 0 for unlimited." type="uint" default="100">100</limit_load_secs>
         <limit_store_failures desc="Maximum number of consecutive save-and-upload to storage failures when unloading the document. 0 for unlimited (not recommended)." type="uint" default="5">5</limit_store_failures>
         <limit_convert_secs desc="Maximum number of seconds to wait for a document conversion to succeed. 0 for unlimited." type="uint" default="100">100</limit_convert_secs>
@@ -81,7 +91,7 @@
 
     <per_view desc="View-specific settings.">
         <out_of_focus_timeout_secs desc="The maximum number of seconds before dimming and stopping updates when the browser tab is no longer in focus. Defaults to 300 seconds." type="uint" default="300">3600</out_of_focus_timeout_secs>
-        <idle_timeout_secs desc="The maximum number of seconds before dimming and stopping updates when the user is no longer active (even if the browser is in focus). Defaults to 15 minutes." type="uint" default="900">900</idle_timeout_secs>
+        <idle_timeout_secs desc="The maximum number of seconds before dimming and stopping updates when the user is no longer active (even if the browser is in focus). Defaults to 15 minutes." type="uint" default="900">3600</idle_timeout_secs>
         <custom_os_info desc="Custom string shown as OS version in About dialog, get from system if empty." type="string" default=""></custom_os_info>
         <min_saved_message_timeout_secs type="uint" desc="The minimum number of seconds before the last modified message is being displayed." default="6">6</min_saved_message_timeout_secs>
     </per_view>
@@ -245,7 +255,7 @@
       <capabilities desc="Should we require capabilities to isolate processes into chroot jails" type="bool" default="true">true</capabilities>
 
       <jwt_expiry_secs desc="Time in seconds before the Admin Console's JWT token expires" type="int" default="1800">1800</jwt_expiry_secs>
-      <enable_macros_execution desc="Specifies whether the macro execution is enabled in general. This will enable Basic and Python scripts to execute both installed and from documents. If it is set to false, the macro_security_level is ignored. If it is set to true, the mentioned entry specified the level of macro security." type="bool" default="false">false</enable_macros_execution>
+      <enable_macros_execution desc="Specifies whether the macro execution is enabled in general. This will enable Basic and Python scripts to execute both installed and from documents. If it is set to false, the macro_security_level is ignored. If it is set to true, the mentioned entry specified the level of macro security." type="bool" default="false">true</enable_macros_execution>
       <macro_security_level desc="Level of Macro security. 1 (Medium) Confirmation required before executing macros from untrusted sources. 0 (Low, not recommended) All macros will be executed without confirmation." type="int" default="1">1</macro_security_level>
       <enable_metrics_unauthenticated desc="When enabled, the /cool/getMetrics endpoint will not require authentication." type="bool" default="false">false</enable_metrics_unauthenticated>
       <server_signature desc="Whether to send server signature in HTTP response headers" type="bool" default="@SERVER_SIGNATURE@">@SERVER_SIGNATURE@</server_signature>
@@ -302,6 +312,11 @@
             </alias_groups>
 
             <is_legacy_server desc="Set to true for legacy server that need deprecated headers." type="bool" default="false">false</is_legacy_server>
+            <access_token>
+                <!-- Note: access_token_ttl is optional and must be in *our* timezone. It is the number of milliseconds after the Unix time epoch when the access_token in question will expire. -->
+                <default_lifetime_mins desc="The default number of minutes an access_token is assumed to be valid after loading it when access_token_ttl is not provided (or is 0). 0 assumes no expiry." type="uint" default="0">0</default_lifetime_mins>
+                <refresh_timeout_secs desc="The number of seconds to wait for the access_token to be refreshed after postMessage App_TokenExpired before the document becomes read-only." type="uint" default="60">60</refresh_timeout_secs>
+            </access_token>
         </wopi>
         <ssl desc="SSL settings">
             <as_scheme type="bool" default="true" desc="When set we exclusively use the WOPI URI's scheme to enable SSL for storage">true</as_scheme>

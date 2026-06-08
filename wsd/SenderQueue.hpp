@@ -16,14 +16,15 @@
 
 #pragma once
 
-#include <common/SigUtil.hpp>
 #include <common/Log.hpp>
-#include <TileDesc.hpp>
-#include <Protocol.hpp>
+#include <common/Protocol.hpp>
+#include <common/SigUtil.hpp>
+#include <wsd/TileDesc.hpp>
 
-#include <Poco/JSON/Parser.h>
 #include <Poco/JSON/Object.h>
+#include <Poco/JSON/Parser.h>
 
+#include <algorithm>
 #include <deque>
 #include <mutex>
 
@@ -34,14 +35,26 @@ class SenderQueue final
 public:
     SenderQueue() = default;
 
-    size_t enqueue(const Item& item)
+    /// Enqueues an item, if not a duplicate and not shutting down.
+    /// Returns true if enqueued. If a queued tile message is dropped by
+    /// deduplication, its wireId is written to *droppedTileWireId so the
+    /// caller can keep any per-tile tracking accurate.
+    bool enqueue(const Item& item, TileWireId* droppedTileWireId = nullptr)
     {
-        std::unique_lock<std::mutex> lock(_mutex);
+        if (droppedTileWireId)
+            *droppedTileWireId = 0;
 
-        if (!SigUtil::getTerminationFlag() && deduplicate(item))
-            _queue.push_back(item);
+        if (!SigUtil::getTerminationFlag())
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            if (deduplicate(item, droppedTileWireId))
+            {
+                _queue.push_back(item);
+                return true;
+            }
+        }
 
-        return _queue.size();
+        return false;
     }
 
     /// Dequeue an item if we have one - @returns true if we do, else false.
@@ -111,6 +124,12 @@ public:
         return _queue.size();
     }
 
+    bool empty() const
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return _queue.empty();
+    }
+
     void dumpState(std::ostream& os)
     {
         std::lock_guard<std::mutex> lock(_mutex);
@@ -149,7 +168,10 @@ private:
     /// Deduplicate messages based on the new one.
     /// Returns true if the new message should be
     /// enqueued, otherwise false.
-    bool deduplicate(const Item& item)
+    /// If a queued tile message is dropped, its wireId is reported via
+    /// droppedTileWireId (when non-null) so the caller can update
+    /// any per-tile tracking it maintains.
+    bool deduplicate(const Item& item, TileWireId* droppedTileWireId)
     {
         // Deduplicate messages based on the incoming one.
         std::string command = item->firstToken();
@@ -178,7 +200,11 @@ private:
                 });
 
             if (pos != _queue.end())
+            {
+                if (droppedTileWireId)
+                    *droppedTileWireId = TileDesc::parse((*pos)->firstLine()).getWireId();
                 _queue.erase(pos);
+            }
         }
         else if (command == "invalidatecursor:" ||
                  command == "setpart:" ||
@@ -247,6 +273,9 @@ private:
         return true;
     }
 
+private:
+    static constexpr std::size_t kMaxInteractionBurst = 4;
+
     static bool isInteractionMessage(const Item& item)
     {
         return item->firstTokenMatches("textselection:") ||
@@ -256,12 +285,10 @@ private:
                item->firstTokenMatches("cursorvisible:");
     }
 
-private:
-    static constexpr std::size_t kMaxInteractionBurst = 4;
     mutable std::mutex _mutex;
     std::deque<Item> _queue;
-    std::size_t _priorityBurstCount = 0;
     using queue_item_t = typename std::deque<Item>::value_type;
+    std::size_t _priorityBurstCount = 0;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

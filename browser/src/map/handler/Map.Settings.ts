@@ -66,21 +66,11 @@ window.L.Map.Settings = window.L.Handler.extend({
 			{ access_token_ttl: window.accessTokenTTL },
 			{ wopi_setting_base_url: window.wopiSettingBaseUrl },
 			{ disable_ai_settings: this._map.wopi.DisableAISettings },
+			{ show_left_nav: true },
 		];
-
-		if (window.mode.isCODesktop())
-			window.postMobileMessage(
-				'PROCESSINTEGRATORADMINFILE ' +
-					JSON.stringify({
-						ui_theme: theme,
-						lang: window.langParam,
-						mobile: window.mode.isSmallScreenDevice(),
-					}),
-			);
 
 		const options = {
 			prefix: 'iframe-settings',
-			stylesheets: [app.LOUtil.getURL('settings.css')],
 			titlebar: _('Options'),
 			modalButtons: [
 				{
@@ -142,11 +132,18 @@ window.L.Map.Settings = window.L.Handler.extend({
 			this._iframeDialog.postMessage(data);
 		} else if (data.MessageId === 'settings-save-complete') {
 			this.removeIframe();
+			// updateviewsettings applies these to the session (e.g. AI credentials
+			// so the AI assistant can authenticate). The apps persist settings
+			// separately, through the native bridge.
 			if (data.viewSettings) {
 				app.socket.sendMessage(
 					'updateviewsettings ' + JSON.stringify(data.viewSettings),
 				);
 			}
+			app.map.uiManager.showSnackbar(_('Settings saved'));
+			// Defer the View-tab / AI-sidebar payoff until isAIConfigured is
+			// updated from the viewsetting: reply (see ServerConnectionService).
+			app.map._aiJustConfigured = !!data.aiJustConfigured;
 		}
 	},
 });

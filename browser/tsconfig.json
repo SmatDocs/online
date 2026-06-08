@@ -11,6 +11,9 @@
       "removeComments": false,
       "preserveConstEnums": false,
       "downlevelIteration": true,
+      "jsx": "react",
+      "jsxFactory": "h",
+      "jsxFragmentFactory": "Fragment",
       "watch": false,
       "plugins": [
         {
@@ -23,6 +26,7 @@
       "./node_modules",
       "./node_modules/*",
       "js",
+      "scripts",
       "admin",
       "mocha_tests",
       "docs",
@@ -33,6 +37,7 @@
       "debug",
       "welcome",
       "util",
-      "templates"
+      "templates",
+      "extensions"
     ]
   }

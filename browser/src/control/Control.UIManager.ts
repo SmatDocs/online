@@ -117,7 +117,33 @@ class UIManager extends window.L.Control {
 		this.map['stateChangeHandler'].setItemValue('toggledarktheme', 'false');
 		this.map['stateChangeHandler'].setItemValue('invertbackground', 'false');
 		this.map['stateChangeHandler'].setItemValue('showannotations', 'false');
+
+		// View Changes menu: default to Hidden, sync with core state.
+		this.map['stateChangeHandler'].setItemValue('viewchanges-hidden', 'true');
+		this.map['stateChangeHandler'].setItemValue('viewchanges-inline', 'false');
+		this.map['stateChangeHandler'].setItemValue('viewchanges-sidebyside', 'false');
+		this.map['stateChangeHandler'].setItemValue('viewchanges', 'false');
+		this.map.on('commandstatechanged', (e: any) => {
+			if (e.commandName === '.uno:ShowTrackedChanges') {
+				const isSideBySide =
+					app.activeDocument?.activeLayout?.type === 'ViewLayoutCompareChanges';
+				if (isSideBySide) return; // side-by-side mode manages its own state
+
+				const isInline = e.state === 'true';
+				this.map['stateChangeHandler'].setItemValue('viewchanges-inline', isInline ? 'true' : 'false');
+				this.map['stateChangeHandler'].setItemValue('viewchanges-hidden', isInline ? 'false' : 'true');
+				this.map['stateChangeHandler'].setItemValue('viewchanges', isInline ? 'true' : 'false');
+			}
+		});
 		window.addEventListener('browsersettingchanged', () => {
+			this.initDarkModeFromSettings();
+		});
+		// Cross-window live update: desktop windows share one profile, so a dark
+		// mode change in another window fires a 'storage' event here. Drop the
+		// cached value and re-apply from the (updated) localStorage.
+		window.addEventListener('storage', (e) => {
+			if (e.key !== 'darkTheme') return;
+			delete (window.prefs as any)._localStorageCache['darkTheme'];
 			this.initDarkModeFromSettings();
 		});
 	}
@@ -151,6 +177,17 @@ class UIManager extends window.L.Control {
 			element.addEventListener('animationend', function () {
 				element.classList.remove('attention');
 			}, { once: true });
+		}
+	}
+
+	/**
+	 * Shows a timed tooltip on the view mode button and optionally plays the attention animation.
+	 */
+	showViewModeAttention(): void {
+		const permissionMode = this.permissionViewMode;
+		const viewModeBtn = permissionMode && (permissionMode.viewModeDropdown || permissionMode.viewModeContainer);
+		if (viewModeBtn) {
+			this.showAttention(viewModeBtn, _('You are currently in View mode'), true, 5000);
 		}
 	}
 
@@ -316,6 +353,12 @@ class UIManager extends window.L.Control {
 			this.loadDarkMode();
 			this.activateDarkModeInCore(true);
 		}
+
+		// On the desktop the native app owns the dark-mode setting (persists it
+		// and broadcasts it to other windows).
+		if (window.mode.isCODesktop())
+			window.postMobileMessage('SETDARKMODE ' + window.prefs.getBoolean('darkTheme'));
+
 		this.applyInvert();
 		this.setCanvasColorAfterModeChange();
 		if (!window.mode.isSmallScreenDevice())
@@ -342,7 +385,14 @@ class UIManager extends window.L.Control {
 			this.loadLightMode();
 		}
 
-		this.applyInvert(true);
+		// On the desktop the load-time render option doesn't reliably override the
+		// engine's persisted theme, so apply it to the engine here too - but not in
+		// the starter screen, which has no document (and no socket) yet.
+		const pushToEngine =
+			window.mode.isCODesktop() && !(window as any).starterScreen;
+		if (pushToEngine)
+			this.activateDarkModeInCore(inDarkTheme);
+		this.applyInvert(!pushToEngine);
 	}
 
 	/**
@@ -398,6 +448,8 @@ class UIManager extends window.L.Control {
 
 		this.permissionViewMode = new PermissionViewMode(this.map);
 		this.permissionViewMode.init();
+
+		app.UI.compactViewAccessibility.initialize();
 	}
 
 	/**
@@ -545,7 +597,7 @@ class UIManager extends window.L.Control {
 
 		// Return early when we are loading welcome slideshow
 		if (startWelcomePresentation) {
-			this.map.on('docloaded', () => {
+			this.map.once('docloaded', () => {
 				app.dispatcher.dispatch('presentinwindow');
 			});
 			this.map.slideShowPresenter = new SlideShow.SlideShowPresenter(
@@ -602,6 +654,8 @@ class UIManager extends window.L.Control {
 			formulabarRow?.classList?.remove('hidden');
 			this.map.formulabar = JSDialog.FormulaBar(this.map);
 			this.map.addressInputField = JSDialog.AddressInputField(this.map);
+			JSDialog.MessageRouter.flushPending('addressinputfield');
+			this.map.calcNotifications = new CalcNotifications(this.map);
 			$('#toolbar-wrapper').addClass('spreadsheet');
 
 			// remove unused elements
@@ -659,7 +713,7 @@ class UIManager extends window.L.Control {
 					if (e.statusType !== 'initializationcomplete') {
 						return;
 					}
-					app.dispatcher.dispatch('comparechanges');
+					app.dispatcher.dispatch('viewchanges-sidebyside');
 					this.map.off('statusindicator', enterCompareChanges);
 				};
 				this.map.on('statusindicator', enterCompareChanges);
@@ -766,7 +820,7 @@ class UIManager extends window.L.Control {
 		if (window.mode.isDesktop() && !window.ThisIsAMobileApp) {
 			app.socket.sendMessage('uno .uno:SidebarHide');
 		}
-		else if (window.mode.isChromebook()) {
+		else if (window.mode.isChromebook() || window.mode.isSmallScreenDevice() || window.mode.isTablet()) {
 			// HACK - currently the sidebar shows when loaded,
 			// with the exception of mobile phones & tablets - but
 			// there, it does not show only because they start
@@ -835,6 +889,8 @@ class UIManager extends window.L.Control {
 
 		if (this._menubarShouldBeHidden)
 			this.hideMenubar();
+
+		app.UI.compactViewAccessibility.initialize();
 	}
 
 	/**
@@ -853,6 +909,7 @@ class UIManager extends window.L.Control {
 		}
 
 		this.notebookbar = JSDialog.NotebookbarBase(this.map, notebookbar);
+		JSDialog.MessageRouter.flushPending('notebookbar');
 		if (showUI)
 			this.showNotebookbarControl();
 	}
@@ -902,20 +959,6 @@ class UIManager extends window.L.Control {
 	refreshMenubar(): void {
 		if (this.map.menubar)
 			this.map.menubar._onRefresh();
-	}
-
-	/**
-	 * Refreshes the sidebar after a delay.
-	 * @param ms - Milliseconds to delay the refresh (default 400ms).
-	 */
-	refreshSidebar(ms?: number): void {
-		ms = ms !== undefined ? ms : 400;
-		setTimeout(function () {
-			var message = 'dialogevent ' +
-				(window.sidebarId !== undefined ? window.sidebarId : -1) +
-				' {"id":"-1"}';
-			app.socket.sendMessage(message);
-		}, ms);
 	}
 
 	/**
@@ -997,6 +1040,15 @@ class UIManager extends window.L.Control {
 
 		// be sure we hide old scrollable markers
 		JSDialog.RefreshScrollables();
+
+		// Recalculate overflow layout after all DOM modifications.
+		// RefreshScrollables dispatches a resize event, but the
+		// OverflowManager skips resize events when the window size
+		// is unchanged. Fire refreshoverflows explicitly with layouting service
+		// so the browser has time to lay out the new DOM before overflow is measured.
+		app.layoutingService.appendLayoutingTask(() => {
+			this.map.fire('refreshoverflows', { force: true });
+		});
 	}
 
 	// UI modification
@@ -1152,6 +1204,11 @@ class UIManager extends window.L.Control {
 
 		if (!found)
 			window.app.console.error('UIManager: Button with id "' + buttonId + '" not found.');
+
+		// When toggledarktheme is hidden, also hide the adjacent separator
+		// to prevent two separators from being displayed in a row.
+		if (buttonId === 'toggledarktheme')
+			this.showButton('view-invertbackground-break', show);
 	}
 
 	/**
@@ -1219,6 +1276,18 @@ class UIManager extends window.L.Control {
 			this.hiddenCommands[command] = true;
 
 		var found = false;
+
+		// The standalone edit affordance on the comment dialog is keyed to
+		// .uno:EditAnnotation. Toggle it for any comments already on screen;
+		// createMenu also consults isCommandVisible for ones built later.
+		// Done before the toolbar/menubar/notebookbar branches so a failure
+		// in one of them cannot skip the comment-dialog update.
+		if (command === '.uno:EditAnnotation') {
+			document.querySelectorAll<HTMLElement>('.cool-annotation-menu-edit')
+				.forEach(el => { el.classList.toggle('hidden-by-command', !show); });
+			found = true;
+		}
+
 		if (this.getCurrentMode() === 'classic') {
 			if (this.showCommandInClassicToolbar(command, show)) {
 				found = true;
@@ -1557,6 +1626,13 @@ class UIManager extends window.L.Control {
 		return document.getElementById('toolbar-down')?.style?.display !== 'none';
 	}
 
+	/**
+	 * Returns whether the multi-page view layout is active.
+	 */
+	isMultiPageView(): boolean {
+		return app.activeDocument?.activeLayout?.type === 'ViewLayoutMultiPage';
+	}
+
 	// Event handlers
 
 	/**
@@ -1646,9 +1722,7 @@ class UIManager extends window.L.Control {
 	 */
 	enterReadonlyOrClose(): void {
 		if (this.map.isEditMode()) {
-			// in edit mode, passing 'edit' actually enters readonly mode
-			// and bring the blue circle editmode button back
-			this.map.setPermission('edit');
+			this.map.setPermission('readonly');
 			var toolbar = app.map.topToolbar;
 			if (toolbar) {
 				toolbar.selectItem('closemobile', false);
@@ -2033,7 +2107,7 @@ class UIManager extends window.L.Control {
 			}}
 		], cancelButtonId);
 		if (!buttonText && !withCancel) {
-			// if no buttons better to set tabIndex to negative so the element is not reachable via sequential keyboard navigation but can be focused programatically
+			// if no buttons better to set tabIndex to negative so the element is not reachable via sequential keyboard navigation but can be focused programmatically
 			const dialogElement = document.getElementById(dialogId);
 			if (dialogElement != null) {
 				dialogElement.tabIndex = -1;

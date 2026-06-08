@@ -216,6 +216,7 @@ window.L.Map.include({
 			return;
 		}
 		this.showBusy(_('Renaming...'), false);
+		app.socket.captureZoomBeforeRenameReload();
 		app.socket.sendMessage('renamefile filename=' + encodeURIComponent(filename));
 	},
 
@@ -315,7 +316,7 @@ window.L.Map.include({
 		}
 
 		var isAllowedInReadOnly = false;
-		var allowedCommands = ['.uno:Save', '.uno:WordCountDialog',
+		var allowedCommands = ['.uno:Save', '.uno:SaveAs', '.uno:WordCountDialog',
 			'.uno:Signature', '.uno:PrepareSignature', '.uno:DownloadSignature', '.uno:InsertSignatureLine',
 			'.uno:ShowResolvedAnnotations', '.uno:Open', '.uno:CloseWin',
 			'.uno:ToolbarMode?Mode:string=notebookbar_online.ui', '.uno:ToolbarMode?Mode:string=Default',
@@ -325,7 +326,7 @@ window.L.Map.include({
 			allowedCommands.push('.uno:InsertAnnotation','.uno:DeleteCommentThread', '.uno:DeleteAnnotation', '.uno:DeleteNote',
 				'.uno:DeleteComment', '.uno:ReplyComment', '.uno:ReplyToAnnotation', '.uno:PromoteComment', '.uno:ResolveComment',
 				'.uno:ResolveCommentThread', '.uno:ResolveComment', '.uno:EditAnnotation', '.uno:ExportToEPUB', '.uno:ExportToPDF',
-				'.uno:ExportDirectToPDF');
+				'.uno:ExportDirectToPDF', '.uno:InsertThreadedComment');
 
 			const graphicInfo = GraphicSelection.extraInfo;
 			if (graphicInfo && graphicInfo.isSignature)
@@ -523,6 +524,30 @@ window.L.Map.include({
 			document.getElementById('online-help-content').innerHTML = app.util.replaceCtrlAltInMac(document.getElementById('online-help-content').innerHTML);
 		}
 		if (id === 'keyboard-shortcuts-content') {
+			// Fill tagged shortcut cells from the locale-aware lookup
+			// table (generated from core's Accelerators.xcu).
+			if (window.JSDialog && window.JSDialog.ShortcutsUtil) {
+				var rows = contentElement.querySelectorAll('tr[data-uno]');
+				for (i = 0; i < rows.length; i++) {
+					var unoCmd = rows[i].getAttribute('data-uno');
+					var shortcut = window.JSDialog.ShortcutsUtil.getShortcutText(unoCmd);
+					var cell = rows[i].querySelector('.shortcut');
+					if (!cell) continue;
+					if (!shortcut) {
+						console.warn('cool-help.html: no shortcut found for ' + unoCmd
+							+ ' — row will render empty. Either drop the data-uno attribute'
+							+ ' or add the binding to Accelerators.xcu / unoshortcuts.py.');
+						continue;
+					}
+					var html = '';
+					var parts = shortcut.split('+');
+					for (var j = 0; j < parts.length; j++) {
+						if (j > 0) html += '<span class="kbd--plus" aria-hidden="true">+</span>';
+						html += '<kbd>' + parts[j] + '</kbd>';
+					}
+					cell.innerHTML = html;
+				}
+			}
 			document.getElementById('keyboard-shortcuts-content').innerHTML = app.util.replaceCtrlAltInMac(document.getElementById('keyboard-shortcuts-content').innerHTML);
 		}
 		var searchInput = document.getElementById('online-help-search-input');
@@ -577,13 +602,22 @@ window.L.Map.include({
 		const buttons = onlineHelpContent.querySelectorAll('.scroll-button');
 
 		buttons.forEach((button) => {
-			button.addEventListener('click', () => {
-				const targetId = button.dataset.target;
-				if (targetId) {
-					const targetElement = document.getElementById(`${targetId}`);
-					if (targetElement) {
-						targetElement.scrollIntoView();
-					}
+			button.addEventListener('click', (e) => {
+				const href = button.getAttribute('href');
+				if (!href || !href.startsWith('#')) return;
+				const targetElement = document.getElementById(href.substring(1));
+				if (!targetElement) return;
+				// Scroll only the help content area. The browser's default anchor
+				// navigation can scroll the modal popup itself, pushing the
+				// titlebar (and its close button) out of view.
+				e.preventDefault();
+				const scrollContainer = targetElement.closest('.ui-dialog-content');
+				if (scrollContainer) {
+					const containerRect = scrollContainer.getBoundingClientRect();
+					const targetRect = targetElement.getBoundingClientRect();
+					scrollContainer.scrollTop += targetRect.top - containerRect.top;
+				} else {
+					targetElement.scrollIntoView({ block: 'start' });
 				}
 			});
 		});
@@ -694,7 +728,8 @@ window.L.Map.include({
 		}.bind(this));
 
 		// select all event scroll elements, main-header elements, product header elements and make visible to user if search term is empty
-		document.querySelectorAll('.m-v-0, .product-header, .help-dialog-header').forEach(function(element) {
+		// Exclude doctype-tagged TOC entries so non-current-doctype items stay hidden after search clear
+		document.querySelectorAll('.m-v-0:not(.text):not(.spreadsheet):not(.presentation), .product-header, .help-dialog-header, .help-toc').forEach(function(element) {
 			this.show(element);
 			element.style.backgroundColor = '';
 		}.bind(this));
@@ -768,26 +803,6 @@ window.L.Map.include({
 				str = 'http://' + str;
 		}
 		return str;
-	},
-
-	getTextForLink: function() {
-		var map = this;
-		var text = '';
-		if (this.hyperlinkUnderCursor && this.hyperlinkUnderCursor.text) {
-			text = this.hyperlinkUnderCursor.text;
-		} else if (this._clip && this._clip._selectionType == 'text') {
-			if (map['stateChangeHandler'].getItemValue('.uno:Copy') === 'enabled') {
-				if (window.L.Browser.clipboardApiAvailable) {
-					// Async copy, trigger fetching the text selection.
-					app.socket.sendMessage('gettextselection mimetype=text/html,text/plain;charset=utf-8');
-				} else {
-					text = this.extractContent(this._clip._selectionContent);
-				}
-			}
-		} else if (this._docLayer._selectedTextContent) {
-			text = this.extractContent(this._docLayer._selectedTextContent);
-		}
-		return text;
 	},
 
 	cancelSearch: function() {

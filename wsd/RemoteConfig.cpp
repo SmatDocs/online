@@ -23,6 +23,7 @@
 #include "RemoteConfig.hpp"
 
 #include <common/CommandControl.hpp>
+#include <common/HexUtil.hpp>
 #include <common/JsonUtil.hpp>
 #include <net/HttpRequest.hpp>
 #include <net/Socket.hpp>
@@ -48,14 +49,16 @@ void RemoteJSONPoll::start()
             LOG_INF("Remote " << _expectedKind << " is not specified in coolwsd.xml");
             return; // no remote config server setup.
         }
-#if !ENABLE_DEBUG
-        if (Util::iequal(remoteServerURI.getScheme(), "http"))
+
+        if constexpr (!Util::isDebugEnabled())
         {
-            LOG_ERR(
-                "Remote config url should only use HTTPS protocol: " << remoteServerURI.toString());
-            return;
+            if (Util::iequal(remoteServerURI.getScheme(), "http"))
+            {
+                LOG_ERR("Remote config url should only use HTTPS protocol: "
+                        << remoteServerURI.toString());
+                return;
+            }
         }
-#endif
     }
 
     startThread();
@@ -70,14 +73,15 @@ void RemoteJSONPoll::pollingThread()
         // don't try to fetch from an empty URI
         bool valid = !remoteServerURI.empty();
 
-#if !ENABLE_DEBUG
-        if (Util::iequal(remoteServerURI.getScheme(), "http"))
+        if constexpr (!Util::isDebugEnabled())
         {
-            LOG_ERR(
-                "Remote config url should only use HTTPS protocol: " << remoteServerURI.toString());
-            valid = false;
+            if (Util::iequal(remoteServerURI.getScheme(), "http"))
+            {
+                LOG_ERR("Remote config url should only use HTTPS protocol: "
+                        << remoteServerURI.toString());
+                valid = false;
+            }
         }
-#endif
 
         if (valid)
         {
@@ -821,7 +825,7 @@ bool RemoteFontConfigPoll::finishDownload(const std::string& uri,
     // And in reality, it is a bit unclear how likely it even is that fonts downloaded through
     // this mechanism even will be updated.
     const std::string fontFile =
-        COOLWSD::TmpFontDir + '/' + Util::encodeId(Util::rng::getNext()) + ".ttf";
+        COOLWSD::TmpFontDir + '/' + HexUtil::encodeId(Util::rng::getNext()) + ".ttf";
 
     std::ofstream fontStream(fontFile);
     fontStream.write(body.data(), body.size());

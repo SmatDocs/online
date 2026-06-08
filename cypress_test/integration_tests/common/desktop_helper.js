@@ -49,6 +49,38 @@ function sidebarToggle() {
 	cy.cGet('#optionscontainer [id^="SidebarDeck.PropertyDeck"] button').click();
 }
 
+// Ensure the sidebar dock is hidden, regardless of starting state.
+function ensureSidebarHidden() {
+	cy.log('>> ensureSidebarHidden');
+	cy.cGet('#sidebar-dock-wrapper').then(function($dock) {
+		if ($dock.is(':visible')) {
+			cy.cGet('#optionscontainer [id^="SidebarDeck.PropertyDeck"] button').click();
+		}
+	});
+	cy.cGet('#sidebar-dock-wrapper').should('not.be.visible');
+	cy.log('<< ensureSidebarHidden - end');
+}
+
+// Wait for the sidebar to reshow and grab focus to its first focusable
+// element via the 'sidebarstealfocus' timer scheduled in
+// Control.Sidebar.ts.
+function assertSidebarStealsFocus(win) {
+	cy.log('>> assertSidebarStealsFocus - start');
+
+	cy.cGet('#sidebar-dock-wrapper').should('be.visible').then(function(sidebar) {
+		// This first waitUntilLayoutingIsIdle ensures the sidebar
+		// update task has run and registered the timer.
+		helper.waitUntilLayoutingIsIdle(win);
+		// Wait for that timer to complete
+		helper.waitForTimers(win, 'sidebarstealfocus');
+		// Wait until dispatched tasks get done
+		helper.waitUntilLayoutingIsIdle(win);
+		helper.containsFocusElement(sidebar[0], true);
+	});
+
+	cy.log('<< assertSidebarStealsFocus - end');
+}
+
 // Make the status bar visible if it's hidden at the moment.
 // We use the menu option under 'View' menu to make it visible.
 function showStatusBarIfHidden() {
@@ -210,6 +242,8 @@ function selectZoomLevel(zoomLevel, makeZoomVisible = true) {
 	if (makeZoomVisible)
 		makeZoomItemsVisible();
 	cy.cGet('#toolbar-down #zoom .arrowbackground').click();
+	// wait for fade-in animation end
+	cy.cGet('#zoom-dropdown').should('have.css', 'opacity', '1');
 	cy.cGet('#zoom-dropdown').contains('.ui-combobox-entry', zoomLevel).click();
 	shouldHaveZoomLevel(zoomLevel);
 
@@ -228,10 +262,13 @@ function resetZoomLevel() {
 	cy.log('<< resetZoomLevel - end');
 }
 
-function fitWidthZoom() {
+function fitWidthZoom(isWriter = true) {
 	cy.log('>> fitWidthZoom - start');
 
-	cy.cGet('#toolbar-down #fitwidthzoom').click();
+	if (isWriter)
+		cy.cGet('#toolbar-down #fitwidthzoom-writer').click();
+	else
+		cy.cGet('#toolbar-down #fitwidthzoom-impress').click();
 
 	cy.log('<< fitWidthZoom - end');
 }
@@ -428,7 +465,7 @@ function openReadOnlyFile(filePath) {
 	helper.loadDocument(filePath, true);
 
 	//check doc is loaded
-	cy.cGet('.leaflet-canvas-container canvas', {timeout : Cypress.config('defaultCommandTimeout') * 2.0});
+	cy.cGet('.leaflet-canvas-container canvas');
 
 	helper.isCanvasWhite(false);
 
@@ -634,6 +671,8 @@ module.exports.updateFollowingUsers = updateFollowingUsers;
 module.exports.assertVisiblePage = assertVisiblePage;
 module.exports.closeNavigatorSidebar = closeNavigatorSidebar;
 module.exports.sidebarToggle = sidebarToggle;
+module.exports.ensureSidebarHidden = ensureSidebarHidden;
+module.exports.assertSidebarStealsFocus = assertSidebarStealsFocus;
 module.exports.getCompactIcon = getCompactIcon;
 module.exports.getNbIcon = getNbIcon;
 module.exports.getCompactIconArrow = getCompactIconArrow;

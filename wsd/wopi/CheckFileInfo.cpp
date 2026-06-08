@@ -13,20 +13,20 @@
 
 #include "CheckFileInfo.hpp"
 
-#include <COOLWSD.hpp>
-#include <RequestDetails.hpp>
-#include <TraceEvent.hpp>
-#include <wopi/StorageConnectionManager.hpp>
-#include <Exceptions.hpp>
-#include <common/Log.hpp>
-#include <DocumentBroker.hpp>
-#include <ClientSession.hpp>
 #include <common/JsonUtil.hpp>
+#include <common/Log.hpp>
+#include <common/TraceEvent.hpp>
 #include <common/Util.hpp>
+#include <wopi/StorageConnectionManager.hpp>
+#include <wsd/COOLWSD.hpp>
+#include <wsd/ClientSession.hpp>
+#include <wsd/DocumentBroker.hpp>
+#include <wsd/Exceptions.hpp>
+#include <wsd/RequestDetails.hpp>
 
 bool CheckFileInfo::checkFileInfo(int redirectLimit)
 {
-    std::string uriAnonym = COOLWSD::anonymizeUrl(_url.toString());
+    std::string uriAnonym = Anonymizer::anonymizeUrl(_url.toString());
 
     LOG_DBG("Getting info for wopi uri [" << uriAnonym << ']');
     _httpSession = StorageConnectionManager::getHttpSession(_url);
@@ -63,8 +63,8 @@ bool CheckFileInfo::checkFileInfo(int redirectLimit)
             if (redirectLimit != 0)
             {
                 const std::string location = httpResponse->get("Location");
-                LOG_INF("WOPI::CheckFileInfo redirect to URI [" << COOLWSD::anonymizeUrl(location)
-                                                                << "]");
+                LOG_INF("WOPI::CheckFileInfo redirect to URI ["
+                        << Anonymizer::anonymizeUrl(location) << "]");
 
                 _url = RequestDetails::sanitizeURI(location);
                 checkFileInfo(redirectLimit - 1);
@@ -117,7 +117,7 @@ bool CheckFileInfo::checkFileInfo(int redirectLimit)
             {
                 LOG_DBG("WOPI::CheckFileInfo ("
                         << callDurationMs
-                        << "): " << (COOLWSD::AnonymizeUserData ? "obfuscated" : wopiResponse));
+                        << "): " << (Anonymizer::enabled() ? "obfuscated" : wopiResponse));
 
                 _state = State::Pass;
             }

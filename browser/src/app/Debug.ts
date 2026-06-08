@@ -85,6 +85,8 @@ class DebugManager {
 	private logKeyboardEvents: boolean;
 	private logTrace: boolean;
 
+	public messageDelayOn: boolean;
+
 	public eventDelayWatchdog: boolean;
 	private _eventDelayTimeout: TimeoutHdl | null;
 	private _lastEventDelayTime?: number;
@@ -100,6 +102,10 @@ class DebugManager {
 	private _automatedUserTasks: AutomatedTaskSet;
 	private _automatedUserQueue: string[];
 	private _automatedUserPhase: number;
+
+	// DOM touching in LayoutingTask check
+	private _domObserver: MutationObserver;
+	private _stopOnDomTouching: boolean;
 
 	constructor(map: MapInterface) {
 		this._map = map;
@@ -196,6 +202,32 @@ class DebugManager {
 		if (servedBy) servedBy.style.display = 'none';
 	}
 
+	private setupObserver() {
+		this._domObserver = new MutationObserver(() => {
+			app.console.error('DOM Modification outside LayoutingTask or RAF');
+			if (this._stopOnDomTouching) {
+				// eslint-disable-next-line
+				debugger;
+			}
+		});
+	}
+
+	public enterRAF() {
+		if (this._domObserver) this._domObserver.disconnect();
+	}
+
+	public exitRAF() {
+		if (this._domObserver) {
+			const config = {
+				attributes: true,
+				childList: true,
+				subtree: true,
+			};
+
+			this._domObserver.observe(app.map.getContainer(), config);
+		}
+	}
+
 	private _addDebugTool(tool: DebugTool) {
 		// Create category fieldset if it doesn't exist
 		let fieldset = this._panel.querySelector(
@@ -251,6 +283,7 @@ class DebugManager {
 				self.overlayOn = true;
 				self._overlayData = {};
 				self._painter._addDebugOverlaySection();
+				if (self._map._serverLoadTimings) self.dumpServerLoadTimings();
 			},
 			onRemove: function () {
 				Util.ensureValue(self._painter);
@@ -495,6 +528,18 @@ class DebugManager {
 		});
 
 		this._addDebugTool({
+			name: 'Verbose JSDialog log',
+			category: 'Logging',
+			startsOn: false,
+			onAdd: function () {
+				JSDialog.verbose = true;
+			},
+			onRemove: function () {
+				JSDialog.verbose = false;
+			},
+		});
+
+		this._addDebugTool({
 			name: 'Tile Dumping',
 			category: 'Logging',
 			startsOn: false,
@@ -541,6 +586,32 @@ class DebugManager {
 		});
 
 		this._addDebugTool({
+			name: 'DOM touching outside task',
+			category: 'Logging',
+			startsOn: true,
+			onAdd: function () {
+				self.setupObserver();
+				self.exitRAF();
+			},
+			onRemove: function () {
+				self._domObserver.disconnect();
+				delete self._domObserver;
+			},
+		});
+
+		this._addDebugTool({
+			name: 'DOM touching - breakpoint',
+			category: 'Logging',
+			startsOn: false,
+			onAdd: function () {
+				self._stopOnDomTouching = true;
+			},
+			onRemove: function () {
+				self._stopOnDomTouching = false;
+			},
+		});
+
+		this._addDebugTool({
 			name: 'Typer',
 			category: 'Functionality',
 			startsOn: false,
@@ -552,6 +623,32 @@ class DebugManager {
 			},
 			onRemove: function () {
 				clearTimeout(self._typerTimeoutId);
+			},
+		});
+
+		this._addDebugTool({
+			name: 'Delay messages 100ms',
+			category: 'Functionality',
+			startsOn: false,
+			onAdd: function () {
+				self.messageDelayOn = true;
+				app.socket.enableMessageDelay(100);
+			},
+			onRemove: function () {
+				self.messageDelayOn = false;
+				app.socket.disableMessageDelay();
+			},
+		});
+
+		this._addDebugTool({
+			name: 'Test refetching tiles',
+			category: 'Functionality',
+			startsOn: false,
+			onAdd: function () {
+				BitmapTileManager.setLimitedCacheSize();
+			},
+			onRemove: function () {
+				BitmapTileManager.setDefaultCacheSize();
 			},
 		});
 
@@ -1376,6 +1473,41 @@ class DebugManager {
 		this._pingTimeoutId = setTimeout(this._pingTimeout.bind(this), 2000);
 	}
 
+	public dumpServerLoadTimings(): void {
+		const t = this._map._serverLoadTimings;
+		if (!t) return;
+		if (!this.overlayOn) return;
+
+		const entries = Object.keys(t)
+			.map((k) => ({ key: k, us: t[k] }))
+			.sort((a, b) => a.us - b.us);
+
+		window.app.console.group('Server load timings (steady_clock us)');
+		let prev = entries.length ? entries[0].us : 0;
+		for (const e of entries) {
+			const delta = e.us - prev;
+			window.app.console.log(
+				e.key.padEnd(24, ' ') +
+					' ' +
+					String(e.us).padStart(16, ' ') +
+					' us (+' +
+					(delta / 1000).toFixed(3) +
+					' ms)',
+			);
+			prev = e.us;
+		}
+		window.app.console.groupEnd();
+
+		const first = entries.length ? entries[0].us : 0;
+		const lines = entries.map(
+			(e) => e.key + '=' + ((e.us - first) / 1000).toFixed(1) + 'ms',
+		);
+		this.setOverlayMessage(
+			'serverLoadTimings',
+			'Server load: ' + lines.join(' '),
+		);
+	}
+
 	public reportPong(rendercount: number): void {
 		if (!this.pingOn) {
 			return;
@@ -1436,7 +1568,7 @@ class DebugManager {
 				'Event handling delay: ' + Math.ceil(delayMs) + 'ms',
 			);
 
-			if (delayMs > very_slow_time_threshold) {
+			if (delayMs > very_slow_time_threshold && !window.L.Browser.cypressTest) {
 				const msg = _(
 					'Event handling has been delayed for an unexpectedly long time: {0}ms',
 				);

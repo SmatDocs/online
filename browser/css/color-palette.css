@@ -10,11 +10,12 @@
 	--color-main-text: #333333;
 	--color-text-dark: #333333;  /* select */
 	--color-text-darker: #000;  /* hover */
-	--color-text-lighter: #696969; /* secondard text, disabled */
+	--color-text-light: #696969; /* secondard text, disabled */
 	--color-text-calc-header: #e8e8e8;
 	--color-status-badge: #616161;
 	--color-slideshow: #A8A8A8;
 	--color-date-text: #555555;
+	--color-annotation-line: #000000;
 
 	--color-main-background: #F8F9FA;
 	--color-background-dark: #e8e8e8;  /* select */
@@ -27,6 +28,8 @@
 	--brightness-stylesview: 1;
 
 	--color-canvas: #f0f0f0;
+	--color-scrollbar-thumb: #7E8182;
+	--color-scrollbar-railway: #EFEFEF;
 
 	--color-primary: #0b87e7; /* border-color */
 	--color-primary-text: #fff; /* text color when primary-lighter is background */
@@ -50,6 +53,10 @@
 	--color-warning: #eca700;
 	--color-success: #46ba61;
 
+	--color-btn-danger-bg: #b62723;
+	--color-btn-danger-hover-bg: #fdeaea;
+	--color-btn-danger-outline: #b62723;
+
 	--color-presenter-console-btn-hover: #404040;
 
 	--color-box-shadow-light: rgba(77, 77, 77, 0.1);
@@ -71,7 +78,7 @@
 	--color-border-calc-header: #c0c0c0;
 	--color-border-calc-header-sheetview: #333;
 
-	--color-calc-comment: #BF819E;
+	--color-calc-comment: #BE5083;
 	--column-row-highlight: #CCFFFF;
 
 	--color-grid-helper-line-solid: #e6e6e6;
@@ -88,6 +95,11 @@
 
 	--color-backstage-background : #f5f5f5;
 	--color-backstage-background-dark : #f0f0f0;
+
+	/* --opacity-icon: 1; */
+	/* --opacity-icon-hover: 1; */
+	/* --opacity-icon-active: 1; */
+	--opacity-icon-disabled: 0.65;
 }
 
 [data-bg-theme='light'] {

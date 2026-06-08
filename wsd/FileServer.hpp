@@ -16,15 +16,16 @@
 
 #pragma once
 
-#include <COOLWSD.hpp>
-#include <ConfigUtil.hpp>
-#include <FileUtil.hpp>
-#include <HttpRequest.hpp>
+#include <common/ConfigUtil.hpp>
+#include <common/ContainerUtil.hpp>
+#include <common/FileUtil.hpp>
+#include <net/HttpRequest.hpp>
+#include <net/Socket.hpp>
+#include <wsd/COOLWSD.hpp>
+
 #include <Poco/Net/PartHandler.h>
-#include <Socket.hpp>
 
 #include <string>
-#include <unordered_map>
 
 class RequestDetails;
 
@@ -59,7 +60,7 @@ public:
     std::size_t size() const { return _size; }
 
     /// Substitute variables per the given map.
-    std::string substitute(const std::unordered_map<std::string, std::string>& values);
+    std::string substitute(const Util::UnorderedStringMap<std::string>& values);
 
 private:
     const std::string _filename; ///< Filename on disk, with extension.
@@ -114,7 +115,7 @@ public:
         const std::string& accessToken() const { return _accessToken; }
         const std::string& noAuthHeader() const { return _noAuthHeader; }
         const std::string& permission() const { return _permission; }
-        // only exists in debugging mode, so built-in wopi debuging server
+        // only exists in debugging mode, so built-in wopi debugging server
         // can support multiple 'shared' configs depending on configid=something
         const std::string& wopiConfigId() const { return _wopiConfigId; }
 
@@ -214,6 +215,11 @@ public:
 
     void readDirToHash(const std::string& basePath, const std::string& path);
 
+    // Build the extension discovery index ("/browser/dist/extensions/index.json") by
+    // collecting every "/browser/dist/extensions/<id>/manifest.json" already cached in
+    // FileHash and emitting a JSON array of the <id>s; called once after readDirToHash:
+    void synthesizeExtensionsIndex();
+
     const std::string *getCompressedFile(const std::string &path);
 
     const std::string *getUncompressedFile(const std::string &path);
@@ -222,25 +228,25 @@ public:
     static void hstsHeaders([[maybe_unused]] http::Response& response)
     {
         // HSTS hardening. Disabled in debug builds.
-#if !ENABLE_DEBUG
-        if (ConfigUtil::isSslEnabled() || ConfigUtil::isSSLTermination())
+        if constexpr (!Util::isDebugEnabled())
         {
-            if (ConfigUtil::getConfigValue<bool>("ssl.sts.enabled", false))
+            if (ConfigUtil::isSslEnabled() || ConfigUtil::isSSLTermination())
             {
-                // Only for release, which doesn't support tests. No CONFIG_STATIC, therefore.
-                static const auto maxAge =
-                    ConfigUtil::getConfigValue<int>("ssl.sts.max_age", 31536000); // Default 1 year.
-                response.add("Strict-Transport-Security",
-                             "max-age=" + std::to_string(maxAge) + "; includeSubDomains");
+                if (ConfigUtil::getBool("ssl.sts.enabled", false))
+                {
+                    static const auto maxAge =
+                        ConfigUtil::getInt("ssl.sts.max_age", 31536000); // Default 1 year.
+                    response.add("Strict-Transport-Security",
+                                 "max-age=" + std::to_string(maxAge) + "; includeSubDomains");
+                }
             }
         }
-#endif
     }
 
     void dumpState(std::ostream& os);
 
 private:
-    using FileHashMap_t = std::unordered_map<std::string, std::pair<std::string, std::string>>;
+    using FileHashMap_t = Util::UnorderedStringMap<std::pair<std::string, std::string>>;
     FileHashMap_t FileHash;
     static void sendError(http::StatusCode errorCode, const std::string& requestPath,
                           const std::shared_ptr<StreamSocket>& socket,

@@ -14,7 +14,6 @@
 }
 
 .jsdialog-overlay.cancellable {
-	-webkit-animation: none;
 	animation: none;
 }
 
@@ -42,6 +41,14 @@
 	min-width: 400px;
 }
 
+@media (max-width: 480px) {
+
+	.jsdialog-window:not(.modalpopup) .jsdialog-container:not(.snackbar) {
+		min-width: unset;
+		width: 460px;
+	}
+}
+
 .jsdialog-container:not(.snackbar) td[role='gridcell'] {
 	padding-left: 5px;
 	padding-right: 5px;
@@ -64,7 +71,7 @@ div.ui-treeview-icon-column {
 #AcceptRejectChangesDialog #RedlineViewPage.jsdialog.ui-grid-cell {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: var(--spacing-m);
 }
 #AcceptRejectChangesDialog #RedlineFilterPage .ui-timefield {
 	margin: 5px;
@@ -142,16 +149,17 @@ div#autoFillPreviewTooltip .lokdialog.ui-dialog-content.ui-widget-content {
 	min-width: 198px;
 	border: 1px solid var(--color-border-darker) !important;
 	border-radius: var(--border-radius);
-	box-shadow: 0 0 3px var(--color-box-shadow);
+	box-shadow: var(--shadow-subtle);
 	overflow: auto;
 	position: relative;
 	margin: auto;
 	max-height: calc(100% - 30px);
 }
 
-/* Overwrite .jsdialog-window.modalpopup width */
-#modal-dialog-about-dialog-box {
-	max-width: 94%;
+#modal-dialog-about-dialog-box,/* Overwrite .jsdialog-window.modalpopup width */
+#modal-dialog-online-help-content-box,/* help */
+#modal-dialog-keyboard-shortcuts-content-box /* Keyboard shortcuts */ {
+	max-width: 94%; /* Safe guard for when window is too small */
 	width: 754px;
 }
 
@@ -205,23 +213,40 @@ div#autoFillPreviewTooltip .lokdialog.ui-dialog-content.ui-widget-content {
 	overflow: hidden; /* don't inherit scrollbar from parent */
 }
 
+@media (max-width: 480px) {
+
+	.jsdialog-container .ui-dialog-content > div:not(.ui-scrollwindow) {
+		overflow: unset;
+	}
+}
+
+
 .jsdialog-container .lokdialog.ui-dialog-content.ui-widget-content {
 	overflow: hidden;
 }
 
-.jsdialog.vertical label, .ui-frame-label, #ui-color-picker-recent-label {
+.jsdialog.vertical label, .ui-frame-label, #ui-color-picker-recent-label, #ui-color-picker-custom-label {
 	margin: auto 0px;
 	color: var(--color-main-text);
 	font-size: var(--default-font-size);
 	line-height: var(--default-height);
 	padding-left: inherit;
 }
+
+@media (max-width: 480px) {
+
+	.jsdialog-container .lokdialog.ui-dialog-content.ui-widget-content {
+		overflow-x: unset;
+	}
+}
+
+
 #glowframe > div.ui-frame.jsdialog.sidebar > label,
 #softedgeframe > div.ui-frame.jsdialog.sidebar > label {
 	color: var(--color-main-text);
 	font-size: var(--header-font-size);
 	line-height: var(--header-height);
-	margin: 4px;
+	margin: var(--spacing-s);
 }
 
 #accessibilityCheckBox .jsdialog.ui-text {
@@ -234,7 +259,6 @@ div#autoFillPreviewTooltip .lokdialog.ui-dialog-content.ui-widget-content {
 
 *:not(.modalpopup) > .lokdialog_container.ui-dialog.ui-widget-content, .autofilter-container {
 	border: 1px solid var(--color-border-darker);
-	-webkit-box-shadow: 0 0 3px var(--color-border-darker);
 	box-shadow: 0 0 3px var(--color-border-darker);
 	border-radius: var(--border-radius);
 	background: var(--color-background-darker);
@@ -276,13 +300,13 @@ td.jsdialog > [id^='table-box']:not(.sidebar) {
 	border-spacing: 0px;
 	width: 100%;
 	display: grid;
-	grid-gap: 4px;
+	grid-gap: var(--spacing-s);
 }
 
 /* Special Characters dialog */
 #SpecialCharactersDialog #viewgrid,
 #SpecialCharactersDialog #favgrid {
-	grid-gap: 4px;
+	grid-gap: var(--spacing-s);
 	width: fit-content;
 }
 
@@ -463,7 +487,7 @@ algned to the bottom */
 	margin-bottom: 14px !important;
 }
 
-#table-style-options .notebookbar.ui-overflow-group-inner,
+#table-options .notebookbar.ui-overflow-group-inner,
 .unotoolbutton.notebookbar.ui-content.has-label > *:not(.arrowbackground) {
 	height: var(--notebookbar-element-height) !important;
 	align-content: center;
@@ -489,33 +513,41 @@ algned to the bottom */
 	line-height: normal !important;
 	color: dimgray !important;
 	color: var(--color-text-dark) !important;
-	height: 24px !important;
+	height: var(--header-height) !important;
 	display: flex !important;
 	align-items: center !important;
 	justify-content: center;
 	padding: 0px 1em !important;
 	border: solid 1px transparent !important;
 	border-radius: var(--border-radius) !important;
-	background-color: var(--color-main-background) !important;
 	margin-inline-end: 12px !important;
-	margin-bottom: 6px;
+	background-color: transparent !important;
+	margin-block: 0 4px;
 }
 
 .ui-tab.hidden.jsdialog {
 	visibility: hidden !important;
 }
 
+[data-theme='dark'] .ui-tab.selected.jsdialog {
+	color: var(--color-main-text) !important;
+}
+
 .ui-toggle.checked button,
 .ui-tab.selected.jsdialog {
 	background-color: var(--color-background-lighter) !important;
-	color: var(--color-text-darker) !important;
-	box-shadow: 0 0 2px 1px var(--color-box-shadow-dark) !important;
+	color: rgba(var(--doc-type), 1) !important;
+	text-decoration: underline 2px solid rgba(var(--doc-type), 1);
+	text-underline-offset: 6px;
+}
+
+body button:not(.ui-corner-all):not(.button):not(.button-primary):not(.unobutton):not(.form-field-button):not(.notebookbar.ui-tab):not(.ui-expander-btn):not(.arrowbackground):not(.ui-combobox-button):not(.inserttable-grid .col):not(.spinfieldbutton-up):not(.spinfieldbutton-down):hover {
+	color: rgba(var(--doc-type), 1) !important;
+	background-color: var(--color-background-darker) !important;
 }
 
 .ui-tab.jsdialog:not(.selected):hover {
 	cursor: pointer !important;
-	background-color: var(--color-background-darker) !important;
-	color: var(--color-text-darker) !important;
 }
 
 /* Sub Tabs: example Format Cells: Font */
@@ -611,6 +643,14 @@ algned to the bottom */
 	display: inline-block;
 }
 
+.ui-treeview-header-button {
+	background: none;
+	border: none;
+	font: inherit;
+	font-weight: bold;
+	cursor: pointer;
+}
+
 .ui-treeview-icon {
 	height: var(--btn-img-size-s);
 	width: var(--btn-img-size-s);
@@ -636,7 +676,7 @@ algned to the bottom */
 }
 
 .ui-expander-content > .root-container.jsdialog {
-	margin: 4px;
+	margin: var(--spacing-s);
 }
 
 /* Link Button*/
@@ -647,7 +687,7 @@ algned to the bottom */
 
 .ui-linkbutton:hover {
 	cursor: pointer;
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 }
 
 /* TreeView */
@@ -715,7 +755,7 @@ algned to the bottom */
 .ui-treeview-entry div.disabled,
 .ui-treeview-entry.disabled {
 	background-color: var(--color-background-dark) !important;
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 	pointer-events: none;
 }
 
@@ -725,7 +765,7 @@ algned to the bottom */
 }
 
 .ui-treeview.empty {
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 }
 
 .ui-treeview-cell.with-sub-dialog {
@@ -769,8 +809,13 @@ algned to the bottom */
 
 #ServerAuditDialog .ui-treeview-entry {
 	display: grid;
-	grid-template-columns: var(--btn-img-size-m) 6fr 3fr;
+	grid-template-columns: var(--btn-img-size) 6fr 3fr;
 	white-space: normal;
+}
+
+#ServerAuditDialog .ui-treeview-entry .ui-treeview-rowheader {
+	min-width: 0;
+	background-color: transparent;
 }
 
 .ui-treeview-expanded-content {
@@ -800,6 +845,11 @@ algned to the bottom */
 	/* grid-column: '1 / ' + (this._columns + 1) - set inside JS */
 }
 
+/* ChartDataDialog uses subgrid so headers align with data columns */
+#ChartDataDialog .ui-treeview-headers {
+	grid-template-columns: subgrid;
+}
+
 #ServerAuditDialog .ui-treeview-headers {
 	display: grid;
 	grid-column-end: 4 !important;
@@ -820,8 +870,23 @@ algned to the bottom */
 	width: 100%;
 }
 
+.ui-treeview-header-color {
+	height: 4px;
+	width: 100%;
+	border-radius: 1px;
+}
+
 .ui-treeview-header-text {
 	font-weight: bold;
+}
+
+#ChartDataDialog .ui-treeview-rowheader {
+	font-weight: bold;
+	text-align: center;
+	background-color: var(--color-background-dark);
+	width: 100% !important;
+	min-width: 3em;
+	box-sizing: border-box;
 }
 
 .ui-treeview-entry > div {
@@ -851,9 +916,6 @@ algned to the bottom */
 }
 
 input[type='checkbox'].autofilter, .jsdialog input[type='checkbox'] {
-	-webkit-appearance: none;
-	-moz-appearance: none;
-	-o-appearance: none;
 	appearance: none;
 	width: 20px;
 	height: 20px;
@@ -883,6 +945,10 @@ input[type='checkbox']:checked.autofilter, .jsdialog input[type='checkbox']:chec
 	line-height: 40px;
 	padding-left: 10px;
 	padding-right: 10px;
+}
+
+#ChartDataDialog .ui-treeview-entry:focus-visible {
+	outline: none;
 }
 
 .ui-treeview-entry.selected {
@@ -958,8 +1024,7 @@ input[type='checkbox']:checked.autofilter, .jsdialog input[type='checkbox']:chec
 	background: var(--color-background-lighter);
 	border: 1px solid var(--color-border-dark);
 	border-radius: var(--border-radius);
-	-webkit-box-shadow: 0 0 3px var(--color-box-shadow);
-	box-shadow: 0 0 3px var(--color-box-shadow);
+	box-shadow: var(--shadow-subtle);
 }
 
 .context-menu-item {
@@ -974,7 +1039,7 @@ input[type='checkbox']:checked.autofilter, .jsdialog input[type='checkbox']:chec
 }
 
 .context-menu-item.context-menu-disabled {
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	background-color: var(--color-background-lighter);
 }
 
@@ -1016,6 +1081,22 @@ img.context-menu-icon {
 	padding-left: 2em;
 }
 
+#statusbar-context-menu-dropdown.jsdialog-window {
+	/* override width set in .jsdialog-window.modalpopup */
+	min-width: 160px !important;
+}
+
+#statusbar-context-menu-dropdown .ui-combobox-entry:not(.checked)::before {
+	content: '\2713';
+	display: inline-block;
+	visibility: hidden;
+	padding: 0 6px;
+}
+
+.user-hidden {
+	display: none !important;
+}
+
 /* input text */
 
 .ui-dialog .jsdialog.ui-edit:focus-visible {
@@ -1028,8 +1109,7 @@ img.context-menu-icon {
 	line-height: 28px;
 	max-height: 32px;
 	width: auto;
-	width: -webkit-fill-available;
-	width: -moz-available;
+	width: stretch;
 	border: 1px solid var(--color-border-dark);
 	border-radius: var(--border-radius);
 	overflow: hidden;
@@ -1043,9 +1123,7 @@ img.context-menu-icon {
 .autofilter .ui-treeview-search-input.jsdialog.ui-edit,
 .autofilter .ui-treeview-search-input.jsdialog.ui-edit:hover {
 	width: 100%;
-	width: -moz-available;
-	width: -webkit-fill-available;
-	width: fill-available;
+	width: stretch;
 	margin-top: 8px;
 	border-radius: 0;
 	border-left: none;
@@ -1104,7 +1182,11 @@ img.context-menu-icon {
 }
 
 .jsdialog input[type='radio'][disabled='disabled'] ~ label {
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
+}
+
+.jsdialog input[type='checkbox'][disabled='disabled'] ~ label {
+	color: var(--color-text-light);
 }
 
 /* text label */
@@ -1168,7 +1250,7 @@ img.context-menu-icon {
 
 .jsdialog.spinfieldcontainer[disabled] {
 	border: 1px solid var(--color-border-lighter);
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	background: var(--color-background-lighter);
 }
 
@@ -1213,11 +1295,11 @@ img.context-menu-icon {
 }
 
 .spinfieldbutton-up::after {
-	border-bottom: 5px solid var(--color-text-lighter);
+	border-bottom: 5px solid var(--color-text-light);
 }
 
 .spinfieldbutton-down::after {
-	border-top: 5px solid var(--color-text-lighter);
+	border-top: 5px solid var(--color-text-light);
 }
 
 .spinfieldcontainer:not([disabled]):hover .spinfieldbutton-up::after {
@@ -1248,11 +1330,9 @@ img.context-menu-icon {
 }
 
 .ui-listbox,
-.ui-combobox-wrapper,
+.ui-combobox,
 .ui-timefield {
 	box-sizing: border-box;
-	-webkit-appearance: none;
-	-moz-appearance: none;
 	appearance: none;
 	height: 1.5rem;
 	line-height: normal;
@@ -1261,12 +1341,6 @@ img.context-menu-icon {
 	border-radius: var(--border-radius);
 	background-color: var(--color-background-dark);
 	color: var(--color-text-dark);
-	display: flex;
-}
-
-.ui-combobox-label {
-	font-size: var(--default-font-size);
-	font-family: var(--cool-font);
 }
 
 .jsdialog-window .ui-listbox,
@@ -1309,7 +1383,8 @@ img.context-menu-icon {
 }
 
 .ui-combobox .ui-listbox-arrow {
-	margin-inline-start: -8px;
+	margin-inline-start: 0;
+	margin-inline-end: 0;
 }
 
 :dir(rtl) .ui-listbox-arrow {
@@ -1323,7 +1398,7 @@ img.context-menu-icon {
 }
 
 /* ui-combobox */
-.ui-combobox-wrapper,
+.ui-combobox,
 .ui-timefield {
 	border: 1px solid var(--color-border);
 }
@@ -1349,8 +1424,8 @@ img.context-menu-icon {
 	justify-content: center;
 	border-inline-start: 1px solid var(--color-border);
 	background-color: transparent;
-	padding-left: 20px;
-	border : none;
+	padding-inline: 10px;
+	border: none;
 }
 
 .ui-combobox-button:hover {
@@ -1388,7 +1463,7 @@ img.context-menu-icon {
 	top: 0;
 	z-index: 1;
 	background-color: var(--color-background-lighter);
-	padding: 4px;
+	padding: var(--spacing-s);
 }
 
 .ui-combobox-search-input {
@@ -1407,7 +1482,26 @@ img.context-menu-icon {
 	background-color: var(--color-background-hover);
 }
 
-.ui-combobox-entry.selected:not(:hover) span,
+[id^='comment-menu-'][id$='-entries'] .ui-combobox-entry:hover,
+#jsd-context-menu-entries .ui-combobox-entry:hover {
+	background-color: var(--color-background-darker) !important;
+	color: var(--color-text-darker) !important;
+}
+
+.ui-combobox-entry:has(> span.shortcut) > span:not(.shortcut) {
+	width: auto;
+}
+.ui-combobox-entry > span.shortcut {
+	margin-inline-start: auto;
+	width: auto;
+	padding-inline-start: 16px;
+	/* Compensate for the 15px scrollbar-padding overflow on
+	 * .ui-combobox-entry so the shortcut stays inside the visible area. */
+	padding-inline-end: 20px;
+	color: var(--color-text-light);
+}
+
+.ui-combobox-entry.selected:not(:hover):not(.checked):not(.notchecked) span,
 .margin-item.selected {
 	background-color: var(--color-background-darker);
 }
@@ -1453,12 +1547,8 @@ img.context-menu-icon {
 	filter: contrast(0.5);
 }
 
-.ui-combobox-entry.selected img:not(:hover) {
+.ui-combobox-entry.selected:not(.checked):not(.notchecked) img:not(:hover) {
 	border: 1px solid var(--color-primary);
-}
-
-[data-theme='dark'] .ui-combobox-entry img {
-	filter: invert(1);
 }
 
 /* Combobox entry with menu and thus arrow/chevron */
@@ -1467,6 +1557,12 @@ img.context-menu-icon {
 	grid-template-columns: 1fr 25px;
 	align-items: center;
 }
+
+/* add extra column space for the icon. */
+.ui-combobox-entry.ui-has-menu.ui-has-img {
+	grid-template-columns: 25px 1fr 25px;
+}
+
 /* Arrow/chevron */
 .ui-combobox-entry.ui-has-menu::after {
 	content: '';
@@ -1501,8 +1597,7 @@ img.context-menu-icon {
 	border: 1px solid var(--color-border-dark);
 	border-radius: var(--border-radius);
 	vertical-align: top;
-	width: -webkit-fill-available;
-	width: -moz-available;
+	width: stretch;
 }
 
 /* buttons: btns.css */
@@ -1538,7 +1633,7 @@ img.context-menu-icon {
 .ui-overflow-group-label {
 	font-family: var(--cool-font);
 	font-size: var(--overflow-group-font-size);
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	flex-grow: 1;
 	text-align: center;
 }
@@ -1556,8 +1651,8 @@ img.context-menu-icon {
 	display: grid;
 	grid-template-columns: 1fr 1fr 1fr;
 	max-height: 40vh;
-	gap: 2px;
-	padding: 2px;
+	gap: var(--spacing-xs);
+	padding: var(--spacing-xs);
 }
 
 .ui-iconview.mobile-wizard {
@@ -1618,16 +1713,6 @@ img.context-menu-icon {
 
 /* Autofilter dropdown */
 
-.autofilter.row {
-	display: table-row;
-}
-
-.autofilter.cell {
-	display: table-cell;
-	vertical-align: middle;
-	padding: 2px;
-}
-
 .autofilter-container {
 	background-color: var(--color-main-background);
 	border: 1px solid var(--color-border);
@@ -1637,16 +1722,25 @@ img.context-menu-icon {
 	font-family: var(--cool-font);
 }
 
-.autofilter-container > .root-container,
-.autofilter-container .cell,
-.autofilter-container .row {
+.autofilter-container > .root-container {
 	margin: 0;
 	padding: 0;
 }
 
+/* start: layouting has less cost when we have thousands of entries */
+.autofilter.ui-treeview-entry:not(.ui-treeview-tree) {
+	display: table-row !important;
+}
+.autofilter.ui-treeview-entry:not(.ui-treeview-tree) > div,
+.autofilter.ui-treeview-entry:not(.ui-treeview-tree) > div:last-child {
+	display: table-cell !important;
+}
+/* end: layouting optimization */
+
 .autofilter-container .ui-treeview {
 	border: none;
 }
+
 .autofilter-container #menu.ui-treeview {
 	height: auto;
 	width: 100%;
@@ -1675,7 +1769,7 @@ img.context-menu-icon {
 	/* Same size as #toggle_all.checkbutton > input */
 	height: 18px;
 	width: 18px;
-	margin: 8px;
+	margin: var(--spacing-m);
 	border: none;
 }
 
@@ -1954,11 +2048,11 @@ button.has-img img {
 
 .jsdialog.menubutton[disabled] {
 	background-color: transparent !important;
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 }
 
 .jsdialog.menubutton[disabled] .arrow {
-	border-top-color: var(--color-text-lighter);
+	border-top-color: var(--color-text-light);
 }
 
 /* toolbox */
@@ -1988,20 +2082,27 @@ button.has-img img {
 
 /* color picker */
 .ui-color-picker {
-	padding: 4px;
+	padding: var(--spacing-s);
+}
+
+.ui-color-picker-header {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: center;
+	gap: var(--spacing-m);
 }
 
 .ui-color-picker,
 #ui-color-picker-custom,
 #ui-color-picker-recent {
 	display: grid;
-	grid-gap: 4px;
+	grid-gap: var(--spacing-s);
 	align-items: center;
 }
 
 .ui-color-picker-palette {
 	display: grid;
-	grid-gap: 4px;
+	grid-gap: var(--spacing-s);
 	margin-top: 3px;
 }
 
@@ -2034,6 +2135,214 @@ button.has-img img {
 
 #ui-color-picker-custom input {
 	max-width: 75px;
+}
+
+/* emoji picker */
+.ui-emoji-picker {
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing-m);
+	padding: var(--spacing-s);
+	box-sizing: border-box;
+}
+
+.ui-emoji-picker-search {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 6px 10px;
+	border: 1px solid var(--color-border);
+	border-radius: 999px;
+	font-size: 12px;
+	font-family: var(--cool-font);
+	color: var(--color-main-text);
+	background: var(--color-main-background);
+}
+
+.ui-emoji-picker-search:focus {
+	border-color: var(--color-primary);
+	outline: none;
+}
+
+.ui-emoji-picker-grid {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.ui-emoji-picker-heading {
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	color: var(--color-text-lighter);
+	margin-top: 4px;
+}
+
+.ui-emoji-picker-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px;
+}
+
+.ui-emoji-picker-cell {
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	font-size: 18px;
+	line-height: 1;
+	border: 0;
+	background: transparent;
+	border-radius: 6px;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.ui-emoji-picker-cell:hover,
+.ui-emoji-picker-cell:focus-visible {
+	background: rgba(var(--color-primary-rgb, 11, 135, 231), 0.1);
+	outline: none;
+}
+
+/* chip widget - see Widget.Chip.ts for the JSON contract.
+   The outer .ui-chip carries the pill: a single rounded border and
+   background that the inner buttons inherit. The inner buttons
+   (.ui-chip-main and .ui-chip-action) are excluded from the
+   project-wide button catch-alls in btns.css and device-desktop.css
+   so they can stay transparent and the pill paints continuously. */
+.ui-chip {
+	display: inline-flex;
+	align-items: stretch;
+	gap: 0;
+	box-sizing: border-box;
+	max-width: 100%;
+	background: var(--color-main-background);
+	border: 1px solid var(--color-border);
+	border-radius: 999px;
+	overflow: hidden;
+	transition: background 0.15s ease,
+		border-color 0.15s ease;
+}
+
+.ui-chip:hover {
+	border-color: rgba(var(--color-primary-rgb, 11, 135, 231), 0.4);
+}
+
+.ui-chip:has(.ui-chip-main[aria-pressed='true']) {
+	background: var(--color-main-text);
+	border-color: var(--color-main-text);
+}
+
+.ui-chip-main,
+.ui-chip-action {
+	background: transparent;
+	border: 0;
+	border-radius: 0;
+	margin: 0;
+	color: var(--color-main-text);
+	font-family: var(--cool-font);
+	font-size: 12px;
+	line-height: 1;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: color 0.15s ease,
+		background 0.15s ease;
+}
+
+.ui-chip-main {
+	flex: 1 1 auto;
+	min-width: 0;
+	gap: 6px;
+	padding: 7px 4px 7px 12px;
+	height: 34px;
+	white-space: nowrap;
+}
+
+.ui-chip:has(.ui-chip-action) .ui-chip-main {
+	padding-right: 4px;
+}
+
+.ui-chip:not(:has(.ui-chip-action)) .ui-chip-main {
+	padding-right: 12px;
+}
+
+.ui-chip-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 14px;
+	line-height: 1;
+}
+
+.ui-chip-icon img {
+	width: 14px;
+	height: 14px;
+}
+
+.ui-chip-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* The inner spans must follow the button's color so the pressed-state
+   colour flip below reaches the visible text. The `.sidebar *` rule
+   in jssidebar.css would otherwise pin every descendant to
+   var(--color-main-text), which makes the label invisible against
+   the dark pressed pill. Two-class selectors here beat .sidebar *. */
+.ui-chip .ui-chip-text,
+.ui-chip .ui-chip-icon {
+	color: inherit;
+}
+
+.ui-chip-action {
+	flex: 0 0 auto;
+	padding: 0 10px 0 2px;
+	height: 34px;
+	min-width: 0;
+	color: var(--color-text-lighter);
+}
+
+.ui-chip-action img {
+	width: 14px;
+	height: 14px;
+	opacity: 0.7;
+}
+
+.ui-chip-action:hover {
+	color: var(--color-main-text);
+}
+
+.ui-chip-action:hover img {
+	opacity: 1;
+}
+
+.ui-chip:has(.ui-chip-main[aria-pressed='true']) .ui-chip-main,
+.ui-chip:has(.ui-chip-main[aria-pressed='true']) .ui-chip-action {
+	color: var(--color-main-background);
+}
+
+.ui-chip:has(.ui-chip-main[aria-pressed='true']) .ui-chip-action {
+	color: rgba(255, 255, 255, 0.7);
+}
+
+.ui-chip:has(.ui-chip-main[aria-pressed='true']) .ui-chip-action:hover {
+	color: #fff;
+}
+
+.ui-chip-main:focus-visible,
+.ui-chip-action:focus-visible {
+	outline: 2px solid rgb(var(--color-primary-rgb, 11, 135, 231));
+	outline-offset: -2px;
+}
+
+.ui-chip[disabled],
+.ui-chip-main[disabled],
+.ui-chip-action[disabled] {
+	cursor: default;
+	opacity: 0.5;
 }
 
 /* busy popup */
@@ -2072,25 +2381,14 @@ button.has-img img {
 
 #busypopup #spinner-paper-g,
 .popup #spinner-paper-g {
-	-webkit-animation-iteration-count: infinite;
 	animation-iteration-count: infinite;
-	animation-direction: normal;
-	-webkit-animation-play-state: running; /* Safari 4.0 - 8.0 */
+	animation-direction: normal; /* Safari 4.0 - 8.0 */
 	animation-play-state: running;
-	-webkit-animation-name: spinner-saving-anim;
 	animation-name: spinner-saving-anim;
-	-webkit-animation-duration: 2s;
 	animation-duration: 2s;
-	-webkit-animation-timing-function: ease-in-out;
 	animation-timing-function: ease-in-out;
 }
 @keyframes spinner-saving-anim {
-	0% {transform: translateY(-20px) translateX(0px); opacity: 0;}
-	20% {transform: translateY(5px) translateX(15px); opacity: 1;}
-	45% {transform: translateY(22px) translateX(-10px); opacity: 1;}
-	100% {transform: translateY(60px) translateX(15px); opacity: 0;}
-}
-@-webkit-keyframes spinner-saving-anim {
 	0% {transform: translateY(-20px) translateX(0px); opacity: 0;}
 	20% {transform: translateY(5px) translateX(15px); opacity: 1;}
 	45% {transform: translateY(22px) translateX(-10px); opacity: 1;}
@@ -2145,7 +2443,7 @@ button.has-img img {
 .snackbar #snackbar-container-progress {
 	align-items: center;
 	max-width: calc(80vw);
-	row-gap: 4px;
+	row-gap: var(--spacing-s);
 }
 
 .snackbar .ui-progressbar progress {
@@ -2202,7 +2500,7 @@ button.has-img img {
 }
 
 .snackbar.jsdialog-container [id$='button'].ui-pushbutton.jsdialog {
-	padding: 8px;
+	padding: var(--spacing-m);
 }
 
 #snackbar-container-progress .ui-progressbar {
@@ -2216,7 +2514,7 @@ button.has-img img {
 }
 
 #mobile-wizard.popup.snackbar [id$='button'] {
-	padding: 8px;
+	padding: var(--spacing-m);
 }
 
 #mobile-wizard.popup.snackbar [id$='button'],
@@ -2319,13 +2617,22 @@ button.has-img img {
 	filter: invert(.9)
 }
 
+/* Position and Size dialog - drawing area images */
+[data-theme='dark'] #CTL_POSRECT img.ui-drawing-area,
+[data-theme='dark'] #CTL_SIZERECT img.ui-drawing-area,
+[data-theme='dark'] #CTL_RECT img.ui-drawing-area,
+[data-theme='dark'] #CTL_ANGLE img.ui-drawing-area,
+[data-theme='dark'] #daRatioTop img.ui-drawing-area,
+[data-theme='dark'] #daRatioBottom img.ui-drawing-area,
+[data-theme='dark'] img#imRatio.ui-image {
+	filter: invert(.95)
+}
+
 /* scrollable content */
 .ui-scrollable-content {
 	overflow-x: scroll;
 	overflow-y: hidden;
 	scrollbar-width: none; /* Firefox >= 64 */
-	overflow: -moz-scrollbars-none; /* Firefox < 64 */
-	-ms-overflow-style: none;  /* Internet Explorer 10+ */
 	display: flex;
 	align-items: center;
 }
@@ -2374,7 +2681,7 @@ button.has-img img {
 .ui-custom-textarea-cursor-layer,
 .ui-custom-textarea-handle-layer,
 .ui-custom-textarea-text-layer {
-	padding: 4px;
+	padding: var(--spacing-s);
 	grid-column: 1;
 	grid-row: 1;
 	white-space: pre-wrap;
@@ -2412,7 +2719,7 @@ button.has-img img {
 	display: grid;
 	grid-auto-flow: column;
 	align-items: center;
-	grid-column-gap: 4px;
+	grid-column-gap: var(--spacing-s);
 	grid-template-columns: repeat(3, 30px);
 }
 
@@ -2464,6 +2771,15 @@ button.has-img img {
 	margin-block: 7px;
 }
 
+#ZoteroDialog-search-container.jsdialog {
+	/* Refresh button (shorter) and Search input (32px tall) sit side by side
+	   - vertically center them instead of top-aligning. */
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
 #ZoteroDialog-locale-container.jsdialog {
 	width: fit-content;
 }
@@ -2495,20 +2811,24 @@ button.has-img img {
 	background-color: var(--color-background-lighter);
 	border: 1px solid var(--color-border-darker);
 }
-#toolbar-down .jsdialog.menubutton:not([disabled]):hover,
-#toolbar-down .ui-listbox:not([disabled]):hover,
-#toolbar-down .jsdialog.ui-edit:not([disabled]):hover,
-#toolbar-down .jsdialog.ui-textarea:not([disabled]):hover {
-	color: var(--color-text-darker);
-	background-color: transparent !important;
-	border-color: transparent;
-}
 #toolbar-down .unobutton .unolabel {
 	cursor: pointer;
 }
-#toolbar-down .unotoolbutton:hover {
-	background-color: transparent !important;
-	border-color: transparent;
+/* Gated to real pointers - on touch, :hover sticks after a tap and the
+   transparent !important below would mask .selected until the next tap. */
+@media (hover: hover) {
+	#toolbar-down .jsdialog.menubutton:not([disabled]):hover,
+	#toolbar-down .ui-listbox:not([disabled]):hover,
+	#toolbar-down .jsdialog.ui-edit:not([disabled]):hover,
+	#toolbar-down .jsdialog.ui-textarea:not([disabled]):hover {
+		color: var(--color-text-darker);
+		background-color: transparent !important;
+		border-color: transparent;
+	}
+	#toolbar-down .unotoolbutton:hover {
+		background-color: transparent !important;
+		border-color: transparent;
+	}
 }
 
 #toolbar-down  .jsdialog .ui-edit-container {
@@ -2530,7 +2850,7 @@ button.has-img img {
 #FormulaDialog #StructPage {
 	display: grid;
 	grid-template-rows: auto 1fr;
-	grid-row-gap: 4px;
+	grid-row-gap: var(--spacing-s);
 }
 #FormulaDialog #StructPage .ui-treeview-entry div {
 	background-color: transparent;
@@ -2548,7 +2868,7 @@ button.has-img img {
 
 #FormulaDialog > [id^='dialog-vbox'] > [id^='box'] > [id^='box'] {
 	grid-auto-columns: max-content;
-	grid-column-gap: 8px;
+	grid-column-gap: var(--spacing-m);
 }
 
 #FormulaDialog label {
@@ -2557,6 +2877,11 @@ button.has-img img {
 #FormulaDialog #box3 {
 	display: grid;
 	min-width: 400px;
+	grid-template-rows: auto 1fr auto auto;
+}
+
+#FormulaDialog #box3:has(#favorites:not(.hidden)) #ParameterPage {
+	display: none !important;
 }
 
 #FormulaDialog .ui-tabs-content.jsdialog {
@@ -2570,6 +2895,36 @@ button.has-img img {
 
 #FormulaDialog #ALTBOX #headline {
 	font-weight: bold;
+}
+
+#FormulaDialog #ALTBOX {
+	align-content: start;
+}
+
+#FormulaDialog #ALTBOX > .ui-grid-cell:first-child {
+	display: flex !important;
+	justify-content: flex-start;
+	align-items: center;
+	gap: var(--spacing-xs);
+}
+
+#FormulaDialog #favorites,
+#FormulaDialog #favorites-button {
+	border: none !important;
+	background: transparent !important;
+	margin: 0 !important;
+	height: auto !important;
+	min-width: 0 !important;
+	width: auto !important;
+	padding: 2px;
+}
+
+#FormulaDialog #FunctionPage #help {
+	width: 100%;
+	justify-content: stretch;
+}
+#FormulaDialog #FunctionPage #help-button {
+	width: 100% !important;
 }
 
 /* text-area overflow on function wizard window */
@@ -2619,7 +2974,7 @@ kbd,
 	font-family: monospace;
 	font-size: .85em;
 	line-height: 1;
-	padding: 4px;
+	padding: var(--spacing-s);
 	white-space: nowrap;
 }
 
@@ -2749,25 +3104,140 @@ kbd,
 	margin-inline-start: 0.5em;
 }
 
+/* Text Import dialog - CSV grid (Widget.CsvGrid.ts) */
+.ui-csv-grid-container {
+	max-width: 700px;
+	max-height: 280px;
+	overflow: auto;
+	border: 1px solid var(--color-border);
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+	font-family: monospace;
+	font-size: 12px;
+}
+
+.ui-csv-ruler-wrapper {
+	position: sticky;
+	top: 0;
+	left: 0;
+	z-index: 2;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.ui-csv-ruler-wrapper.fixed-mode {
+	cursor: pointer;
+}
+
+.ui-csv-ruler-canvas {
+	display: block;
+}
+
+.ui-csv-grid {
+	border-collapse: collapse;
+	table-layout: fixed;
+}
+
+.ui-csv-grid tr {
+	height: var(--csv-row-height);
+}
+
+.ui-csv-grid tr.import-start {
+	border-top: 2px solid var(--color-primary);
+}
+
+.ui-csv-grid th {
+	padding: 2px 4px;
+	border-right: 1px solid var(--color-calc-grid);
+	border-bottom: 1px solid var(--color-border);
+	background: var(--color-calc-header);
+	font-weight: normal;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	position: sticky;
+	top: 0;
+	user-select: none;
+}
+
+.ui-csv-grid-container.fixed-mode .ui-csv-grid th {
+	top: var(--csv-ruler-height);
+}
+
+.ui-csv-grid th.selected {
+	background: var(--color-calc-header-selected);
+}
+
+.ui-csv-grid-row-header {
+	left: 0;
+	z-index: 1;
+}
+
+.ui-csv-grid-row-number {
+	padding: 1px 4px;
+	border-right: 1px solid var(--color-calc-grid);
+	background: var(--color-calc-header);
+	color: var(--color-text-lighter);
+	text-align: right;
+	user-select: none;
+	position: sticky;
+	left: 0;
+}
+
+.ui-csv-grid-cell {
+	padding: 1px 4px;
+	border-right: 1px solid var(--color-calc-grid);
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.ui-csv-grid-cell.selected {
+	background: var(--color-calc-header-selected);
+}
+
+.ui-csv-grid-cell.dimmed {
+	color: var(--color-text-lighter);
+}
+
+/* Column-type popup menu (positioned in JS via inline left/top) */
+.ui-csv-context-menu {
+	position: fixed;
+	z-index: 10000;
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+	border: 1px solid var(--color-border);
+	border-radius: 3px;
+	box-shadow: 0 2px 8px var(--color-box-shadow, rgba(0, 0, 0, 0.25));
+	padding: 4px 0;
+	min-width: 140px;
+	font-family: sans-serif;
+	font-size: 13px;
+}
+
+.ui-csv-menu-item {
+	padding: 4px 14px;
+	cursor: pointer;
+	white-space: nowrap;
+	user-select: none;
+}
+
+.ui-csv-menu-item:hover {
+	background: var(--color-background-hover, var(--color-background-lighter));
+}
+
+.ui-csv-grid-col-header:focus-visible,
+.ui-csv-ruler-canvas:focus-visible {
+	outline: 2px solid var(--color-primary);
+	outline-offset: -2px;
+}
+
 /* clipboard warning dialog */
 #modal-dialog-copy_paste_download_progress .ui-dialog-content {
 	width: 450px;
 }
 
-/* help */
-#modal-dialog-online-help-content-box {
-	min-width: 75%;
-}
-
-/* Keyboard shortcuts */
-#modal-dialog-keyboard-shortcuts-content-box {
-	width: 468px;
-	max-width: 95%; /* Safe guard for when window is too small */
-}
-
 /* Calc -> Insert -> Pivot Table */
 #PivotTableLayout #box2 {
-	grid-gap: 12px; /* make space for vertical separator */
+	grid-gap: var(--spacing-l); /* make space for vertical separator */
 }
 
 /* Modal info with 2 line message*/
@@ -2785,7 +3255,7 @@ kbd,
 
 #DocumentPropertiesDialog #properties > .jsdialog.ui-grid > .ui-grid-cell > .ui-grid-cell {
 	align-items: center;
-	grid-column-gap: 4px;
+	grid-column-gap: var(--spacing-s);
 }
 
 #DocumentPropertiesDialog #customprops button {
@@ -2823,7 +3293,7 @@ kbd,
 #ServerAuditDialog #ServerAuditDialog-mainbox label {
 	display: flex;
 	align-items: center;
-	gap: 4px;
+	gap: var(--spacing-s);
 	color: #000;
 	border-radius: 30px;
 	width: fit-content;
@@ -2897,40 +3367,40 @@ kbd,
 /* Writer - Format - Page Style - Area - Image */
 #ImageTabPage #frame1 .ui-grid-cell {
 	display: grid;
-	grid-gap: 4px;
+	grid-gap: var(--spacing-s);
 }
 
 /* Calc - Format - Format Cells - Background - Color */
 /* Format -> Character -> Font Effects -> Font color */
 
-#ColorPage.jsdialog :is(#iconview_colors, #iconview_recent_colors).ui-iconview,
-:is(#colorwindow_iv_colors, #colorwindow_iv_recentcolors).ui-iconview {
+[id^='ColorPage'].jsdialog :is([id^='iconview_colors'], [id^='iconview_recent_colors']).ui-iconview,
+:is([id^='colorwindow_iv_colors'], [id^='colorwindow_iv_recentcolors']).ui-iconview {
 	grid-template-columns: repeat(12, 1fr);
 	width: max-content;
 	line-height: 0;
 	padding: 5px;
 }
 
-#ColorPage.jsdialog #iconview_colors.ui-iconview,
-#colorwindow_iv_colors.ui-iconview {
+[id^='ColorPage'].jsdialog [id^='iconview_colors'].ui-iconview,
+[id^='colorwindow_iv_colors'].ui-iconview {
 	max-height: 19vh;
 }
 
-#ColorPage.jsdialog :is(#iconview_colors, #iconview_recent_colors).ui-iconview .ui-iconview-entry :is(img, span),
-:is(#colorwindow_iv_colors, #colorwindow_iv_recentcolors) .ui-iconview-entry img {
+[id^='ColorPage'].jsdialog :is([id^='iconview_colors'], [id^='iconview_recent_colors']).ui-iconview .ui-iconview-entry :is(img, span),
+:is([id^='colorwindow_iv_colors'], [id^='colorwindow_iv_recentcolors']) .ui-iconview-entry img {
 	padding: 1px;
 }
 
-#ColorPage.jsdialog :is(#iconview_colors, #iconview_recent_colors).ui-iconview .ui-iconview-entry:is(:hover, .selected),
-:is(#colorwindow_iv_colors, #colorwindow_iv_recentcolors) .ui-iconview-entry:is(:hover, .selected) {
+[id^='ColorPage'].jsdialog :is([id^='iconview_colors'], [id^='iconview_recent_colors']).ui-iconview .ui-iconview-entry:is(:hover, .selected),
+:is([id^='colorwindow_iv_colors'], [id^='colorwindow_iv_recentcolors']) .ui-iconview-entry:is(:hover, .selected) {
 	outline: 2px solid var(--color-primary);
 	border: 1px solid transparent;
 	background-color: transparent;
 	border-radius: 0;
 }
 
-#ColorPage.jsdialog :is(#iconview_colors, #iconview_recent_colors).ui-iconview .ui-iconview-entry span,
-:is(#colorwindow_iv_colors, #colorwindow_iv_recentcolors) .ui-iconview-entry span {
+[id^='ColorPage'].jsdialog :is([id^='iconview_colors'], [id^='iconview_recent_colors']).ui-iconview .ui-iconview-entry span,
+:is([id^='colorwindow_iv_colors'], [id^='colorwindow_iv_recentcolors']) .ui-iconview-entry span {
 	font-size: 0; /* Hide placeholder text to prevent layout shifts in color palette iconview widgets due to lazy loading */
 }
 
@@ -2971,13 +3441,13 @@ kbd,
 /* Writer - Format - Paragraph - Area - Color */
 #ParagraphPropertiesDialog #labelTP_TABULATOR #entryED_TABTYPE_DECCHAR-input,
 #ParagraphPropertiesDialog #labelTP_TABULATOR #entryED_FILLCHAR_OTHER-input,
-#ColorPage.jsdialog #rgbpreset input,
-#ColorPage.jsdialog #rgbcustom input {
+[id^='ColorPage'].jsdialog [id^='rgbpreset'] input,
+[id^='ColorPage'].jsdialog [id^='rgbcustom'] input {
 	max-width: 100px;
 }
 
 /* Writer - Format - Paragraph - Area - Color */
-#ColorPage.jsdialog #rgbpreset {
+[id^='ColorPage'].jsdialog [id^='rgbpreset'] {
 	width: max-content;
 }
 
@@ -3166,5 +3636,125 @@ div [id^='themeview'].ui-iconview-entry, div [id^='themeview1col'].ui-iconview-e
 }
 
 #ManageStylePage #box1 #desc {
+	display: block;
+}
+
+/* Chart Data Table dialog */
+
+/* Hide the fragment-based series header boxes — these are VCL child widgets
+   that get serialized as part of the dialog tree; headers are rendered
+   inside the TreeView column headers instead. */
+#ChartDataDialog #columns,
+#ChartDataDialog #colorcolumns {
+	display: none !important;
+}
+#ChartDataDialog .ui-scrollwindow:has(#columns),
+#ChartDataDialog .ui-scrollwindow:has(#colorcolumns) {
+	display: none !important;
+}
+
+/* Let the datagridwin scrollwindow not constrain width — TreeView handles scrolling */
+#ChartDataDialog #datagridwin.ui-scrollwindow {
+	max-width: none;
+	overflow-x: hidden;
+}
+
+#ChartDataDialog #datagrid.ui-treeview {
+	overflow-x: auto;
+	grid-auto-columns: minmax(80px, auto);
+}
+
+/* Align header text (e.g. "Categories") to bottom, matching columns with series names */
+#ChartDataDialog .ui-treeview-header {
+	display: flex;
+	flex-direction: column;
+	background-color: var(--color-background-dark);
+}
+
+#ChartDataDialog .ui-treeview-header .ui-treeview-header-text,
+#ChartDataDialog .ui-treeview-header .ui-treeview-header-button {
+	margin-top: auto;
+}
+
+/* Editable series name input in TreeView column headers */
+#ChartDataDialog .ui-treeview-header-name {
+	display: block;
+	font-weight: normal;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	width: 100%;
+	border: 1px solid var(--color-border);
+	border-radius: 2px;
+	padding: 1px 3px;
+	font-size: var(--default-font-size);
+	background: var(--color-background-lighter);
+	box-sizing: border-box;
+}
+/* Inline cell editing input */
+#ChartDataDialog .ui-treeview-inline-edit {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+	box-sizing: border-box;
+	font: inherit;
+	padding: var(--spacing-xs);
+	margin: 0;
+	border: 1px solid var(--color-primary, #005da0);
+	border-radius: 2px;
+	outline: none;
+	background: var(--color-background-lighter, white);
+}
+
+/* Highlight selected column header */
+#ChartDataDialog .ui-treeview-header.selected {
+	background-color: var(--color-background-darker);
+}
+/* Make cell text spans fill their gridcells so empty cells are clickable and editable */
+#ChartDataDialog .ui-treeview-entry .ui-treeview-cell-text {
+	display: block;
+	width: 100%;
+	min-height: 1.4em;
+}
+#ChartDataDialog .ui-treeview-entry .ui-treeview-cell-text-content {
+	display: inline-block;
+	width: 100%;
+	min-height: inherit;
+}
+/* In the chart data grid we navigate cell-by-cell, so the whole-row
+   blue selection (.ui-treeview-entry.selected) would clash with and
+   hide the active-cell marker. Neutralise the row fill here and let
+   the active cell carry the highlight instead. */
+#ChartDataDialog .ui-treeview-entry.selected {
+	background-color: transparent;
+	color: inherit;
+	border-color: transparent;
+}
+/* Keyboard "active cell" marker. The row carries DOM focus; this
+   class shows which cell within the row is currently active for
+   Tab/Arrow navigation and is the target of inline editing. */
+#ChartDataDialog .ui-treeview-entry > [role='gridcell'].ui-treeview-cell-active,
+#ChartDataDialog .ui-treeview-entry > [role='rowheader'].ui-treeview-cell-active {
+	background-color: var(--color-primary, #005da0);
+	color: var(--color-text-darker, #fff);
+	outline: 2px solid var(--color-primary, #005da0);
+	outline-offset: -2px;
+}
+/* The active cell carries DOM focus; its marker above is the focus
+   indicator, so suppress the browser's default ring on the cell. */
+#ChartDataDialog .ui-treeview-entry > [role='gridcell']:focus,
+#ChartDataDialog .ui-treeview-entry > [role='rowheader']:focus,
+#ChartDataDialog .ui-treeview-entry > [role='gridcell']:focus-visible,
+#ChartDataDialog .ui-treeview-entry > [role='rowheader']:focus-visible {
+	outline: 2px solid var(--color-primary, #005da0);
+	outline-offset: -2px;
+}
+
+/* Writer - Review - Tracking - Manage */
+#writerchanges .ui-treeview-cell-text-content {
+	overflow: hidden;
+	text-overflow: ellipsis;
 	display: block;
 }

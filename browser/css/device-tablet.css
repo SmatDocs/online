@@ -4,7 +4,6 @@
 .ui-scroll-wrapper {
 	overflow-x: scroll !important;
 	scrollbar-width: none; /*css draft (firefox only)*/
-	-ms-scrollbar: none; /*ie*/
 }
 .ui-scroll-wrapper::-webkit-scrollbar { /*webkit only*/
 	display: none;
@@ -20,10 +19,6 @@
 }
 .ui-scroll-right {
 	right: 0;
-	-webkit-transform: rotate(180deg);
-	-moz-transform: rotate(180deg);
-	-ms-transform: rotate(180deg);
-	-o-transform: rotate(180deg);
 	transform: rotate(180deg);
 }
 
@@ -33,18 +28,12 @@
 }
 .main-nav.hasnotebookbar {
 	overflow: visible; /*make sure #Menubar's contents are visible*/
-	display: -webkit-flex;
-	display: -ms-flexbox;
 	display: flex;
 	flex-direction: row;
-	-webkit-box-align: center;
-	-ms-flex-align: center;
-	-webkit-align-items: center;
 	align-items: center;
 }
 .hasnotebookbar {
 	scrollbar-width: none;
-	-ms-overflow-style: none;
 }
 .hasnotebookbar::-webkit-scrollbar {
 	width: 0;
@@ -71,20 +60,9 @@
 	z-index: 1;
 	overflow-x: auto;
 	overflow-y: hidden;
-	display: -webkit-box;
-	display: -webkit-flex;
-	display: -ms-flexbox;
 	display: inline-flex;
-	-webkit-box-pack: start;
-	-webkit-justify-content: flex-start;
-	-ms-flex-pack: start;
 	justify-content: flex-start;
-	-webkit-overflow-scrolling: touch;
-	-ms-overflow-style: -ms-autohiding-scrollbar;
-	-ms-autohiding-scrollbar: none;
 	scrollbar-width: none;
-	-webkit-flex-wrap: nowrap;
-	-ms-flex-wrap: nowrap;
 	flex-wrap: nowrap;
 	word-wrap: nowrap;
 }
@@ -117,12 +95,10 @@
 	margin: 0;
 }
 
-#coolwsd-version span:before,
-#lokit-version > span:before {
+#coolwsd-version span:before {
 	content: ' (';
 	white-space: pre;
 }
-#coolwsd-version span:after,
-#lokit-version > span:after {
+#coolwsd-version span:after {
 	content: ')';
 }

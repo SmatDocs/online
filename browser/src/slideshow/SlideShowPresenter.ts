@@ -128,7 +128,7 @@ class SlideShowPresenter {
 	_progressBarContainer: HTMLDivElement | null = null;
 	_slideNavContainer: HTMLDivElement | null = null;
 	_enableA11y: boolean = false;
-	_fromPresenterConsole: boolean = false;
+	_presentToAllInProgress: boolean = false;
 	_isWelcomePresentation: boolean = false;
 	private _pauseTimer: PauseTimerGl | PauseTimer2d;
 	private _slideControlsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -260,6 +260,12 @@ class SlideShowPresenter {
 			case 'displayslide':
 				this._slideShowNavigator.setLeaderSlide(info);
 				this._slideShowNavigator.resetLeaderEffect();
+				if (this.isFollowing()) {
+					// Navigate to the leader's slide if we are idle. If
+					// we are loading, the fetchAndRun callback's catch-up
+					// will handle it once the load completes.
+					this._slideShowNavigator.followLeaderDisplaySlide(info.currentSlide);
+				}
 				break;
 			case 'effect':
 				this._slideShowNavigator.setLeaderEffect(info);
@@ -578,11 +584,14 @@ class SlideShowPresenter {
 		}
 
 		this._progressBarContainer = this._createProgressBar(parent);
-		if (!this._isWelcomePresentation)
+		const presenterConsoleActive = !!this._map.presenterConsole?._active;
+		if (!this._isWelcomePresentation && !presenterConsoleActive) {
 			this._slideNavContainer = this._createSlideNav(
 				parent,
 				showSwitchMonitors,
 			);
+			this._showSlideControls();
+		}
 
 		canvas.addEventListener(
 			'click',
@@ -592,7 +601,9 @@ class SlideShowPresenter {
 			'mousemove',
 			this._slideShowNavigator.onMouseMove.bind(this._slideShowNavigator),
 		);
-		canvas.addEventListener('mousemove', this._showSlideControls.bind(this));
+		if (!this._isWelcomePresentation && !presenterConsoleActive) {
+			canvas.addEventListener('mousemove', this._showSlideControls.bind(this));
+		}
 
 		if (this._hammer) {
 			this._hammer.off('swipe');
@@ -827,7 +838,6 @@ class SlideShowPresenter {
 			img.style.width = '48px';
 			img.style.height = '48px';
 			img.style.flex = '1 1 25%';
-			img.style.marginInlineStart = '5px';
 			img.style.maxWidth = '100%';
 			img.style.borderRadius = '100%';
 		};
@@ -837,7 +847,6 @@ class SlideShowPresenter {
 		closeImg.setAttribute('aria-label', slideshowCloseText);
 		closeImg.setAttribute('data-cooltip', slideshowCloseText);
 		setImgSize(closeImg);
-		closeImg.style.marginInlineStart = 0;
 		window.L.control.attachTooltipEventListener(closeImg, this._map);
 		closeImg.addEventListener('click', this._onQuit);
 
@@ -943,6 +952,10 @@ class SlideShowPresenter {
 			function (this: SlideShowPresenter) {
 				clearTimeout(this._slideControlsTimer);
 			}.bind(this),
+		);
+		container.addEventListener(
+			'mouseleave',
+			this._showSlideControls.bind(this),
 		);
 		container.addEventListener('click', (e: Event) => {
 			const target = e.target as HTMLElement;
@@ -1181,7 +1194,7 @@ class SlideShowPresenter {
 		}
 
 		if (this._checkAlreadyPresenting()) {
-			if (!this._fromPresenterConsole) this._notifyAlreadyPresenting();
+			if (!this._presentToAllInProgress) this._notifyAlreadyPresenting();
 			return false;
 		}
 

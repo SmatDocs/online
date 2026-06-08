@@ -18,6 +18,7 @@
 
 #include "AdminModel.hpp"
 
+#include <common/Anonymizer.hpp>
 #include <common/ConfigUtil.hpp>
 #include <common/Log.hpp>
 #include <common/Protocol.hpp>
@@ -128,7 +129,7 @@ const std::string AdminDocument::getHistory() const
     std::ostringstream oss;
     oss << "{";
     oss << "\"docKey\"" << ":\"" << _docKey << "\",";
-    oss << "\"filename\"" << ":\"" << COOLWSD::anonymizeUrl(getFilename()) << "\",";
+    oss << "\"filename\"" << ":\"" << Anonymizer::anonymizeUrl(getFilename()) << "\",";
     oss << "\"start\"" << ':' << _start << ',';
     oss << "\"end\"" << ':' << _end << ',';
     oss << "\"pid\"" << ':' << getPid() << ',';
@@ -174,7 +175,7 @@ void AdminDocument::updateMemoryDirty()
     {
         size_t lastMemDirty = _memoryDirty;
         auto procSMaps = _procSMaps.lock();
-        _memoryDirty = procSMaps ? Util::getPssAndDirtyFromSMaps(procSMaps.get()).second : 0;
+        _memoryDirty = procSMaps ? ProcUtil::getPssAndDirtyFromSMaps(procSMaps.get()).second : 0;
         _lastTimeSMapsRead = now;
         if (lastMemDirty != _memoryDirty)
             _hasMemDirtyChanged = true;
@@ -360,7 +361,7 @@ size_t AdminModel::getKitsJiffies() const
             const int pid = it.second.getPid();
             if (pid > 0)
             {
-                unsigned newJ = Util::getCpuUsage(pid);
+                unsigned newJ = ProcUtil::getCpuUsage(pid);
                 unsigned prevJ = it.second.getLastJiffies();
                 if(newJ >= prevJ)
                 {
@@ -617,8 +618,8 @@ void AdminModel::addDocument(const std::string& docKey, pid_t pid,
     if (log)
     {
         LOG_ANY("docstats : adding a document : "
-                << filename << ", created by : " << COOLWSD::anonymizeUsername(userName)
-                << ", using WopiHost : " << COOLWSD::anonymizeUrl(wopiHost)
+                << filename << ", created by : " << Anonymizer::anonymize(userName)
+                << ", using WopiHost : " << Anonymizer::anonymizeUrl(wopiHost)
                 << ", allocating memory of : " << memoryAllocated);
     }
     notify(oss.str());
@@ -987,12 +988,14 @@ int AdminModel::getPidsFromProcName(const std::regex& procNameRegEx, std::vector
 
 int AdminModel::getAssignedKitPids(std::vector<int> *pids)
 {
-    return getPidsFromProcName(std::regex("kitbroker_.*"), pids);
+    static const std::regex re("kitbroker_.*");
+    return getPidsFromProcName(re, pids);
 }
 
 int AdminModel::getUnassignedKitPids(std::vector<int> *pids)
 {
-    return getPidsFromProcName(std::regex("kit_spare_.*"), pids);
+    static const std::regex re("kit_spare_.*");
+    return getPidsFromProcName(re, pids);
 }
 
 void AdminModel::getKitPidsFromSystem(std::vector<int> *pids)
@@ -1123,8 +1126,8 @@ struct KitProcStats
 {
     void UpdateAggregateStats(int pid)
     {
-        _threadCount.Update(Util::getStatFromPid(pid, 19));
-        _cpuTime.Update(Util::getCpuUsage(pid) / sysconf (_SC_CLK_TCK));
+        _threadCount.Update(ProcUtil::getStatFromPid(pid, 19));
+        _cpuTime.Update(ProcUtil::getCpuUsage(pid) / sysconf (_SC_CLK_TCK));
     }
 
     int unassignedCount;
@@ -1200,18 +1203,24 @@ void AdminModel::getMetrics(std::ostream& oss) const
 {
     ASSERT_CORRECT_THREAD_OWNER(_owner);
 
-    oss << "coolwsd_count " << getPidsFromProcName(std::regex("coolwsd"), nullptr) << std::endl;
-    oss << "coolwsd_thread_count " << Util::getStatFromPid(Util::getProcessId(), 19) << std::endl;
-    oss << "coolwsd_cpu_time_seconds " << Util::getCpuUsage(Util::getProcessId()) / sysconf (_SC_CLK_TCK) << std::endl;
-    oss << "coolwsd_memory_used_bytes " << Util::getMemoryUsagePSS(Util::getProcessId()) * 1024 << std::endl;
-    oss << "coolwsd_tcp_connections_used " << StreamSocket::getExternalConnectionCount() << std::endl;
-    oss << std::endl;
+    static const std::regex coolwsdRe("coolwsd");
+    static const std::regex forkitRe("forkit");
 
-    oss << "forkit_count " << getPidsFromProcName(std::regex("forkit"), nullptr) << std::endl;
-    oss << "forkit_thread_count " << Util::getStatFromPid(_forKitPid, 19) << std::endl;
-    oss << "forkit_cpu_time_seconds " << Util::getCpuUsage(_forKitPid) / sysconf (_SC_CLK_TCK) << std::endl;
-    oss << "forkit_memory_used_bytes " << Util::getMemoryUsageRSS(_forKitPid) * 1024 << std::endl;
-    oss << std::endl;
+    oss << "coolwsd_count " << getPidsFromProcName(coolwsdRe, nullptr) << '\n';
+    oss << "coolwsd_thread_count " << ProcUtil::getStatFromPid(ProcUtil::getProcessId(), 19)
+        << '\n';
+    oss << "coolwsd_cpu_time_seconds "
+        << ProcUtil::getCpuUsage(ProcUtil::getProcessId()) / sysconf(_SC_CLK_TCK) << '\n';
+    oss << "coolwsd_memory_used_bytes " << ProcUtil::getMemoryUsagePSS(ProcUtil::getProcessId()) * 1024
+        << '\n';
+    oss << "coolwsd_tcp_connections_used " << StreamSocket::getExternalConnectionCount() << '\n';
+    oss << '\n';
+
+    oss << "forkit_count " << getPidsFromProcName(forkitRe, nullptr) << '\n';
+    oss << "forkit_thread_count " << ProcUtil::getStatFromPid(_forKitPid, 19) << '\n';
+    oss << "forkit_cpu_time_seconds " << ProcUtil::getCpuUsage(_forKitPid) / sysconf (_SC_CLK_TCK) << '\n';
+    oss << "forkit_memory_used_bytes " << ProcUtil::getMemoryUsageRSS(_forKitPid) * 1024 << '\n';
+    oss << '\n';
 
     DocumentAggregateStats docStats;
     KitProcStats kitStats;
@@ -1219,41 +1228,41 @@ void AdminModel::getMetrics(std::ostream& oss) const
     CalcDocAggregateStats(docStats);
     CalcKitStats(kitStats);
 
-    oss << "kit_count " << kitStats.unassignedCount + kitStats.assignedCount << std::endl;
-    oss << "kit_unassigned_count " << kitStats.unassignedCount << std::endl;
-    oss << "kit_assigned_count " << kitStats.assignedCount << std::endl;
-    oss << "kit_segfault_count " << _segFaultCount << std::endl;
-    oss << "kit_lost_terminated_count " << _lostKitsTerminatedCount << std::endl;
-    oss << "kit_killed_count " << _killedCount << std::endl;
-    oss << "kit_killed_oom_count " << _oomKilledCount << std::endl;
+    oss << "kit_count " << kitStats.unassignedCount + kitStats.assignedCount << '\n';
+    oss << "kit_unassigned_count " << kitStats.unassignedCount << '\n';
+    oss << "kit_assigned_count " << kitStats.assignedCount << '\n';
+    oss << "kit_segfault_count " << _segFaultCount << '\n';
+    oss << "kit_lost_terminated_count " << _lostKitsTerminatedCount << '\n';
+    oss << "kit_killed_count " << _killedCount << '\n';
+    oss << "kit_killed_oom_count " << _oomKilledCount << '\n';
     PrintKitAggregateMetrics(oss, "thread_count", "", kitStats._threadCount);
     PrintKitAggregateMetrics(oss, "memory_used", "bytes", docStats._kitUsedMemory.active());
     PrintKitAggregateMetrics(oss, "cpu_time", "seconds", kitStats._cpuTime);
-    oss << std::endl;
+    oss << '\n';
 
-    oss << "document_resource_consuming_count " << docStats._resConsCount << std::endl;
-    oss << "document_resource_consuming_abort_started_count " << docStats._resConsAbortPendingCount << std::endl;
-    oss << "document_resource_consuming_aborted_count " << docStats._resConsAbortCount << std::endl;
-    oss << std::endl;
+    oss << "document_resource_consuming_count " << docStats._resConsCount << '\n';
+    oss << "document_resource_consuming_abort_started_count " << docStats._resConsAbortPendingCount << '\n';
+    oss << "document_resource_consuming_aborted_count " << docStats._resConsAbortCount << '\n';
+    oss << '\n';
 
     PrintDocActExpMetrics(oss, "views_all_count", "", docStats._viewsCount);
     docStats._activeViewsCount.active().Print(oss, "document_active_views_active_count", "");
     docStats._expiredViewsCount.active().Print(oss, "document_active_views_expired_count", "");
-    oss << std::endl;
+    oss << '\n';
 
     PrintDocActExpMetrics(oss, "opened_time", "seconds", docStats._openedTime);
-    oss << std::endl;
+    oss << '\n';
     PrintDocActExpMetrics(oss, "sent_to_clients", "bytes", docStats._bytesSentToClients);
-    oss << std::endl;
+    oss << '\n';
     PrintDocActExpMetrics(oss, "received_from_clients", "bytes", docStats._bytesRecvFromClients);
-    oss << std::endl;
+    oss << '\n';
     PrintDocActExpMetrics(oss, "wopi_upload_duration", "milliseconds", docStats._wopiUploadDuration);
-    oss << std::endl;
+    oss << '\n';
     PrintDocActExpMetrics(oss, "wopi_download_duration", "milliseconds", docStats._wopiDownloadDuration);
-    oss << std::endl;
+    oss << '\n';
     PrintDocActExpMetrics(oss, "view_load_duration", "milliseconds", docStats._viewLoadDuration);
 
-    oss << std::endl;
+    oss << '\n';
     oss << "error_storage_space_low " << StorageSpaceLowException::count << "\n";
     oss << "error_storage_connection " << StorageConnectionException::count << "\n";
     oss << "error_bad_request " << (BadRequestException::count - BadArgumentException::count) << "\n";
@@ -1261,7 +1270,7 @@ void AdminModel::getMetrics(std::ostream& oss) const
     oss << "error_unauthorized_request " << UnauthorizedRequestException::count << "\n";
     oss << "error_service_unavailable " << ServiceUnavailableException::count << "\n";
     oss << "error_parse_error " << ParseError::count << "\n";
-    oss << std::endl;
+    oss << '\n';
 
     int tick_per_sec = sysconf(_SC_CLK_TCK);
     // dump document data
@@ -1287,7 +1296,7 @@ void AdminModel::getMetrics(std::ostream& oss) const
         oss << "doc_idle_time_seconds" << suffix << doc.getIdleTime() << "\n";
         oss << "doc_download_time_seconds" << suffix << ((double)doc.getWopiDownloadDuration().count() / 1000) << "\n";
         oss << "doc_upload_time_seconds" << suffix << ((double)doc.getWopiUploadDuration().count() / 1000) << "\n";
-        oss << std::endl;
+        oss << '\n';
     }
 }
 

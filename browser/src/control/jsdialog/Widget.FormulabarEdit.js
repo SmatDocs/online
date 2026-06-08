@@ -25,7 +25,7 @@
  * 'enabled' editable field can be temporarily disabled
  */
 
-/* global JSDialog FormulaBarSelectionHandle cool */
+/* global JSDialog FormulaBarSelectionHandle cool app */
 
 var scrollToCursorTimeout = null;
 var startHandle;
@@ -36,6 +36,9 @@ function _sendSelection(edit, builder, id) {
 		return;
 
 	var selection = document.getSelection();
+	if (!selection)
+		return;
+
 	var startPos = 0;
 	var anchorOffset = selection.anchorOffset;
 	var endPos = 0;
@@ -334,6 +337,9 @@ function _setSelection(builder, container, wrapper, cursorLayer, handleLayer, te
 	}
 
 	const selectionPositions = selectionTexts.flatMap(selectionText => Array.from(selectionText.getClientRects()));
+	if (!selectionPositions.length)
+		return;
+
 	const selectionStartPosition = selectionPositions[0];
 	const selectionEndPosition = selectionPositions[selectionPositions.length - 1];
 	const cursorLayerPosition = cursorLayer.getBoundingClientRect();
@@ -390,7 +396,7 @@ function _formulabarEditControl(parentContainer, data, builder) {
 	var handleLayer = window.L.DomUtil.create('div', 'ui-custom-textarea-handle-layer ' + builder.options.cssClass, wrapper);
 
 	wrapper.addEventListener('scroll', () => {
-		requestAnimationFrame(() => {
+		app.layoutingService.appendLayoutingTask(() => {
 			handleLayer.style.top = `${-wrapper.scrollTop}px`;
 		});
 	});

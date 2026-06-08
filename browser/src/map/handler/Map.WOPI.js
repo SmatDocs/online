@@ -12,7 +12,7 @@
  * L.WOPI contains WOPI related logic
  */
 
-/* global _ app _UNO JSDialog errorMessages URLPopUpSection */
+/* global _ app _UNO JSDialog errorMessages URLPopUpSection brandProductName */
 window.L.Map.WOPI = window.L.Handler.extend({
 	// If the CheckFileInfo call fails on server side, we won't have any PostMessageOrigin.
 	// So use '*' because we still needs to send 'close' message to the parent frame which
@@ -38,6 +38,8 @@ window.L.Map.WOPI = window.L.Handler.extend({
 	EnableInsertRemoteLink: false,
 	EnableRemoteAIContent: false,
 	DisableAISettings: false,
+	AIConfigured: false,
+	AIModelName: '',
 	EnableShare: false,
 	HideUserList: null,
 	CallPythonScriptSource: null,
@@ -143,6 +145,7 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		this.BreadcrumbDocName = wopiInfo['BreadcrumbDocName'];
 		if (this.BreadcrumbDocName === undefined)
 			this.BreadcrumbDocName = this.BaseFileName;
+		this._updateDocumentTitle();
 		this.HidePrintOption = !!wopiInfo['HidePrintOption'];
 		this.HideSaveOption = !!wopiInfo['HideSaveOption'];
 		this.HideExportOption = !!wopiInfo['HideExportOption'];
@@ -161,6 +164,14 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		this.EnableRemoteLinkPicker = !!wopiInfo['EnableRemoteLinkPicker'];
 		this.EnableRemoteAIContent = !!wopiInfo['EnableRemoteAIContent'];
 		this.DisableAISettings = !!wopiInfo['DisableAISettings'];
+		this.AIConfigured = !!wopiInfo['AIConfigured'];
+		this.AIModelName = wopiInfo['AIModelName'] || '';
+		this.AIEthicalRating = wopiInfo['AIEthicalRating'] || 'U';
+		app.serverConnectionService.onWopiProps({
+			AIConfigured: this.AIConfigured,
+			AIModelName: this.AIModelName,
+			AIEthicalRating: this.AIEthicalRating,
+		});
 		this.SupportsRename = !!wopiInfo['SupportsRename'];
 		this.UserCanRename = !!wopiInfo['UserCanRename'];
 		this.EnableShare = !!wopiInfo['EnableShare'];
@@ -185,6 +196,56 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		}
 
 		this.setupImageInsertionMenu();
+	},
+
+	_updateDocumentTitle: function() {
+		var docName = this.BreadcrumbDocName || this.BaseFileName;
+		if (!docName)
+			return;
+
+		var moduleByDocType = {
+			'text': 'Writer',
+			'spreadsheet': 'Calc',
+			'presentation': 'Impress',
+			'drawing': 'Draw',
+		};
+		var docType = this._map.getDocType();
+		var moduleName = moduleByDocType[docType];
+
+		var brand = (typeof brandProductName !== 'undefined' && brandProductName) ? brandProductName : 'Collabora Online';
+		var product = moduleName ? brand.replace(/Online$/, moduleName).trim() : brand;
+		if (moduleName && product === brand)
+			product = brand + ' ' + moduleName;
+
+		var title = docName + ' - ' + product;
+		if (title === this._lastDocTitle)
+			return;
+		this._lastDocTitle = title;
+		document.title = title;
+
+		this._map.fire('postMessage', {
+			msgId: 'Doc_Title',
+			args: {
+				Title: title,
+				DocName: docName,
+				DocType: docType || '',
+				ProductName: product,
+			},
+		});
+	},
+
+	// Called after an in-place rename so cached WOPI props and the page title
+	// refresh without waiting for a fresh CheckFileInfo round trip. Only
+	// update BreadcrumbDocName if it was the default fallback (== BaseFileName);
+	// a host-customized breadcrumb (friendly title, path prefix, extension-less
+	// name) is left alone and will be refreshed by the next CheckFileInfo.
+	onRenameFile: function(newName) {
+		if (!newName)
+			return;
+		if (this.BreadcrumbDocName === this.BaseFileName)
+			this.BreadcrumbDocName = newName;
+		this.BaseFileName = newName;
+		this._updateDocumentTitle();
 	},
 
 	sendFrameReady: function() {
@@ -247,9 +308,7 @@ window.L.Map.WOPI = window.L.Handler.extend({
 
 		// Socket reconnects after WOPI rename reuse the existing UI. The
 		// specialized UI was already initialized on the first load, so no new
-		// initializedui event is emitted. Treat it as satisfied; otherwise
-		// _appLoaded never becomes true again and postMessage actions that require
-		// a loaded document (Action_Save, CallPythonScript) are ignored.
+		// initializedui event is emitted.
 		if (wasInitializedUI) {
 			this._appLoadedConditions.initializedui = true;
 		}
@@ -271,6 +330,7 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			}
 
 			this.DocumentLoadedTime = Date.now();
+			this._updateDocumentTitle();
 		}
 		this._appLoadedConditions[e.type] = true;
 		for (var key in this._appLoadedConditions) {
@@ -513,16 +573,31 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			return;
 		}
 		else if (msg.MessageId === 'Send_UNO_Command' && msg.Values && msg.Values.Command) {
-			this._map.sendUnoCommand(msg.Values.Command, msg.Values.Args || '');
-			return;
-		}
-		else if (msg.MessageId === 'Send_Dispatcher_Action' && msg.Values && msg.Values.Action) {
-			// Allow the host to invoke COOL dispatcher actions (zoomin, zoomout, etc).
-			// This is what the COOL UI uses internally and affects COOL's map state
-			// directly (unlike Send_UNO_Command which only affects LO's internal state).
-			if (app.dispatcher) {
-				app.dispatcher.dispatch(msg.Values.Action, msg.Values.Data);
+			// Commands to insert comments without args initiate interactive insertion,
+			// showing in-place editor, and in PDF, entering a click-to-place mode.
+			if (!msg.Values.Args) {
+				if (msg.Values.Command === '.uno:InsertAnnotation') {
+					this._map.insertComment();
+					return;
+				}
+				if (msg.Values.Command === '.uno:InsertThreadedComment') {
+					this._map.insertThreadedComment();
+					return;
+				}
 			}
+			// Same commands shipped with full args plus an InteractiveAnchor
+			// sentinel: the host has the text ready and wants the browser to
+			// pick the anchor (PDF picker), then dispatch the command with the
+			// picked PositionX/Y (and Width/Height for a drag) substituted in.
+			// The sentinel is browser-directed (stripped before dispatch), not
+			// a UNO arg, so any truthy value enables it.
+			else if (msg.Values.Args.InteractiveAnchor
+				&& (msg.Values.Command === '.uno:InsertAnnotation'
+					|| msg.Values.Command === '.uno:InsertThreadedComment')) {
+				this._map.insertCommentInteractive(msg.Values.Command, msg.Values.Args);
+				return;
+			}
+			this._map.sendUnoCommand(msg.Values.Command, msg.Values.Args || '');
 			return;
 		}
 		else if (msg.MessageId === 'Hint_OnscreenKeyboard') {
@@ -571,14 +646,13 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		}
 
 		if (msg.MessageId === 'Grab_Focus') {
+			app.idleHandler._activate();
 			if (app.idleHandler._documentIdle) {
-				// Document was fully idled — reset and reload, same as user click.
 				window.app.console.debug('Grab_Focus: reactivating idle document');
 				app.map.fire('postMessage', {msgId: 'User_Active'});
 				app.idleHandler._documentIdle = false;
 				app.setCursorVisibility(true);
 			}
-			app.idleHandler._activate();
 			app.map.focus();
 			return;
 		}
@@ -616,7 +690,14 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			this._postViewsMessage('Get_Views_Resp');
 		}
 		else if (msg.MessageId === 'Reset_Access_Token') {
-			app.socket.sendMessage('resetaccesstoken ' + msg.Values.token);
+			if (msg.Values) {
+				// No ttl implies no expiry tracking, matching the legacy
+				// single-arg form of the resetaccesstoken protocol command.
+				var ttl = msg.Values.ttl ? msg.Values['ttl'] : '0';
+				app.socket.sendMessage('resetaccesstoken ' + msg.Values.token + ' ' + ttl);
+				this._map.options.docParams.access_token_ttl = ttl;
+				app.socket.resetTokenExpiryTimer();
+			}
 		}
 		else if (msg.MessageId === 'Action_Save') {
 			var dontTerminateEdit = msg.Values && msg.Values['DontTerminateEdit'];
@@ -633,6 +714,23 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		else if (msg.MessageId === 'Action_Fullscreen') {
 			app.util.toggleFullScreen();
 		}
+		else if (msg.MessageId === 'Action_EndPresentation' && this._map.getDocType() === 'presentation') {
+			var presenter = app.map && app.map.slideShowPresenter;
+			if (presenter && typeof presenter.endPresentation === 'function') {
+				presenter.endPresentation(true);
+			}
+			var legacySlideShow = this._map.slideShow;
+			if (legacySlideShow && legacySlideShow._slideShow && typeof legacySlideShow._stopFullScreen === 'function') {
+				legacySlideShow._stopFullScreen();
+			}
+		}
+		else if (msg.MessageId === 'Action_PresentationCurrentSlide' && this._map.getDocType() === 'presentation') {
+			if (app.dispatcher && app.dispatcher.dispatch) {
+				app.dispatcher.dispatch('presentation-currentslide');
+			} else {
+				this._map.fire('fullscreen', { startSlideNumber: this._map.getCurrentPartNumber() });
+			}
+		}
 		else if (msg.MessageId === 'Action_FullscreenPresentation' && this._map.getDocType() === 'presentation') {
 			if (msg.Values) {
 				var slideNumber;
@@ -641,10 +739,14 @@ window.L.Map.WOPI = window.L.Handler.extend({
 				} else if (msg.Values.CurrentSlide) {
 					slideNumber = this._map.getCurrentPartNumber();
 				}
-				this._map.fire('fullscreen',
-					       {
-						       startSlideNumber: slideNumber
-					       });
+				var presentationArgs = { startSlideNumber: slideNumber };
+				if (window.canvasSlideshowEnabled) {
+					this._map.fire('newfullscreen', presentationArgs);
+				} else {
+					this._map.fire('fullscreen', presentationArgs);
+				}
+			} else if (window.canvasSlideshowEnabled) {
+				this._map.fire('newfullscreen');
 			} else {
 				this._map.fire('fullscreen');
 			}
@@ -660,6 +762,11 @@ window.L.Map.WOPI = window.L.Handler.extend({
 				fileName = fileName.substr(0, fileName.lastIndexOf('.'));
 				fileName = fileName === '' ? 'document' : fileName;
 				this._map.downloadAs(fileName + '.' + format, format);
+			}
+		}
+		else if (msg.MessageId === 'Action_RenameFile') {
+			if (msg.Values && msg.Values.Filename !== null && msg.Values.Filename !== undefined) {
+				this._map.renameFile(msg.Values.Filename);
 			}
 		}
 		else if (msg.MessageId == 'Action_InsertGraphic') {
@@ -685,9 +792,9 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		else if (msg.MessageId == 'Action_InsertLink') {
 			if (msg.Values) {
 				var link = this._map.makeURLFromStr(msg.Values.url);
-				var text = this._map.getTextForLink();
-
-				text = text ? text.trim() : link;
+				// Hyperlink.TextIsHint tells the engine to keep the existing
+				// selection (if any) and use this text only as a fallback.
+				var text = (msg.Values.text ? String(msg.Values.text).trim() : '') || link;
 
 				var command = {
 					'Hyperlink.Text': {
@@ -697,6 +804,10 @@ window.L.Map.WOPI = window.L.Handler.extend({
 					'Hyperlink.URL': {
 						type: 'string',
 						value: link
+					},
+					'Hyperlink.TextIsHint': {
+						type: 'boolean',
+						value: true,
 					}
 				};
 				this._map.sendUnoCommand('.uno:SetHyperlink', command);
@@ -704,29 +815,9 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			}
 		}
 		else if (msg.MessageId == 'Action_GetLinkPreview_Resp') {
-			var preview = document.querySelector('#hyperlink-pop-up-preview');
-			if (preview) {
-				// check if this is a preview for currently displayed link
-				if (preview.nextSibling && preview.nextSibling.innerText !== msg.Values.url)
-					return;
-
-				preview.innerText = '';
-				if (msg.Values.image && msg.Values.image.indexOf('data:') === 0) {
-					var image = window.L.DomUtil.create('img', '', preview);
-					image.src = msg.Values.image;
-					image.alt = msg.Values.title;
-					image.onload = function() {
-						URLPopUpSection.resetPosition();
-					};
-				} else {
-					window.L.DomUtil.addClass(preview, 'no-preview');
-				}
-				if (msg.Values.title) {
-					var title = window.L.DomUtil.create('p', '', preview);
-					title.innerText = msg.Values.title;
-					URLPopUpSection.resetPosition();
-				}
-			}
+			var popup = URLPopUpSection.getCurrent();
+			if (popup)
+				popup.updatePreview(msg.Values);
 		}
 		else if (msg.MessageId === 'Action_InsertFile') {
 			if (msg.Values && (msg.Values.File instanceof Blob)) {
@@ -765,6 +856,51 @@ window.L.Map.WOPI = window.L.Handler.extend({
 
 			this._postMessage({msgId: 'Get_Export_Formats_Resp', args: exportFormatsResp});
 		}
+		else if (msg.MessageId === 'Get_Comments') {
+			let commentsResp = [];
+			const commentSection = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
+			if (commentSection) {
+				if (this._map._docLayer._docType === 'spreadsheet') {
+					// calcMasterList has raw data for all sheets.
+					const masterList = commentSection.sectionProperties.calcMasterList;
+					for (let i = 0; i < masterList.length; i++) {
+						const data = masterList[i];
+						const entry = {
+							Id: data.id,
+							Author: data.author,
+							DateTime: data.dateTime,
+							Text: data.text,
+						};
+						if (data.threaded) {
+							entry.Resolved = data.resolved;
+							entry.Parent = data.parent;
+						}
+						commentsResp.push(entry);
+					}
+				} else {
+					const commentList = commentSection.sectionProperties.commentList;
+					for (let i = 0; i < commentList.length; i++) {
+						const data = commentList[i].sectionProperties.data;
+						if (data.trackchange)
+							continue;
+						const entry = {
+							Id: data.id,
+							Author: data.author,
+							DateTime: data.dateTime,
+							Text: commentList[i].sectionProperties.contentText.textContent,
+							Resolved: data.resolved,
+							Parent: data.parent,
+						};
+						// Flag threaded comments so consumers can tell which ones support resolve.
+						// Writer comments don't set data.threaded; Draw PDF comments do.
+						if (data.threaded)
+							entry.Threaded = 'true';
+						commentsResp.push(entry);
+					}
+				}
+			}
+			this._postMessage({msgId: 'Get_Comments_Resp', args: { Comments: commentsResp }});
+		}
 		else if (msg.MessageId === 'Action_SaveAs') {
 			if (msg.Values) {
 				if (msg.Values.Filename !== null && msg.Values.Filename !== undefined) {
@@ -787,11 +923,6 @@ window.L.Map.WOPI = window.L.Handler.extend({
 						this._map.saveAs(msg.Values.Filename, format);
 					}
 				}
-			}
-		}
-		else if (msg.MessageId === 'Action_RenameFile') {
-			if (msg.Values && msg.Values.Filename !== null && msg.Values.Filename !== undefined) {
-				this._map.renameFile(msg.Values.Filename);
 			}
 		}
 		else if (msg.MessageId === 'Action_FollowUser') {
@@ -826,15 +957,35 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			this._map.mention.openMentionPopup(list);
 		}
 		else if (msg.MessageId === 'Action_ResolveComment') {
-			// Currently only Writer has "Resolve Comment" feature.
-			if (msg.Values && this._map._docLayer._docType === 'text') {
+			var docType = this._map._docLayer._docType;
+			if (msg.Values && ['text', 'spreadsheet', 'drawing'].includes(docType)) {
 				const commentSection = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
 				if (commentSection) {
 					const comment = commentSection.getComment(msg.Values.Id);
-					if (comment && comment.sectionProperties.data.resolved !== 'true') {
+					// Writer allows resolve on every comment; Calc and Draw only on threaded ones.
+					if (comment && comment.sectionProperties.data.resolved !== 'true'
+						&& (docType === 'text' || comment.sectionProperties.data.threaded)) {
 						commentSection.resolve(comment);
 					}
 				}
+			}
+		}
+		else if (msg.MessageId === 'Action_GoToComment') {
+			if (msg.Values) {
+				var commentSection = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
+				if (!commentSection) {
+					this._sendGoToCommentResp(msg.Values.Id, false, 'Comment section not available');
+					return;
+				}
+				var docType = this._map._docLayer._docType;
+				if (docType === 'spreadsheet')
+					this._goToCalcComment(commentSection, msg.Values.Id);
+				else if (docType === 'text')
+					this._goToComment(commentSection, msg.Values.Id);
+				else if (['drawing', 'presentation'].includes(docType))
+					this._goToDrawComment(commentSection, msg.Values.Id);
+				else
+					this._sendGoToCommentResp(msg.Values.Id, false, 'Unsupported document type');
 			}
 		}
 		else if (msg.sender === 'EIDEASY_SINGLE_METHOD_SIGNATURE') {
@@ -844,6 +995,185 @@ window.L.Map.WOPI = window.L.Handler.extend({
 				eSignature.handleSigned(msg);
 			}
 		}
+	},
+
+	_goToComment: function(commentSection, commentId) {
+		// Writer and Calc use different types for Id: string vs. integer?
+		var comment = commentSection.getComment(commentId);
+		if (!comment)
+			comment = commentSection.getComment(parseInt(commentId));
+		if (!comment) {
+			this._sendGoToCommentResp(commentId, false, 'Comment not found');
+			return;
+		}
+
+		this._map.showComments(true);
+		if (comment.sectionProperties.data.resolved === 'true')
+			this._map.showResolvedComments(true);
+
+		// Move the cursor to the comment's anchor
+		var clickX, clickY;
+		var cellRange = comment.sectionProperties.data.cellRange;
+		if (this._map._docLayer._docType === 'spreadsheet' && cellRange) {
+			var cellRect = this._map._docLayer._cellRangeToTwipRect(cellRange).toRectangle();
+			clickX = Math.round(cellRect[0] + cellRect[2] / 2);
+			clickY = Math.round(cellRect[1] + cellRect[3] / 2);
+		} else {
+			var anchorPos = comment.sectionProperties.data.anchorPos;
+			clickX = anchorPos[0];
+			clickY = anchorPos[1];
+		}
+		if (clickX && clickY) {
+			this._map._docLayer._postMouseEvent('buttondown', clickX, clickY, 1, 1, 0);
+			this._map._docLayer._postMouseEvent('buttonup', clickX, clickY, 1, 1, 0);
+		}
+
+		commentSection.navigateAndFocusComment(comment);
+
+		if (this._map._docLayer._docType === 'spreadsheet') {
+			// The sheet switch and mouse click (which sets cursor to anchor) trigger
+			// async events (_onSetPartMsg, onNewDocumentTopLeft, onCellAddressChanged)
+			// that would normally hide the comment. Set a guard to prevent that, show
+			// the comment, then clear the guard after a timeout to let events settle.
+			// 2 s timeout is an arbitrary value, hoped to cover typical cases, and at
+			// the same time, not block expected responsiveness, when user expects it
+			// to hide.
+			var props = commentSection.sectionProperties;
+			if (props.doNotHideCommentTimer)
+				clearTimeout(props.doNotHideCommentTimer);
+			props.doNotHideCommentTimer = setTimeout(function() {
+				props.doNotHideCommentTimer = null;
+			}, 2000);
+
+			// Finally, an additional operation specific to Calc (maybe also Draw?):
+			// it actually shows the comment on mouse hover
+			comment.onMouseEnter();
+		}
+
+		this._sendGoToCommentResp(commentId, true);
+	},
+
+	_goToCalcComment: function(commentSection, commentId) {
+		var map = this._map;
+		var props = commentSection.sectionProperties;
+
+		// Try to find the comment in the current calcMasterList.
+		var entry = props.calcMasterList.find(el => el.id == commentId);
+		if (!entry) {
+			this._sendGoToCommentResp(commentId, false, 'Comment not found');
+			return;
+		}
+
+		// If timeout from previous command is still active, stop it; and hide any shown comment,
+		// to avoid a case when doNotHideCommentTimer would prevent another comment from hiding.
+		if (props.doNotHideCommentTimer)
+			clearTimeout(props.doNotHideCommentTimer);
+		props.doNotHideCommentTimer = null;
+		commentSection.hideAllComments();
+
+		var targetTab = parseInt(entry.tab);
+		if (map._docLayer._selectedPart == targetTab) {
+			// Already on the right sheet - navigate immediately.
+			this._goToComment(commentSection, commentId);
+			return;
+		}
+
+		// The comment is on a different sheet. Switch to it and wait for
+		// sheetgeometrychanged so the geometry is ready for positioning.
+
+		var safetyTimer = null;
+		var self = this;
+
+		function cleanup() {
+			clearTimeout(safetyTimer);
+			map.off('sheetgeometrychanged', onGeometry);
+		}
+
+		function onGeometry() {
+			cleanup();
+			self._goToComment(commentSection, commentId);
+		}
+
+		safetyTimer = setTimeout(function() {
+			cleanup();
+			self._sendGoToCommentResp(commentId, false, 'Timed out waiting for server');
+		}, 10000);
+
+		map.once('sheetgeometrychanged', onGeometry);
+		map.setPart(targetTab);
+	},
+
+	_goToDrawComment: function(commentSection, commentId) {
+		// Draw and Impress share Writer's per-page annotation shape, but comments
+		// live on specific parts (slides or pages). If the target is on a different
+		// part than the current one, switch parts first so the annotation becomes
+		// reachable.
+		const comment = commentSection.getComment(commentId)
+			|| commentSection.getComment(parseInt(commentId));
+		if (!comment) {
+			this._sendGoToCommentResp(commentId, false, 'Comment not found');
+			return;
+		}
+
+		const map = this._map;
+		const self = this;
+
+		function finish() {
+			// _goToComment -> navigateAndFocusComment -> scrollCommentIntoView
+			// scrolls the anchor into view for every docType.
+			self._goToComment(commentSection, commentId);
+			// Guard the freshly-selected comment against async events that
+			// would otherwise cancel it during the settling window. Calc uses
+			// this same flag to keep the comment visible across
+			// _onSetPartMsg / onNewDocumentTopLeft / onCellAddressChanged;
+			// for Draw/Impress on a cross-part navigation, a status-msg-driven
+			// 'updateparts' fires right after setPart and would hit
+			// onPartChange which cancels selectedComment, and an annotations
+			// refresh rebuilds the comment list and drops the selection too.
+			const props = commentSection.sectionProperties;
+			if (props.doNotHideCommentTimer)
+				clearTimeout(props.doNotHideCommentTimer);
+			props.doNotHideCommentTimer = setTimeout(function() {
+				props.doNotHideCommentTimer = null;
+			}, 2000);
+		}
+
+		const targetPart = comment.sectionProperties.partIndex;
+		if (targetPart < 0 || targetPart === map._docLayer._selectedPart) {
+			finish();
+			return;
+		}
+
+		// Cross-part: setPart triggers an async round-trip with the server.
+		// ImpressTileLayer._onSetPartMsg fires 'setpart' after
+		// _scrollViewToPartPosition has settled the viewport. Wait for that,
+		// then run finish() - the doNotHideCommentTimer set there prevents a
+		// later status-msg-driven 'updateparts' from canceling the selection.
+		let safetyTimer = null;
+		function cleanup() {
+			clearTimeout(safetyTimer);
+			map.off('setpart', onPart);
+		}
+		function onPart() {
+			cleanup();
+			finish();
+		}
+		safetyTimer = setTimeout(function() {
+			cleanup();
+			self._sendGoToCommentResp(commentId, false, 'Timed out waiting for server');
+		}, 10000);
+		map.once('setpart', onPart);
+		map.setPart(targetPart);
+	},
+
+	_sendGoToCommentResp: function(commentId, success, errorMsg) {
+		var args = { Id: String(commentId), success: success };
+		if (errorMsg)
+			args.errorMsg = errorMsg;
+		this._map.fire('postMessage', {
+			msgId: 'Action_GoToComment_Resp',
+			args: args
+		});
 	},
 
 	_postMessage: function(e) {

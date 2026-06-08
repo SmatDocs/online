@@ -26,6 +26,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Initialize the COOLWSD
         COWrapper.startServer()
 
+        // Start the WebDriver server if requested via --testDriverPort=<port>.
+        // This happens early, before any window/webview is created, so the
+        // test setup can wait for /status and drive the backstage from there.
+        WebDriverManager.shared.startIfRequested()
+
         // We have to set the product name in the menu entries explicitly, there seems to be no automatic way to do that
         updateProductName()
 
@@ -33,6 +38,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.documentController.presentStartupBackstage(calledFromStartup: true)
         }
+
         // Now remove the Share menu item, as we haven't implemented sharing yet.
         if let mainMenu = NSApp.mainMenu,
             let fileMenuItem = mainMenu.item(withTitle: "File"),

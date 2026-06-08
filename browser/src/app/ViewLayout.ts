@@ -368,6 +368,11 @@ class ViewLayoutBase {
 		return false;
 	}
 
+	// virtual function implemented by the children
+	public unselectCommentOnScroll() {
+		return;
+	}
+
 	private addToMoveBy(pX: number, pY: number) {
 		if (this.scrollProperties.moveBy !== null) {
 			// Add offset to the pending move event.
@@ -478,7 +483,20 @@ class ViewLayoutBase {
 		return this.viewSize.pY > documentAnchor.size[1];
 	}
 
-	public scroll(pX: number, pY: number): void {
+	public scroll(
+		pX: number,
+		pY: number,
+		userIsScrolling: boolean = false,
+	): void {
+		// While a zoom is waiting for its new tiles the canvas is not cleared (to
+		// avoid white flicker), so scrolling in that window leaves smears.
+		// Force a clear in that case; the flag is reset once the zoom finishes.
+		if (
+			app.sectionContainer.isZoomChanged() &&
+			!app.sectionContainer.isInZoomAnimation()
+		)
+			app.sectionContainer.setScrollingBeforeZoomSettled(true);
+		if (userIsScrolling) this.unselectCommentOnScroll();
 		this.refreshScrollProperties();
 		const documentAnchor = this.getDocumentAnchorSection();
 
@@ -492,7 +510,11 @@ class ViewLayoutBase {
 		app.sectionContainer.requestReDraw();
 	}
 
-	public scrollTo(pX: number, pY: number): void {
+	public scrollTo(
+		pX: number,
+		pY: number,
+		userIsScrolling: boolean = false,
+	): void {
 		this.refreshScrollProperties();
 
 		this.scrollProperties.moveBy = null;
@@ -500,7 +522,7 @@ class ViewLayoutBase {
 		pX -= this.viewedRectangle.pX1;
 		pY -= this.viewedRectangle.pY1;
 
-		this.scroll(pX, pY);
+		this.scroll(pX, pY, userIsScrolling);
 	}
 
 	public setOverviewPageVisArea(point: cool.SimplePoint): void {

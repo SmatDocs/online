@@ -32,17 +32,23 @@ window.L.Map.include({
 		// we warn the user about loosing the rich formatting and offer an option to
 		// save as ODF instead of the current format
 		//
-		// For mobile we need to display the edit button for all the cases except for PDF
-		// we offer save-as to another place where the user can edit the document
-		var isPDF = app.file.fileBasedView && app.file.editComment;
-		if (!isPDF && (window.mode.isSmallScreenDevice() || window.mode.isTablet())) {
+		var mobileOrTablet = window.mode.isSmallScreenDevice() || window.mode.isTablet();
+		var firstOpen = this._permission === undefined;
+		var shouldGateFirstOpen = perm === 'edit' && firstOpen && this._shouldStartReadOnly();
+		// Show the edit button only when the user is actually in a viewing
+		// state. Mobile/tablet should not force writable documents to open
+		// in Viewing mode.
+		if (!app.file.readOnly && mobileOrTablet && (perm !== 'edit' || shouldGateFirstOpen)) {
 			button.css('display', 'flex');
 		} else {
 			button.hide();
 		}
 		var that = this;
 		if (perm === 'edit') {
-			if (this._shouldStartReadOnly() || window.mode.isSmallScreenDevice() || window.mode.isTablet()) {
+			// Only apply the opt-in gate when the doc is first opened;
+			// later setPermission calls (reload, save-as, server perm
+			// changes) honor what was asked.
+			if (shouldGateFirstOpen) {
 				button.on('click', function () {
 					that._switchToEditMode();
 				});
@@ -68,8 +74,14 @@ window.L.Map.include({
 				button.on('click', function () {
 					that._requestFileCopy();
 				});
-			} else if ((!window.ThisIsAMobileApp && !this['wopi'].UserCanWrite) || (!this.options.canTryLock && (window.mode.isSmallScreenDevice() || window.mode.isTablet()))) {
+			} else if (!window.ThisIsAMobileApp && !this['wopi'].UserCanWrite) {
 				$('#mobile-edit-button').hide();
+			} else if (window.mode.isSmallScreenDevice() || window.mode.isTablet()) {
+				// Writeable user stepped back from edit to readonly: keep the FAB
+				// visible so they can re-enter edit mode.
+				button.on('click', function () {
+					that._switchToEditMode();
+				});
 			}
 
 			this._enterReadOnlyMode(perm);
@@ -108,7 +120,7 @@ window.L.Map.include({
 	_shouldStartReadOnly: function () {
 		if (this.isLockedReadOnlyUser())
 			return true;
-		if (window.mode.isCODesktop() && !window.mode.isNewDocument()) {
+		if (window.coolParams.get('startreadonly') === 'true') {
 			return true;
 		}
 		var fileName = this['wopi'].BaseFileName;
@@ -213,6 +225,22 @@ window.L.Map.include({
 		}
 	},
 
+	// Tell core whether this view is read-only, and flip the client-side
+	// comment/redline gates the UI checks via isCommentEditingAllowed()/
+	// isRedlineManagementAllowed(). Only meaningful for users that actually
+	// have WOPI write permission: users without write permission already
+	// get read-only set up server-side at session start, and their
+	// app.file.editComment / allowManageRedlines flags already reflect the
+	// real doc state (e.g. comment-only PDFs) and must not be touched.
+	_applyViewReadOnly: function (readOnly) {
+		if (!this['wopi'] || !this['wopi'].UserCanWrite)
+			return;
+		if (app.socket)
+			app.socket.sendMessage('setviewreadonly value=' + readOnly);
+		app.file.editComment = !readOnly;
+		app.file.allowManageRedlines = !readOnly;
+	},
+
 	_enterEditMode: function (perm) {
 		this._permission = perm;
 
@@ -223,9 +251,19 @@ window.L.Map.include({
 		if (app.map['stateChangeHandler'].getItemValue('EditDoc') === 'false')
 			app.map.sendUnoCommand('.uno:EditDoc?Editable:bool=true');
 
+		// Re-enable direct-canvas interactions (shape drag, arrow-key
+		// shape move) that the matching _enterReadOnlyMode branch
+		// disabled.
+		this._applyViewReadOnly(false);
+
 		app.events.fire('updatepermission', {perm : perm});
 
-		if (this._docLayer._docType === 'text') {
+		var renameZoomRestoreActive = !!(
+			app.socket
+			&& app.socket.isRestoringZoomAfterRenameReload
+			&& app.socket.isRestoringZoomAfterRenameReload()
+		);
+		if (this._docLayer._docType === 'text' && !renameZoomRestoreActive) {
 			this.setZoom(10);
 		}
 
@@ -244,6 +282,12 @@ window.L.Map.include({
 			this._docLayer._onUpdateCursor();
 			this._docLayer._clearSelections();
 		}
+
+		// Block direct-canvas interactions (shape drag, arrow-key shape
+		// move) server-side and hide per-comment edit/redline controls
+		// in the UI.
+		this._applyViewReadOnly(true);
+
 		app.events.fire('updatepermission', {perm : perm});
 		this.fire('closemobilewizard');
 		this.fire('closealldialogs');

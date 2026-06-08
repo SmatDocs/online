@@ -290,23 +290,41 @@ public:
 
     void setZoteroAPIKey(const std::string& val) { _zoteroAPIKey = val; }
 
-    std::string getAIProviderAPIKey() const { return _aiProviderAPIKey; }
+    const std::string& getAIProviderAPIKey() const { return _aiProviderAPIKey; }
     void setAIProviderAPIKey(const std::string& val) { _aiProviderAPIKey = val; }
 
-    std::string getAIProviderModel() const { return _aiProviderModel; }
+    const std::string& getAIProviderModel() const { return _aiProviderModel; }
     void setAIProviderModel(const std::string& val) { _aiProviderModel = val; }
 
-    std::string getAIProviderURL() const { return _aiProviderURL; }
+    const std::string& getAIProviderURL() const { return _aiProviderURL; }
     void setAIProviderURL(const std::string& val) { _aiProviderURL = val; }
 
-    std::string getAIImageModel() const { return _aiImageModel; }
+    const std::string& getAIImageModel() const { return _aiImageModel; }
     void setAIImageModel(const std::string& val) { _aiImageModel = val; }
 
-    std::string getAIImageProviderAPIKey() const { return _aiImageProviderAPIKey; }
+    const std::string& getAIImageProviderAPIKey() const { return _aiImageProviderAPIKey; }
     void setAIImageProviderAPIKey(const std::string& val) { _aiImageProviderAPIKey = val; }
 
-    std::string getAIImageProviderURL() const { return _aiImageProviderURL; }
+    const std::string& getAIImageProviderURL() const { return _aiImageProviderURL; }
     void setAIImageProviderURL(const std::string& val) { _aiImageProviderURL = val; }
+
+    const std::string& getAIImageSize() const { return _aiImageSize; }
+    void setAIImageSize(const std::string& val) { _aiImageSize = val; }
+
+    const std::string& getAIRequestTimeout() const { return _aiRequestTimeout; }
+    void setAIRequestTimeout(const std::string& val) { _aiRequestTimeout = val; }
+    int getAIRequestTimeoutSeconds() const
+    {
+        if (_aiRequestTimeout.empty())
+            return 120;
+        try {
+            int val = std::stoi(_aiRequestTimeout);
+            if (val < 10) val = 10;
+            return val;
+        } catch (...) {
+            return 120;
+        }
+    }
 
     const std::string& getSignatureCertificate() const { return _signatureCertificate; }
     void setSignatureCertificate(const std::string& cert) { _signatureCertificate = cert; }
@@ -494,6 +512,12 @@ private:
 
     // AI image generation base URL (optional, falls back to _aiProviderURL)
     std::string _aiImageProviderURL;
+
+    // AI image generation size (e.g. "1024x1024")
+    std::string _aiImageSize;
+
+    // AI request timeout in seconds (default 120, range 10-300)
+    std::string _aiRequestTimeout;
 
     /// Digital signature certificate, key, and CA
     std::string _signatureCertificate;

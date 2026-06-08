@@ -181,6 +181,7 @@ class CanvasSectionContainer {
 	private documentBackgroundColor = '#ffffff'; // This is the background color of the document
 	private useCSSForBackgroundColor = true;
 	private touchEventInProgress: boolean = false; // This prevents multiple calling of mouse down and up events.
+	private activePointerId: number | null = null;
 	public testing: boolean = false; // If this set to true, container will create a div element for every section. So, cypress tests can find where to click etc.
 	public lowestPropagatedBoundSection: string = null; // Event propagating to bound sections. The first section which stops propagating and the sections those are on top of that section, get the event.
 	public targetSection: string = null;
@@ -190,6 +191,7 @@ class CanvasSectionContainer {
 	private inZoomAnimation: boolean = false;
 	private postZoomReplay: boolean = false;
 	private zoomChanged: boolean = false;
+	private scrollingBeforeZoomSettled: boolean = false;
 	private documentAnchorSectionName: string = null; // This section's top left point declares the point where document starts.
 	private documentAnchor: Array<number> = null; // This is the point where document starts inside canvas element. Initial value shouldn't be [0, 0].
 	// Above 2 properties can be used with documentBounds.
@@ -226,6 +228,11 @@ class CanvasSectionContainer {
 		this.canvas.onwheel = this.onMouseWheel.bind(this);
 		this.canvas.onmouseleave = this.onMouseLeave.bind(this);
 		this.canvas.onmouseenter = this.onMouseEnter.bind(this);
+		this.canvas.addEventListener('pointerdown', (e: PointerEvent) => {
+			if (e.button === 0 && e.isPrimary) this.activePointerId = e.pointerId;
+		});
+		this.canvas.addEventListener('pointerup', () => { this.activePointerId = null; });
+		this.canvas.addEventListener('pointercancel', () => { this.activePointerId = null; });
 		this.canvas.ontouchstart = this.onTouchStart.bind(this);
 		this.canvas.ontouchmove = this.onTouchMove.bind(this);
 		this.canvas.ontouchend = this.onTouchEnd.bind(this);
@@ -357,6 +364,12 @@ class CanvasSectionContainer {
 
 	public setZoomChanged (zoomChanged: boolean) {
 		this.zoomChanged = zoomChanged;
+		if (!zoomChanged)
+			this.scrollingBeforeZoomSettled = false;
+	}
+
+	public setScrollingBeforeZoomSettled (on: boolean) {
+		this.scrollingBeforeZoomSettled = on;
 	}
 
 	public isZoomChanged (): boolean {
@@ -410,6 +423,12 @@ class CanvasSectionContainer {
 
 		if (this.drawingEnabled && wasNonZero && this.drawingPaused === 0) {
 			this.paintOnResumeOrEnable();
+		} else {
+			// This is unusual, make it visible in the logs
+			let log = 'Skipped paint on resume.';
+			log += '\nDrawing Enabled: ' + (this.drawingEnabled ? 'YES' : 'NO');
+			log += '\nDrawing Paused: ' + (this.drawingPaused > 0 ? 'YES' : 'NO');
+			app.console.debug(log);
 		}
 	}
 
@@ -506,6 +525,20 @@ class CanvasSectionContainer {
 
 	public isDraggingSomething(): boolean {
 		return this.draggingSomething;
+	}
+
+	// Capture/release can throw if the pointer is gone or was never captured;
+	// we ignore that and carry on.
+	public capturePointerForDrag(): void {
+		if (this.activePointerId !== null) {
+			try { this.canvas.setPointerCapture(this.activePointerId); } catch (_) { /* ignore */ }
+		}
+	}
+
+	public releasePointerForDrag(): void {
+		if (this.activePointerId !== null) {
+			try { this.canvas.releasePointerCapture(this.activePointerId); } catch (_) { /* ignore */ }
+		}
 	}
 
 	public getDragDistance(): number[] {
@@ -667,18 +700,24 @@ class CanvasSectionContainer {
 	}
 
 	private redrawCallback(timestamp: number) {
+		app.enterRAF();
+
 		this.drawRequest = null;
 
-		if (!this.isCanvasSizeValidAfterDisplayChange())
+		if (!this.isCanvasSizeValidAfterDisplayChange()) {
+			app.exitRAF();
 			return;
+		}
 
+		this.flushLayoutingTasks();
 		this.resizeCanvas();
 		this.drawSections();
-		this.flushLayoutingTasks();
 		this.canvas.style.visibility = 'unset';
 
 		// need to check if we should continue animation
 		this.animate(timestamp);
+
+		app.exitRAF();
 	}
 
 	public requestReDraw() {
@@ -1228,7 +1267,10 @@ class CanvasSectionContainer {
 	}
 
 	public onMouseDown (e: MouseEvent) { // Ignore this event, just rely on this.draggingSomething variable.
-		if (e.button === 0 && !this.touchEventInProgress && this.mouseIsInside ) { // So, we only handle left button (and only when mouse is inside).
+		if (e.button === 0 && !this.touchEventInProgress) {
+			// canvas.onmousedown only fires when the pointer is on the canvas,
+			// so by definition the mouse is inside.
+			this.mouseIsInside = true;
 			this.clearMousePositions();
 			this.positionOnMouseDown = this.convertPositionToCanvasLocale(e);
 
@@ -1489,7 +1531,9 @@ class CanvasSectionContainer {
 			return;
 		}
 
-		this.clearMousePositions();
+		if (!this.draggingSomething)
+			this.clearMousePositions();
+
 		this.width = newWidth;
 		this.height = newHeight;
 		this.needsResize = true;
@@ -1668,8 +1712,9 @@ class CanvasSectionContainer {
 			this.createUpdateDivElements();
 		if (redraw && this.drawingAllowed())
 			this.requestReDraw();
-		else
-			this.resizeCanvas(); // Ensure canvas backing store is correctly sized even when drawing is disabled, to prevent blurriness on HiDPI displays
+		else if (!this.drawingEnabled)
+			// Size backing store before WebKit's first composite, else canvas stays blurry until a later resize (Skyler f69d2fd / Andras 8f67b845).
+			this.resizeCanvas();
 	}
 
 	private roundPositionAndSize(section: CanvasSectionObject) {
@@ -1903,6 +1948,10 @@ class CanvasSectionContainer {
 	}
 
 	private shouldDrawSection (section: CanvasSectionObject) {
+	    // During a zoom animation app.twipsToPixels still holds the old zoom value,
+	    // so section would draw at the wrong size; skip them until it updates.
+	    if (this.inZoomAnimation && section.documentObject)
+	        return false;
 	    return section.isLocated && section.showSection && (!section.documentObject || section.isVisible);
 	}
 
@@ -1917,7 +1966,7 @@ class CanvasSectionContainer {
 
 		this.context.setTransform(1, 0, 0, 1, 0, 0);
 
-		if (!this.zoomChanged) {
+		if (!this.zoomChanged || this.scrollingBeforeZoomSettled) {
 			this.clearCanvas();
 		}
 
@@ -2090,6 +2139,8 @@ class CanvasSectionContainer {
 	}
 
 	private animate (timeStamp: number) {
+		app.enterRAF();
+
 		if (this.lastFrameStamp > 0)
 			this.elapsedTime += Math.max(0, timeStamp - this.lastFrameStamp);
 
@@ -2114,6 +2165,8 @@ class CanvasSectionContainer {
 			this.setAnimatingSectionName(null);
 			this.frameCount = this.elapsedTime = null;
 		}
+
+		app.exitRAF();
 	}
 
 	// Resets animation duration. Not to be called directly. Instead, use (inside section class) this.resetAnimation()

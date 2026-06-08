@@ -46,7 +46,7 @@ std::size_t getSecondsSinceEpoch()
 } // namespace
 
 std::string Quarantine::QuarantinePath;
-std::unordered_map<std::string, std::vector<Quarantine::Entry>> Quarantine::QuarantineMap;
+Util::UnorderedStringMap<std::vector<Quarantine::Entry>> Quarantine::QuarantineMap;
 std::mutex Quarantine::Mutex;
 std::size_t Quarantine::MaxSizeBytes;
 std::size_t Quarantine::MaxAgeSecs;
@@ -58,7 +58,7 @@ Quarantine::Quarantine(DocumentBroker& docBroker, const std::string& docName)
     , _quarantinedFilename(Delimiter + std::to_string(docBroker.getPid()) + Delimiter + _docName)
 {
     std::string anonymizedFilename = _quarantinedFilename;
-    Util::replaceAllSubStr(anonymizedFilename, _docName, COOLWSD::anonymizeUsername(_docName));
+    Util::replaceAllSubStr(anonymizedFilename, _docName, Anonymizer::anonymize(_docName));
     LOG_DBG("Quarantine ctor for [" << _docKey << "], filename: [" << anonymizedFilename << ']');
 }
 
@@ -512,7 +512,7 @@ Quarantine::Entry::Entry(const std::string& root, const std::string& docKey,
 
     _secondsSinceEpoch = secondsSinceEpoch;
 
-    _pid = Util::getProcessId();
+    _pid = ProcUtil::getProcessId();
 
     _filename = filename;
 

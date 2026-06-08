@@ -25,7 +25,7 @@ export class CornerGroup extends GroupBase {
 	zIndex: number = app.CSections.CornerGroup.zIndex;
 	sectionProperties: any = { cursor: 'pointer' };
 
-	_map: any;
+	declare _map: any;
 
 	constructor() { super(app.CSections.CornerGroup.name); }
 
@@ -67,7 +67,6 @@ export class CornerGroup extends GroupBase {
 
 	onMouseEnter(): void {
 		this.containerObject.getCanvasStyle().cursor = 'pointer';
-		$.contextMenu('destroy', '#document-canvas');
 	}
 
 	onMouseLeave(): void {

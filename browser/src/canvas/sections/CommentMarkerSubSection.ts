@@ -22,7 +22,7 @@ class CommentMarkerSubSection extends HTMLObjectSection {
 		documentPosition: cool.SimplePoint,
 		extraClass: string = '',
 		showSection: boolean = false,
-		parentSection: any, // Parent section.
+		parentSection: cool.Comment,
 		data: any, // Parent section's data.
 	) {
 		super(
@@ -69,6 +69,7 @@ class CommentMarkerSubSection extends HTMLObjectSection {
 		e: MouseEvent,
 	): void {
 		if (this.sectionProperties.parentSection === null) return;
+		if (!this.sectionProperties.parentSection.isAuthor()) return;
 
 		if (app.sectionContainer.isDraggingSomething()) {
 			if (this.sectionProperties.parent === null) return;
@@ -85,6 +86,8 @@ class CommentMarkerSubSection extends HTMLObjectSection {
 
 	onDragEnd(): void {
 		this.sectionProperties.dragStartPosition = null;
+
+		if (!this.sectionProperties.parentSection.isAuthor()) return;
 
 		const twips = [
 			this.position[0] * app.pixelsToTwips,

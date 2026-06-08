@@ -16,10 +16,10 @@
 
 #pragma once
 
-#include <RequestDetails.hpp>
-#include <Storage.hpp>
 #include <common/Util.hpp>
-#include <WebSocketHandler.hpp>
+#include <net/WebSocketHandler.hpp>
+#include <wsd/RequestDetails.hpp>
+#include <wsd/Storage.hpp>
 
 #include <Poco/URI.h>
 
@@ -53,6 +53,7 @@ public:
                           const RequestDetails& requestDetails)
         : _requestDetails(requestDetails)
         , _poll(poll)
+        , _wopiPostReceived(std::chrono::steady_clock::now())
         , _mobileAppDocId(0)
     {
     }
@@ -120,6 +121,9 @@ private:
     std::shared_ptr<WebSocketHandler> _ws;
     std::weak_ptr<StreamSocket> _socket;
     Util::Stopwatch _birthday;
+    std::chrono::steady_clock::time_point _wopiPostReceived;
+    std::chrono::steady_clock::time_point _checkFileInfoStart;
+    std::chrono::steady_clock::time_point _checkFileInfoEnd;
     unsigned _mobileAppDocId;
 };
 

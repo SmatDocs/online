@@ -17,6 +17,7 @@
 #pragma once
 
 #include <common/ConfigUtil.hpp>
+#include <common/ContainerUtil.hpp>
 #include <common/FileUtil.hpp>
 #include <common/Unit.hpp>
 #include <common/Util.hpp>
@@ -135,7 +136,7 @@ public:
     /// Tracks the URIs that are switching to Disconnected (WASM) Mode.
     /// The time is when the switch request was made. We expire the request after a certain
     /// time, in case the user fails to load WASM, it will revert to Collaborative mode.
-    static std::unordered_map<std::string, std::chrono::steady_clock::time_point> Uri2WasmModeMap;
+    static Util::UnorderedStringMap<std::chrono::steady_clock::time_point> Uri2WasmModeMap;
 #endif
 
     static std::unordered_set<std::string> EditFileExtensions;
@@ -235,18 +236,6 @@ public:
     /// Sets the log level of current kits.
     static void setLogLevelsOfKits(const std::string& level);
 
-    /// Anonymize the basename of filenames, preserving the path and extension.
-    static std::string anonymizeUrl(const std::string& url)
-    {
-        return FileUtil::anonymizeUrl(url);
-    }
-
-    /// Anonymize user names and IDs.
-    /// Will use the Obfuscated User ID if one is provided via WOPI.
-    static std::string anonymizeUsername(const std::string& username)
-    {
-        return FileUtil::anonymizeUsername(username);
-    }
     static void alertAllUsersInternal(const std::string& msg);
     static void alertUserInternal(const std::string& dockey, const std::string& msg);
     static void setMigrationMsgReceived(const std::string& docKey);
@@ -316,10 +305,8 @@ private:
     virtual std::string getJailRoot(int pid) override;
 
     /// Settings passed from the command-line to override those in the config file.
-    std::unordered_map<std::string, std::string> _overrideSettings;
+    Util::UnorderedStringMap<std::string> _overrideSettings;
 };
-
-void setKitInProcess();
 
 int createForkit(const std::string& forKitPath, const StringVector& args);
 

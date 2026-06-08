@@ -109,6 +109,12 @@ function closeHamburgerMenu() {
 function openMobileWizard() {
 	cy.log('>> openMobileWizard - start');
 
+	// Drain any in-flight core work first so the toggle isn't racing
+	// against a pending sidebar update.
+	cy.getFrameWindow().then(function(win) {
+		helper.processToIdle(win);
+	});
+
 	// Open mobile wizard
 	cy.cGet('#toolbar-up #mobile_wizard')
 		.should('not.have.class', 'disabled')
@@ -142,6 +148,12 @@ function closeMobileWizard() {
 
 function openInsertionWizard() {
 	cy.log('>> openInsertionWizard - start');
+
+	// Drain any in-flight core work first so the toggle isn't racing
+	// against a pending update.
+	cy.getFrameWindow().then(function(win) {
+		helper.processToIdle(win);
+	});
 
 	cy.cGet('#toolbar-up #insertion_mobile_wizard')
 		.should('not.have.class', 'disabled');
@@ -267,10 +279,7 @@ function selectAnnotationMenuItem(menuItem) {
 	cy.cGet('#mobile-wizard .wizard-comment-box .cool-annotation-menu')
 		.click({force: true});
 
-	cy.cGet('.context-menu-list')
-		.should('exist');
-
-	cy.cGet('body').contains('.context-menu-item', menuItem)
+	cy.cGet('body').contains('.ui-header.mobile-wizard.ui-widget', menuItem)
 		.click();
 
 	cy.log('<< selectAnnotationMenuItem - end');
@@ -307,18 +316,22 @@ function selectListBoxItem2(listboxSelector, item) {
 
 	cy.log('<< selectListBoxItem2 - end');
 }
-function insertComment(skipCommentCheck = false) {
+function insertComment(skipCommentCheck = false, menuLabel = 'Comment') {
 	cy.log('>> insertComment - start');
 
 	openInsertionWizard();
-	cy.cGet('body').contains('.menu-entry-with-icon', 'Comment').click();
+	cy.cGet('body').contains('.menu-entry-with-icon', menuLabel).click();
 	cy.cGet('.cool-annotation-table').should('exist');
 	cy.cGet('#input-modal-input').type('some text');
 	cy.cGet('#response-ok').click();
-	cy.wait(2000); // FIXME: skip DocModified message
+
+	// Wait for core to process the comment insertion
+	cy.getFrameWindow().then((win) => {
+		helper.processToIdle(win);
+	});
 
 	if (!skipCommentCheck) {
-		cy.cGet('[id^=comment-container-]').should('exist').wait(300);
+		cy.cGet('[id^=comment-container-]').should('exist');
 		cy.cGet('[id^=annotation-content-area-]').should('be.visible');
 		cy.cGet('[id^=annotation-content-area-]').should('have.text', 'some text');
 	}
@@ -337,6 +350,15 @@ function insertImage() {
 
 	cy.cGet('#insertgraphic[type=file]')
 		.attachFile('/mobile/writer/image_to_insert.png');
+
+	// The upload + insert round-trip is asynchronous.
+	// CPU load the default 10s wait on the SVG might be not enough
+
+	cy.wait(1000);
+
+	cy.getFrameWindow().then(function(win) {
+		helper.processToIdle(win);
+	});
 
 	cy.cGet('#document-container svg g')
 		.should('exist');

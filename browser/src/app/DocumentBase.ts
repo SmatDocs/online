@@ -25,6 +25,7 @@ class DocumentBase {
 	public activeView: DocumentViewBase;
 	private activeViewSelectionColor = 'lightblue'; // Overwritten in constructor.
 
+	public partHasComments: boolean | undefined = undefined;
 	protected _fileSize: cool.SimplePoint;
 
 	constructor() {
@@ -32,6 +33,8 @@ class DocumentBase {
 
 		if (app.map._docLayer._docType === 'text') {
 			this.activeLayout = new ViewLayoutWriter();
+		} else if (app.file.fileBasedView) {
+			this.activeLayout = new ViewLayoutFileBased();
 		} else {
 			this.activeLayout = new ViewLayoutBase();
 		}
@@ -57,6 +60,15 @@ class DocumentBase {
 		dummyDiv.remove();
 	}
 
+	// Swap the layout at runtime (e.g. mobile Impress toggling fileBasedView
+	// when switching between read-only and edit). Preserves scroll-x position
+	// where possible; pY is rebuilt from scratch by the new layout.
+	public swapLayout(newLayout: ViewLayoutBase): void {
+		this.activeLayout = newLayout;
+		app.sectionContainer.onNewDocumentTopLeft();
+		app.sectionContainer.requestReDraw();
+	}
+
 	public setActiveViewID(activeViewID: number) {
 		if (this.activeViewID !== activeViewID) {
 			this.activeViewID = activeViewID;
@@ -70,6 +82,10 @@ class DocumentBase {
 
 	private addSections() {
 		this.mouseControl = new MouseControl(app.CSections.MouseControl.name);
+
+		if (app.sectionContainer.doesSectionExist(this.mouseControl.name))
+			app.sectionContainer.removeSection(this.mouseControl.name);
+
 		app.sectionContainer.addSection(this.mouseControl);
 
 		if (

@@ -16,16 +16,16 @@
 
 #pragma once
 
-#include <Exceptions.hpp>
-#include <Protocol.hpp>
-#include <Rectangle.hpp>
+#include <common/Protocol.hpp>
+#include <common/Rectangle.hpp>
 #include <common/StringVector.hpp>
+#include <wsd/Exceptions.hpp>
 
 #include <cassert>
-#include <unordered_map>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 
 #define TILE_WIRE_ID
 using TileWireId = uint32_t;
@@ -783,6 +783,49 @@ public:
                             tiles[0].getWidth(), tiles[0].getHeight(),
                             xs.str(), ys.str(), tiles[0].getTileWidth(), tiles[0].getTileHeight(),
                             vers.str(), "", oldhs.str(), hs.str());
+    }
+
+    /// Split a heterogeneous set of tiles into homogeneous tilecombines.
+    /// create() takes its part, size and canonicalViewId from tiles[0] and
+    /// only concatenates positions, so every member must already share those
+    /// params or two tiles from different views collide on one position. Bucket
+    /// by sameTileCombineParams so each returned combine is internally uniform.
+    static std::vector<TileCombined> createGroups(const std::vector<TileDesc>& tilesNeedsRendering)
+    {
+        std::vector<TileCombined> combines;
+        if (tilesNeedsRendering.empty())
+            return combines;
+
+        std::vector<std::vector<TileDesc>> groupsNeedsRendering(1);
+        auto it = tilesNeedsRendering.begin();
+        // start off with one group bucket
+        groupsNeedsRendering[0].push_back(*it++);
+        while (it != tilesNeedsRendering.end())
+        {
+            bool inserted = false;
+            // check if tile should go into an existing group bucket
+            for (size_t i = 0; i < groupsNeedsRendering.size(); ++i)
+            {
+                if (it->sameTileCombineParams(groupsNeedsRendering[i][0]))
+                {
+                    groupsNeedsRendering[i].push_back(*it);
+                    inserted = true;
+                    break;
+                }
+            }
+            // if not, add another and put it there
+            if (!inserted)
+            {
+                groupsNeedsRendering.emplace_back();
+                groupsNeedsRendering.back().push_back(*it);
+            }
+            ++it;
+        }
+
+        combines.reserve(groupsNeedsRendering.size());
+        for (const auto& group : groupsNeedsRendering)
+            combines.push_back(create(group));
+        return combines;
     }
 
     void initFrom(const TileDesc &desc)

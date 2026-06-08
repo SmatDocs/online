@@ -7,6 +7,9 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
+
+MAINTAINERCLEANFILES = Makefile.in
+
 QUIET_M4 = $(QUIET_M4_$(V))
 QUIET_M4_ = $(QUIET_M4_$(AM_DEFAULT_VERBOSITY))
 QUIET_M4_0 = @echo "  M4      " $@;
@@ -40,6 +43,7 @@ online_SOURCES = \
 	../common/Log-common.cpp \
 	../common/Log-poco.cpp \
 	../common/TraceEvent.cpp \
+	../common/ProcUtil.cpp \
 	../common/Protocol.cpp \
 	../common/RegexUtil.cpp \
 	../common/StringVector.cpp \
@@ -80,9 +84,13 @@ online_DEPENDENCIES = \
 	soffice.data \
 	soffice.data.js.metadata \
 	@LOBUILDDIR@/workdir/CustomTarget/static/emscripten_fs_image/soffice.data.js.link \
+	@LOSOURCEDIR@/static/emscripten/environment.js
+
+if ENABLE_WASM_EMBIND_UNO
+online_DEPENDENCIES += \
 	@LOBUILDDIR@/workdir/CustomTarget/static/unoembind/bindings_uno.js \
-	@LOSOURCEDIR@/static/emscripten/environment.js \
 	@LOSOURCEDIR@/static/emscripten/uno.js
+endif
 
 if ENABLE_WASM_EMBINDTEST
 online_DEPENDENCIES += @LOSOURCEDIR@/unotest/source/embindtest/embindtest.js
@@ -98,16 +106,23 @@ online_LDADD = \
 	${POCOLIB}/libPocoFoundation@POCODEBUG@.a \
 	${ZSTDLIB}/libzstd.a \
 	-L@LOBUILDDIR@/instdir/program \
-	$(shell cat @LOBUILDDIR@/instdir/program/soffice.js.linkdeps) \
-	@LOBUILDDIR@/workdir/LinkTarget/StaticLibrary/libunoembind.a
+	$(shell cat @LOBUILDDIR@/instdir/program/soffice.js.linkdeps)
+
+if ENABLE_WASM_EMBIND_UNO
+online_LDADD += @LOBUILDDIR@/workdir/LinkTarget/StaticLibrary/libunoembind.a
+endif
 
 # TODO these are just copypasta from core
 online_LDFLAGS = \
 	-pthread -s MODULARIZE -s EXPORT_NAME=createOnlineModule -s USE_PTHREADS=1 -s TOTAL_MEMORY=1GB -s PTHREAD_POOL_SIZE_STRICT=0 --bind -s FORCE_FILESYSTEM=1 -s WASM_BIGINT=1 -s ERROR_ON_UNDEFINED_SYMBOLS=1 -s FETCH=1 -s ASSERTIONS=1 -s EXIT_RUNTIME=0 -s EXPORTED_RUNTIME_METHODS=["UTF16ToString","stringToUTF16","UTF8ToString","stringToNewUTF8","ccall","cwrap","FS","registerType","ClassHandle","HEAPU16","HEAPU32"] -pthread -s USE_PTHREADS=1 -fwasm-exceptions -s EXPORTED_FUNCTIONS=@exports \
 	--pre-js @LOSOURCEDIR@/static/emscripten/environment.js \
-	--pre-js @LOBUILDDIR@/workdir/CustomTarget/static/emscripten_fs_image/soffice.data.js.link \
+	--pre-js @LOBUILDDIR@/workdir/CustomTarget/static/emscripten_fs_image/soffice.data.js.link
+
+if ENABLE_WASM_EMBIND_UNO
+online_LDFLAGS += \
 	--post-js @LOBUILDDIR@/workdir/CustomTarget/static/unoembind/bindings_uno.js \
 	--post-js @LOSOURCEDIR@/static/emscripten/uno.js
+endif
 
 if ENABLE_WASM_EMBINDTEST
 online_LDFLAGS += --post-js @LOSOURCEDIR@/unotest/source/embindtest/embindtest.js
@@ -121,6 +136,7 @@ all_local =
 
 if ENABLE_DEBUG
 
+AM_CXXFLAGS += -gsplit-dwarf
 online_LDFLAGS += \
 	-gseparate-dwarf -gsplit-dwarf -gpubnames
 

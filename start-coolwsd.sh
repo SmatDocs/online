@@ -37,6 +37,7 @@ exec "${SCRIPT_DIR}/coolwsd" \
   --o:child_root_path="${CHILD_ROOT_PATH}" \
   --o:cache_files.path="${CACHE_PATH}" \
   --o:storage.filesystem[@allow]=true \
+  --o:security.enable_macros_execution=true \
   --o:ssl.enable=false \
   --o:ssl.termination=true \
   --o:admin_console.username="${ADMIN_USERNAME}" \

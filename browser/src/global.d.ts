@@ -43,6 +43,7 @@ interface COOLTouch {
 interface Window {
 	touch: COOLTouch;
 	setLogging(value: boolean): void;
+	postMobileMessage(msg: string): void;
 }
 
 /*
@@ -162,6 +163,7 @@ interface AppInterface {
 	impress: {
 		partList: any; // Info for parts.
 		notesMode: boolean;
+		savedViewMode: string | null; // 'normal' | 'notes' | 'master' | null
 		twipsCorrection: number;
 		getIndexFromSlideHash(hash: number): number;
 		isSlideHidden(partNo: number): boolean;
@@ -189,6 +191,7 @@ interface AppInterface {
 			notebookbarAccessibility: any;
 		};
 		notebookbarAccessibility: any;
+		compactViewAccessibility: any;
 		horizontalRuler: HRuler | null;
 		verticalRuler: VRuler | null;
 	};
@@ -270,10 +273,6 @@ interface SockInterface {
 interface ServerInfo {
 	coolwsdVersion: string;
 	coolwsdHash: string;
-	lokitVersionName: string;
-	lokitVersionNumber: string;
-	lokitVersionSuffix: string;
-	lokitHash: string;
 	serverId: string;
 	osInfo: string;
 	wsdOptions: any;
@@ -338,7 +337,7 @@ interface Window {
 		isDesktop(): boolean;
 		isTablet(): boolean;
 		isCODesktop(): boolean;
-		isNewDocument(): boolean;
+		isChromebook(): boolean;
 		getDeviceFormFactor(): string;
 	};
 	prefs: {
@@ -347,6 +346,7 @@ interface Window {
 		get(key: string, defaultValue?: any): any;
 		_initializeBrowserSetting(msg: string): void;
 		set(key: string, value: any): void;
+		remove(key: string): void;
 		setMultiple(prefs: Record<string, string>): void;
 		sendPendingBrowserSettingsUpdate(): void;
 		canPersist: boolean;
@@ -379,6 +379,7 @@ interface Window {
 	sidebarId: number;
 	userInterfaceMode: string;
 	ThisIsAMobileApp: boolean;
+	ThisIsTheAndroidApp: boolean;
 	ThisIsTheEmscriptenApp: boolean;
 	ThisIsTheiOSApp: boolean;
 	ThisIsTheMacOSApp: boolean;

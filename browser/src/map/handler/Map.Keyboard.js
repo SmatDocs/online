@@ -7,7 +7,7 @@
  * at TextInput.
  */
 
-/* global _ app UNOKey TileManager */
+/* global app UNOKey TileManager */
 
 window.L.Map.mergeOptions({
 	keyboard: true,
@@ -311,13 +311,14 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 			container.tabIndex = '0';
 		}
 
-		window.L.DomEvent.on(this._map.getContainer(), 'keydown keyup keypress', this._onKeyDown, this);
+		this._keyEventContainer = document.getElementById('document-container');
+		window.L.DomEvent.on(this._keyEventContainer, 'keydown keyup keypress', this._onKeyDown, this);
 		window.L.DomEvent.on(window.document, 'keydown', this._globalKeyEvent, this);
 		window.document.addEventListener('keyup', this._globalKeyUp.bind(this), true);
 	},
 
 	removeHooks: function () {
-		window.L.DomEvent.off(this._map.getContainer(), 'keydown keyup keypress', this._onKeyDown, this);
+		window.L.DomEvent.off(this._keyEventContainer, 'keydown keyup keypress', this._onKeyDown, this);
 		window.L.DomEvent.off(window.document, 'keydown', this._globalKeyEvent, this);
 		window.document.removeEventListener('keyup', this._globalKeyUp.bind(this));
 	},
@@ -406,6 +407,10 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 			app.UI.notebookbarAccessibility.onDocumentKeyDown(ev);
 		}
 
+		if (app.UI.compactViewAccessibility) {
+			app.UI.compactViewAccessibility.onDocumentKeyDown(ev);
+		}
+
 		if (ev.shortCutActivated === true) {
 			window.app.console.log('Shortcut for: ' + ev.code + ' already handled');
 			return;
@@ -415,12 +420,21 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 			return;
 		}
 		if (this._map.jsdialog
-			&& (this._map.jsdialog.hasDialogOpened() || this._map.jsdialog.hasSnackbarOpened() || this._map.jsdialog.hasDropdownOpened())
-			&& this._map.jsdialog.handleKeyEvent(ev)) {
-			ev.preventDefault();
+			&& (this._map.jsdialog.hasDialogOpened() || this._map.jsdialog.hasSnackbarOpened() || this._map.jsdialog.hasDropdownOpened())) {
+			if (this._map.jsdialog.handleKeyEvent(ev))
+				ev.preventDefault();
 			return;
 		}
-		else if (this._map._docLayer && (this._map._docLayer._docType === 'presentation' || this._map._docLayer._docType === 'drawing') && this._map._docLayer._preview.partsFocused === true) {
+
+		const comment = app.definitions.Comment.isAnyEdit();
+		if (comment) {
+			const container = comment.sectionProperties.container;
+			if (container && !container.contains(document.activeElement) && ev.ctrlKey && ev.key === 'Enter') {
+				comment.onCommentKeyDown(ev);
+			}
+		}
+
+		if (this._map._docLayer && (this._map._docLayer._docType === 'presentation' || this._map._docLayer._docType === 'drawing') && this._map._docLayer._preview.partsFocused === true) {
 			if (ev.shiftKey && !ev.ctrlKey && !ev.altKey
 				&& (ev.keyCode === this.keyCodes.DOWN || ev.keyCode === this.keyCodes.UP || ev.keyCode === this.keyCodes.HOME || ev.keyCode === this.keyCodes.END)
 				&& ev.type === 'keydown') {
@@ -459,8 +473,6 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 						this._map.deselectAll();
 						this._map.setPart(partToSelect);
 					}
-					if (app.file.fileBasedView)
-						this._map._docLayer._checkSelectedPart();
 				}
 				else if (this._map.isEditMode() && !app.file.fileBasedView &&
 						this._map.jsdialog &&
@@ -478,7 +490,20 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 				app.map._clip.clearSelection();
 				app.map._clip.setTextSelectionType('slide');
 			}
+			else if (this._isCtrlKey(ev) && !ev.altKey
+				&& (ev.keyCode === this.keyCodes.Y || (ev.shiftKey && ev.keyCode === this.keyCodes.Z))) {
+				app.socket.sendMessage('uno .uno:Redo');
+				ev.preventDefault();
+			}
+			else if (this._isCtrlKey(ev) && !ev.altKey && ev.keyCode === this.keyCodes.Z) {
+				app.socket.sendMessage('uno .uno:Undo');
+				ev.preventDefault();
+			}
 			else if (!ev.ctrlKey && !ev.shiftKey) {
+				if (ev.key === 'Meta' || ev.key === 'Alt' ||
+				    ev.key === 'AltGraph' || ev.key === 'CapsLock' ||
+				    ev.key === 'NumLock')
+					return;
 				this._map._docLayer._preview.partsFocused = false;
 				app.map._clip.clearSelection();
 				app.map.focus();
@@ -494,6 +519,11 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 		if (app.UI.notebookbarAccessibility &&
 		    app.UI.notebookbarAccessibility.accessibilityInputElement !== document.activeElement) {
 			app.UI.notebookbarAccessibility.onDocumentKeyUp(ev);
+		}
+
+		if (app.UI.compactViewAccessibility &&
+			app.UI.compactViewAccessibility.accessibilityInputElement !== document.activeElement) {
+			app.UI.compactViewAccessibility.onDocumentKeyUp(ev);
 		}
 	},
 
@@ -609,6 +639,11 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 				// key ignored
 			}
 			else if (ev.type === 'keydown') {
+				if (window.mode.isDesktop()
+					&& keyCode === this.keyCodes.enter
+					&& this._isFormatPaintbrushActiveOnCalcCell()) {
+					this._clickCellCursor();
+				}
 				if (this.handleOnKeyDownKeys[keyCode] && charCode === 0) {
 					if (keyEventFn) {
 						keyEventFn('input', charCode, unoKeyCode);
@@ -671,11 +706,7 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 				map.setZoom(map.getZoom() + (ev.shiftKey ? 3 : 1) * this._zoomKeys[key], null, true /* animate? */);
 			}
 			else if (ev.key && ev.key.length === 1 && !ev.ctrlKey && !ev.altKey && !map.isEditMode()) {
-				let permissionMode = map.uiManager && map.uiManager.permissionViewMode;
-				let viewModeBtn = permissionMode && (permissionMode.viewModeDropdown || permissionMode.viewModeContainer);
-				if (viewModeBtn && map.uiManager && map.uiManager.showAttention) {
-					map.uiManager.showAttention(viewModeBtn, _('You are currently in View mode'), true, 5000);
-				}
+				map.uiManager.showViewModeAttention();
 			}
 		}
 
@@ -687,6 +718,25 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 			return e.metaKey;
 		else
 			return e.ctrlKey;
+	},
+
+	_isFormatPaintbrushActiveOnCalcCell: function () {
+		if (this._map.getDocType() !== 'spreadsheet')
+			return false;
+		if (this._map._docLayer.insertMode)
+			return false;
+		return this._map.stateChangeHandler.getItemValue('.uno:FormatPaintbrush') === 'true';
+	},
+
+	// Simulates a click on the cell cursor, which is needed to apply
+	// the format paintbrush in calc when pressing enter on a cell
+	// with the paintbrush active.
+	_clickCellCursor: function () {
+		var center = app.calc.cellCursorRectangle.center;
+		var x = Math.round(center[0]);
+		var y = Math.round(center[1]);
+		this._map._docLayer._postMouseEvent('buttondown', x, y, 1, 1, 0);
+		this._map._docLayer._postMouseEvent('buttonup', x, y, 1, 1, 0);
 	},
 
 	// Keys that should still be sent to core with modifiers in read-only mode.
@@ -846,10 +896,11 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 		}
 		/* Without specifying the key type, the messages are sent twice (both keydown/up) */
 
-		// Don't do this in CODA-W, there it is the sending of
-		// the PASTE message in document,onpaste() in
-		// Clipboard.js that does the paste.
-		if (e.type === 'keydown' && window.ThisIsAMobileApp && !window.ThisIsTheWindowsApp && !window.ThisIsTheQtApp) {
+		// In the desktop app variants (CODA-W, CODA-Q, CODA-M) the
+		// copy/cut/paste is driven by the document.oncopy/oncut/onpaste
+		// handlers in Clipboard.js. Sending the UNO command here as well
+		// would run the operation twice, e.g. paste the content twice.
+		if (e.type === 'keydown' && window.ThisIsAMobileApp && !window.ThisIsTheWindowsApp && !window.ThisIsTheQtApp && !window.ThisIsTheMacOSApp) {
 			if (this.keyCodes.C.includes(e.keyCode)) {
 				app.socket.sendMessage('uno .uno:Copy');
 				return true;

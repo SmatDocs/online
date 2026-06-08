@@ -271,29 +271,32 @@ function traverseTabs(getContainer, win, level, command, isNested = false) {
 						})
 						.then(() => {
 							// Writer-specific tab subdialogs
-							if (command == '.uno:SetDocumentProperties' && tabAriaControls == 'customprops') {
+							if (command == '.uno:SetDocumentProperties' && tabId == 'customprops') {
 								cy.cGet('#durationbutton-button').click();
 								handleDialog(win, level + 1);
-							} else if (command == '.uno:SetDocumentProperties' && tabAriaControls == 'general') {
+							} else if (command == '.uno:SetDocumentProperties' && tabId == 'general') {
 								cy.cGet('#changepass-button').should('not.be.disabled').click();
 								handleDialog(win, level + 1);
-							} else if (command == '.uno:InsertSection' && tabAriaControls == 'section') {
+							} else if (command == '.uno:InsertSection' && tabId == 'section') {
 								// check protect to enable password dialog
 								cy.cGet('#protect-input').check();
 								cy.cGet('#selectpassword-button').should('not.be.disabled').click();
 								handleDialog(win, level + 1);
 								cy.cGet('#protect-input').uncheck();
 								cy.cGet('#selectpassword-button').should('be.disabled');
-							} else if (command == '.uno:HyperlinkDialog' && tabAriaControls == '~Document') {
+							} else if (command == '.uno:HyperlinkDialog' && tabId == 'document') {
 								cy.cGet('#browse-button').click();
 								handleDialog(win, level + 1);
-							} else if (command == '.uno:FontDialog' && tabAriaControls == 'font') {
+							} else if (command == '.uno:FontDialog' && tabId == 'font') {
 								cy.cGet('#btnWestFeatures-button').click();
 								handleDialog(win, level + 1);
-							} else if ((command == '.uno:PageDialog' || command == '.uno:PageFormatDialog') && tabAriaControls == 'Footer') {
-								cy.cGet('button.ui-pushbutton[aria-label="More..."]:visible').click();
+							} else if ((command == '.uno:PageDialog' || command == '.uno:PageFormatDialog') && (tabId == 'header' || tabId == 'footer')) {
+								// enable the header/footer to make the More... button sensitive
+								const toggleId = tabId == 'header' ? '#checkHeaderOn-input' : '#checkFooterOn-input';
+								cy.cGet(toggleId).check({ force: true });
+								cy.cGet('[id^="buttonMore"][id$="-button"]').filter(':visible').first().should('be.enabled').click();
 								handleDialog(win, level + 1);
-							} else if (command == '.uno:FormatArea' && tabAriaControls == 'lbhatch') {
+							} else if ((command == '.uno:FormatArea' || command == '.uno:PageDialog' || command == '.uno:PageFormatDialog') && tabAriaControls == 'lbhatch') {
 								cy.cGet('button.ui-pushbutton[aria-label="Add"]:visible').click();
 								testNameDialog(win, level);
 							}
@@ -364,7 +367,7 @@ function handleDialog(win, level, command, isWarningDialog) {
 			    command == '.uno:SpellDialog' ||
 			    command == '.uno:SpellingAndGrammarDialog' ||
 			    command == '.uno:DataDataPilotRun:Field') {
-				cy.cGet('#options-button').click();
+				getActiveDialog(level).find('#options-button').click();
 				handleDialog(win, level + 1);
 			} else if (command == '.uno:InsertIndexesEntry') {
 				cy.cGet('#new-button').click();
@@ -380,11 +383,33 @@ function handleDialog(win, level, command, isWarningDialog) {
 				cy.cGet('#similarity-input').check();
 				cy.cGet('#similaritybtn-button').should('be.enabled').click();
 				handleDialog(win, level + 1);
+				cy.cGet('#similarity-input').uncheck();
+				cy.cGet('#soundslike-input').check();
+				cy.cGet('#soundslikebtn-button').should('be.enabled').click();
+				handleDialog(win, level + 1);
+				cy.cGet('#soundslike-input').uncheck();
+				// Format and Attributes search are writer-only and the
+				// buttons are hidden in calc/draw.
+				cy.cGet('body').then($body => {
+					if ($body.find('#attributes-button:visible').length) {
+						cy.cGet('#attributes-button').should('be.enabled').click();
+						handleDialog(win, level + 1);
+					}
+				});
+				cy.cGet('body').then($body => {
+					if ($body.find('#format-button:visible').length) {
+						cy.cGet('#format-button').should('be.enabled').click();
+						handleDialog(win, level + 1);
+					}
+				});
 			} else if (command == '.uno:Signature') {
 				cy.cGet('#signatures .ui-treeview-entry > div:first-child').click();
 				cy.cGet('#view-button').should('be.enabled').click();
 				handleDialog(win, level + 1);
 				cy.cGet('#sign-button').should('be.enabled').click();
+				handleDialog(win, level + 1);
+			} else if (command == '.uno:DataBarFormatDialog') {
+				cy.cGet('#options-button').should('be.visible').click();
 				handleDialog(win, level + 1);
 			} else if (command == '.uno:DataDataPilotRun') {
 				cy.cGet('#listbox-page .ui-treeview-entry > div:first-child').dblclick();
@@ -428,6 +453,10 @@ function testDialog(win, commandSpec) {
 }
 
 const allCommonDialogs = [
+	// .uno:Signature must run first: it shows a "save before sign" prompt
+	// when the document is modified, which aborts the dialog flow. Running
+	// before any other dialog dirties the doc keeps that prompt out of the way.
+	'.uno:Signature',
 	'.uno:AcceptTrackedChanges',
 	{ command: '.uno:ExportToPDF', args: { SynchronMode: { type: 'boolean', value: false } } },
 	'.uno:FontworkGalleryFloater',
@@ -438,7 +467,6 @@ const allCommonDialogs = [
 	'.uno:RunMacro',
 	'.uno:SearchDialog',
 	'.uno:SetDocumentProperties',
-	'.uno:Signature',
 	'.uno:SpellDialog',
 	'.uno:SpellingAndGrammarDialog',
 	'.uno:SplitCell',
@@ -480,20 +508,22 @@ function testPDFExportWarningDialog(win) {
 		win.app.map.sendUnoCommand('.uno:ExportToPDF', args);
 	});
 
+	// The warning dialog opens at the same level (1) as the export options
+	// dialog it replaces, so to tell them apart capture the export
+	// dialog's window id and wait for that specific dialog to close after
+	// OK before handling the warning.
+	var exportDialogId;
 	getActiveDialog(1)
-		.then(() => {
+		.then(($dialog) => {
+			exportDialogId = $dialog.parents('.jsdialog-window').attr('id');
 			return helper.processToIdle(win);
 		})
 		.then(() => {
 			cy.cGet('#forms-input').check();
 			cy.cGet('#pdf_version-input').select('PDF/A-1b (PDF 1.4 base)');
 			cy.cGet('#ok-button').click();
-		})
-		.then(() => {
-			// pdf export dialog should dismiss and a warning dialog should appear
-			return helper.processToIdle(win);
-		})
-		.then(() => {
+			// pdf export dialog should dismiss
+			cy.cGet('#' + CSS.escape(exportDialogId)).should('not.exist');
 			// and the warning dialog we're interested in should appear
 			handleDialog(win, 1);
 		});

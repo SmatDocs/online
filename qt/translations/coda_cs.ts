@@ -16,47 +16,47 @@
     <message>
         <location filename="../DocumentOperations.cpp" line="51"/>
         <source>Word Document (.docx)</source>
-        <translation>Word Dokument (.docx)</translation>
+        <translation>Dokument Word (.docx)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="52"/>
         <source>Word 2003 Document (.doc)</source>
-        <translation>Word 2003 Dokument (.doc)</translation>
+        <translation>Dokument Word 2003 (.doc)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="58"/>
         <source>ODF spreadsheet (.ods)</source>
-        <translation>ODF tabulka (.ods)</translation>
+        <translation>Sešit ODF (.ods)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="59"/>
         <source>Excel Spreadsheet (.xlsx)</source>
-        <translation>Excel tabulka(.xlsx)</translation>
+        <translation>Sešit Excel (.xlsx)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="60"/>
         <source>Excel 2003 Spreadsheet (.xls)</source>
-        <translation>Excel 2003 tabulka (.xls)</translation>
+        <translation>Sešit Excel 2003 (.xls)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="66"/>
         <source>ODF presentation (.odp)</source>
-        <translation>ODF prezentace (.odp)</translation>
+        <translation>Prezentace ODF (.odp)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="67"/>
         <source>PowerPoint Presentation (.pptx)</source>
-        <translation type="unfinished"></translation>
+        <translation>Prezentace PowerPoint (.pptx)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="68"/>
         <source>PowerPoint 2003 Presentation (.ppt)</source>
-        <translation type="unfinished"></translation>
+        <translation>Prezentace PowerPoint 2003 (.ppt)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="74"/>
         <source>ODF drawing (.odg)</source>
-        <translation type="unfinished"></translation>
+        <translation>Kresba ODF (.odg)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="106"/>
@@ -137,53 +137,59 @@
         <translation type="vanished">Prezentace (*.odp);;Všechny soubory (*)</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="739"/>
+        <location filename="../Bridge.cpp" line="737"/>
+        <location filename="../Bridge.cpp" line="805"/>
         <source>All Files (*)</source>
         <translation>Všechny soubory (*)</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="249"/>
+        <location filename="../Bridge.cpp" line="228"/>
         <source>Save Document</source>
         <translation>Uložit dokument</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="625"/>
+        <location filename="../Bridge.cpp" line="637"/>
         <source>Open File</source>
         <translation>Otevřít soubor</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="626"/>
+        <location filename="../Bridge.cpp" line="638"/>
         <source>All Files (*);;Text Documents (*.odt *.ott *.doc *.docx *.rtf *.txt);;Spreadsheets (*.ods *.ots *.xls *.xlsx *.csv);;Presentations (*.odp *.otp *.ppt *.pptx)</source>
         <translation>Všechny soubory (*);;Textové dokumenty (*.odt *.ott *.doc *.docx *.rtf *.txt);;Tabulky (*.ods *.ots *.xls *.xlsx *.csv);;Prezentace (*.odp *.otp *.ppt *.pptx)</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="737"/>
+        <location filename="../Bridge.cpp" line="735"/>
         <source>Export As</source>
         <translation>Exportovat jako</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="156"/>
+        <location filename="../Bridge.cpp" line="803"/>
+        <source>Save File</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../WebView.cpp" line="158"/>
         <source>Presentation</source>
-        <translation type="unfinished"></translation>
+        <translation>Prezentace</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="161"/>
-        <location filename="../WebView.cpp" line="177"/>
+        <location filename="../WebView.cpp" line="163"/>
+        <location filename="../WebView.cpp" line="179"/>
         <source>Text Document</source>
-        <translation type="unfinished"></translation>
+        <translation>Textový dokument</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="166"/>
+        <location filename="../WebView.cpp" line="168"/>
         <source>Spreadsheet</source>
-        <translation type="unfinished"></translation>
+        <translation>Sešit</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="171"/>
+        <location filename="../WebView.cpp" line="173"/>
         <source>Drawing</source>
-        <translation type="unfinished"></translation>
+        <translation>Kresba</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="317"/>
+        <location filename="../WebView.cpp" line="304"/>
         <source>Presenting</source>
         <translation>Prezentování</translation>
     </message>
@@ -191,17 +197,15 @@
 <context>
     <name>WebView</name>
     <message>
-        <location filename="../WebView.cpp" line="233"/>
         <source>Unsaved Changes</source>
-        <translation>Neuložené změny</translation>
+        <translation type="vanished">Neuložené změny</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="234"/>
         <source>The document has unsaved changes. Do you want to close anyway?</source>
-        <translation>Dokument obsahuje neuložené změny. Chcete jej přesto zavřít?</translation>
+        <translation type="vanished">Dokument obsahuje neuložené změny. Chcete jej přesto zavřít?</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="609"/>
+        <location filename="../WebView.cpp" line="599"/>
         <source>Start</source>
         <translation>Spustit</translation>
     </message>

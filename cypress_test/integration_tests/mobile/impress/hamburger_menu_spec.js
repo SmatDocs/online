@@ -18,7 +18,7 @@ describe.skip(['tagmobile'], 'Trigger hamburger menu options.', function() {
 		});
 	});
 
-	it('Save', { defaultCommandTimeout: 60000 }, function() {
+	it('Save', function() {
 		// Change the document content and save it
 		impressHelper.selectTextShapeInTheCenter();
 
@@ -270,8 +270,7 @@ describe.skip(['tagmobile'], 'Trigger hamburger menu options.', function() {
 			.should('exist');
 
 		// Check the version
-		cy.cGet('body').contains('#lokit-version', 'Collabora Office')
-			.should('exist');
+		cy.cGet('body').find('#coolwsd-version').should('exist');
 
 		// Close about dialog
 		cy.cGet('div.mobile-wizard.jsdialog-overlay.cancellable').click({force : true});

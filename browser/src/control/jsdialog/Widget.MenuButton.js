@@ -116,7 +116,7 @@ function _menubuttonControl (parentContainer, data, builder) {
 					JSDialog.CloseDropdown(dropdownId, opensExternal);
 					return true;
 				} else if (eventType === 'selected' && entry && entry.id) {
-					builder.callback('menubutton', 'select', control.container, entry.id, builder);
+					builder.callback('menubutton', 'select', {id: dropdownId}, entry.id, builder);
 					JSDialog.CloseDropdown(dropdownId);
 					return true;
 				} else /* note: entry can be a builder instance as in regular JSDialog callback */ {
@@ -147,7 +147,11 @@ function _menubuttonControl (parentContainer, data, builder) {
 			JSDialog.AddOnClick(control.button, applyCallback);
 		} else {
 			JSDialog.AddOnClick(control.button, clickFunction);
-			if (control.label)
+			// Only wire the label separately when it isn't a descendant of
+			// the button - otherwise a click on the label fires both
+			// handlers (its own and the button's via bubbling), and any
+			// toggle-style action ends up firing twice.
+			if (control.label && !control.button.contains(control.label))
 				JSDialog.AddOnClick(control.label, clickFunction);
 		}
 

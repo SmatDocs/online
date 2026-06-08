@@ -30,7 +30,7 @@
 .margin-item {
 	display: flex;
 	align-items: center;
-	padding: 8px;
+	padding: var(--spacing-m);
 	cursor: pointer;
 	border-radius: 3px;
 	border: 1px solid transparent;
@@ -74,7 +74,7 @@
 
 .custom-margins-link {
 	justify-content: center;
-	padding: 4px;
+	padding: var(--spacing-s);
 	font-size: var(--default-font-size);
 }
 
@@ -134,7 +134,7 @@
 	border: 1px solid var(--color-toolbar-border);
 	align-items: center;
 	border-radius: 4px;
-	padding: 4px;
+	padding: var(--spacing-s);
 	box-shadow: 0 2px 6px 2px rgba(60, 64, 67, .15);
 }
 
@@ -171,7 +171,7 @@
 	margin-top: 3px;
 }
 #toolbar-down #zoom {
-	min-width: 43px;
+	min-width: 56px;
 }
 #toolbar-down #zoom .unolabel::after {
 	content: '%';
@@ -189,7 +189,7 @@
 }
 
 #toolbar-down .ToolbarStatusInactive {
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	box-shadow: inset 0px 0px 0px 10px var(--color-background-dark), 0px 0px 0px 2px var(--color-background-dark), 4px 0px 0px 1px var(--color-background-lighter), -4px 0px 0px 1px #fff, 0px 0px 0px 5px var(--color-background-lighter);
 }
 #presentation-toolbar {
@@ -438,9 +438,6 @@ button.leaflet-control-search-next
 
 .search-not-found {
 	background-color: var(--color-error) !important;
-	-webkit-transition: background-color 0.8s linear;
-	-moz-transition: background-color 0.8s linear;
-	-o-transition: background-color 0.8s linear;
 	transition: background-color 0.8s linear;
 }
 
@@ -460,19 +457,19 @@ button.leaflet-control-search-next
 	color: var(--color-text-darker);
 }
 #toolbar-up .ui-combobox-button {
-	padding-left: 10px;
+	padding-inline: 5px;
 }
 #fontsizecombobox-input-context-toolbar {
 	width: 55px !important;
 }
 #toolbar-up #fontnamecombobox {
-	width: 170px;
-	max-width: 170px;
+	min-width: 150px;
+	max-width: 181px;
 	margin: auto 5px;
 }
 #toolbar-up #fontsizecombobox {
-	min-width: 90px;
-	width: 90px;
+	min-width: 70px;
+	width: 70px;
 	margin: auto 4px;
 }
 #fontsizecombobox-dropdown .ui-grid {
@@ -512,7 +509,7 @@ button.leaflet-control-search-next
 	border-radius: var(--border-radius);
 	box-sizing: border-box;
 	position: relative;
-	padding: 2px;
+	padding: var(--spacing-xs);
 	overflow: auto; /* child margins otherwise don't expand *this* element (parent) */
 }
 
@@ -741,11 +738,6 @@ button.leaflet-control-search-next
 	background-size: 16px 16px, 16px 16px, 16px 16px !important;
 	background-position: 2px center, 20px center, 38px center !important;
 	width: 94px !important; }
-/* Avoid the iconset07, the core renders it the same as iconset06, no need to support it in the online.
-.w2ui-icon.iconset07 { background: url('images/icon-set-symbols1-cross.svg') no-repeat, url('images/icon-set-symbols1-exclamation-mark.svg') no-repeat, url('images/icon-set-symbols1-check.svg') no-repeat;
-											 background-size: 16px 16px, 16px 16px, 16px 16px !important;
-											 background-position: 2px center, 20px center, 38px center !important;
-																			width: 94px !important; }*/
 .w2ui-icon.iconset08 { background: url('images/icon-set-positive-yellow-smilie.svg') no-repeat, url('images/icon-set-neutral-yellow-smilie.svg') no-repeat, url('images/icon-set-negative-yellow-smilie.svg') no-repeat;
 	background-size: 16px 16px, 16px 16px, 16px 16px !important;
 	background-position: 2px center, 20px center, 38px center !important;
@@ -1387,7 +1379,7 @@ button.leaflet-control-search-next
 .inserttable-grid {
 	box-sizing: border-box;
 	position: relative;
-	padding: 2px;
+	padding: var(--spacing-xs);
 	display: block;
 }
 
@@ -1399,7 +1391,7 @@ button.leaflet-control-search-next
 .inserttable-grid .col {
 	height: 100%;
 	float: left;
-	padding: 2px;
+	padding: var(--spacing-xs);
 	width: 20px;
 	border: 1px;
 	border-style: solid;
@@ -1417,7 +1409,7 @@ button.leaflet-control-search-next
 .insertshape-grid {
 	box-sizing: border-box;
 	position: static;
-	padding: 2px;
+	padding: var(--spacing-xs);
 	display: block;
 	min-width: 350px;
 	width: 100%;
@@ -1445,7 +1437,7 @@ button.leaflet-control-search-next
 
 .insertshape-grid .col {
 	height: 30px;
-	padding: 2px;
+	padding: var(--spacing-xs);
 	width: 30px;
 	border: 1px solid transparent;
 }
@@ -1561,14 +1553,14 @@ menu-entry-with-icon.padding-left + menu-entry-icon.width */
 #followingChipBackground,
 #userListSummaryBackground {
 	border-radius: var(--btn-img-size); /* We expect the height to be --btn-img-size, give a bit for a border. To fully round the corners, this needs to be at least 50% of the height so --btn-img-size should do */
-	padding: 2px; /* This will become the grey border around the inner elements */
+	padding: var(--spacing-xs); /* This will become the grey border around the inner elements */
 
 	display: none;
 }
 
 #followingChipBackground {
 	transform: translateX(calc(2.5px /* border widths */ + 2.5px /* background paddings */ + var(--btn-img-size) - 0.6px /* browser rendering fudge */));
-	/* We'd like this to flow over the first item of the userListSummary. I've added a fudge because browser rendering seems to have subpixel errors here and it's far better to
+	/* We'd like this to flow over the first item of the userListSummaryButton. I've added a fudge because browser rendering seems to have subpixel errors here and it's far better to
 	 * render the border marginally too far left than leave a gap. */
 }
 
@@ -1577,12 +1569,12 @@ menu-entry-with-icon.padding-left + menu-entry-icon.width */
 }
 
 #followingChipBackground:hover:has(#followingChip:hover),
-#userListSummaryBackground:hover:has(#userListSummary:hover) {
+#userListSummaryBackground:hover:has(#userListSummaryButton:hover) {
 	background-color: var(--color-background-darker);
 }
 
 #followingChipBackground > #followingChip,
-#userListSummaryBackground > #userListSummary {
+#userListSummaryBackground > #userListSummaryButton {
 	cursor: pointer;
 
 	margin: 0; /* everything is in the respective #fooBackground selectors */
@@ -1608,7 +1600,7 @@ menu-entry-with-icon.padding-left + menu-entry-icon.width */
 	box-sizing: border-box;
 }
 
-#userListSummaryBackground > #userListSummary {
+#userListSummaryBackground > #userListSummaryButton {
 	background: transparent !important; /* we want to override some classes that are added to buttons by default */
 
 	height: fit-content !important;
@@ -1623,20 +1615,20 @@ menu-entry-with-icon.padding-left + menu-entry-icon.width */
 	border: none !important; /* we want to override some classes that are added to buttons by default */
 }
 
-#userListSummary .avatar-img:first-child {
+#userListSummaryButton .avatar-img:first-child {
 	margin-left: 0;
 }
 
-#userListSummary .avatar-img:last-child {
+#userListSummaryButton .avatar-img:last-child {
 	margin-right: 0 !important;
 }
 
-#userListSummary .avatar-img {
+#userListSummaryButton .avatar-img {
 	background-clip: padding-box;
 	margin-left: -10px;
 }
 
-#userListSummary:not(:hover) .avatar-img.following {
+#userListSummaryButton:not(:hover) .avatar-img.following {
 	border-color: transparent !important;
 }
 
@@ -1681,7 +1673,7 @@ menu-entry-with-icon.padding-left + menu-entry-icon.width */
 }
 
 #follow-editor {
-	padding: 8px;
+	padding: var(--spacing-m);
 	display: flex;
 	align-items: center;
 }
@@ -1704,7 +1696,7 @@ menu-entry-with-icon.padding-left + menu-entry-icon.width */
 	padding-inline-start: 8px;
 	font-size: var(--default-font-size);
 	padding-block-end: 4px;
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 }
 
 .user-list-item.selected-user .user-list-item--name {
@@ -1755,7 +1747,7 @@ menu-entry-with-icon.padding-left + menu-entry-icon.width */
 #picture-transparency-entry-6 img { filter: opacity(0.05) }
 
 @media only screen and (max-width: 600px) {
-	#userListSummary,
+	#userListSummaryButton,
 	#userListHeader {
 		display: none;
 	}
@@ -1765,7 +1757,7 @@ menu-entry-with-icon.padding-left + menu-entry-icon.width */
 	display: flex;
 	justify-content: center;
 	align-items: center;
-	padding: 8px;
+	padding: var(--spacing-m);
 	cursor: pointer;
 	border-radius: 3px;
 	border: 1px solid transparent;

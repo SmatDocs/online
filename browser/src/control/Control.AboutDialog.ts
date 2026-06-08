@@ -17,12 +17,10 @@
 
 declare var JSDialog: any;
 declare var brandProductName: any;
-declare var brandProductURL: any;
 declare var sanitizeUrl: any;
 
 interface AboutDialogElements {
 	coolwsdVersion: HTMLElement;
-	lokitVersion: HTMLElement;
 	servedBy: HTMLElement;
 	slowProxy: HTMLElement;
 	jsDialog: HTMLElement;
@@ -85,6 +83,18 @@ class AboutDialog {
 		a.href = linkHref;
 		a.target = '_blank';
 		a.textContent = linkText;
+		// WCAG 3.2.5: without altering what sighted users see.
+		const srOnly = document.createElement('span');
+		srOnly.className = 'visuallyhidden';
+		srOnly.textContent = ' ' + _('(opens in new tab)');
+		a.appendChild(srOnly);
+		// Route the click through window.open so CODA (Qt/Windows/macOS)
+		// hands the URL off to the system browser via the HYPERLINK bridge
+		// rather than letting the embedded webview navigate target=_blank itself.
+		a.addEventListener('click', (e: MouseEvent) => {
+			e.preventDefault();
+			window.open(linkHref, '_blank');
+		});
 
 		span.appendChild(a);
 		if (extraText) {
@@ -106,7 +116,7 @@ class AboutDialog {
 			return;
 		}
 
-		// fill product-name and product-string
+		// fill product-name
 		let productName;
 		if (window.ThisIsAMobileApp) {
 			productName = window.MobileAppName;
@@ -116,11 +126,6 @@ class AboutDialog {
 					? brandProductName
 					: 'Collabora Online Development Edition (unbranded)';
 		}
-
-		const productURL =
-			typeof brandProductURL === 'string' && brandProductURL.length > 0
-				? brandProductURL
-				: 'https://collaboraonline.github.io/';
 
 		const productNameElement = content.querySelector(
 			'#product-name',
@@ -134,55 +139,15 @@ class AboutDialog {
 					.toLowerCase(),
 		);
 
-		const productStringText = _('This version of {productname} is powered by');
-		let productNameWithURL;
-		if (!window.ThisIsAMobileApp)
-			productNameWithURL =
-				'<a href="' +
-				sanitizeUrl(productURL) +
-				'" target="_blank">' +
-				productName +
-				'</a>';
-		else productNameWithURL = productName;
-
-		const productStringElement = content.querySelector(
-			'#product-string',
-		) as HTMLElement;
-		if (productStringElement) {
-			productStringElement.innerText = productStringText.replace(
-				'{productname}',
-				productNameWithURL,
-			);
-		}
-
-		// COOLWSD version
+		// Version
 		elements.coolwsdVersion.textContent = info.coolwsdVersion;
 		this.appendSpanAndLink(
 			elements.coolwsdVersion,
 			' git hash:\xA0',
-			`https://github.com/CollaboraOnline/online/commits/${info.coolwsdHash}`,
+			`https://gerrit.collaboraoffice.com/plugins/gitiles/online/+log/${info.coolwsdHash}`,
 			info.coolwsdHash,
 			info.wsdOptions,
 		);
-
-		// LOKit version
-		const lokitVersionText = `${info.lokitVersionName} ${info.lokitVersionNumber}${info.lokitVersionSuffix}`;
-		elements.lokitVersion.textContent = lokitVersionText;
-		this.appendSpanAndLink(
-			elements.lokitVersion,
-			' git hash:\xA0',
-			`https://gerrit.libreoffice.org/core/+log/${info.lokitHash}`,
-			info.lokitHash.substring(0, 10),
-		);
-
-		// Update lokit-extra position if exists
-		const lokitExtra = content.querySelector('#lokit-extra');
-		if (lokitExtra) {
-			elements.lokitVersion.parentNode.parentNode.insertBefore(
-				lokitExtra,
-				elements.lokitVersion.parentNode,
-			);
-		}
 
 		// Served By and Server ID
 		const label = document.createElement('span');
@@ -378,15 +343,13 @@ class AboutDialog {
 
 		let coolwsdLine = info.coolwsdVersion;
 		coolwsdLine += ` (git hash: ${info.coolwsdHash} ${info.wsdOptions})`;
-		addLine('COOLWSD version', coolwsdLine);
+		addLine('Version', coolwsdLine);
 
-		const lokitVersionText = `${info.lokitVersionName} ${info.lokitVersionNumber}${info.lokitVersionSuffix}`;
-		let lokitLine = lokitVersionText;
-		lokitLine += ` (git hash: ${info.lokitHash.substring(0, 10)})`;
-		addLine('LOKit version', lokitLine);
-		addLine('Served by', info.osInfo);
-		addLine('Server ID', info.serverId);
-		addLine('WOPI host', window.wopiHostId);
+		if (!window.mode.isCODesktop()) {
+			addLine('Served by', info.osInfo);
+			addLine('Server ID', info.serverId);
+			addLine('WOPI host', window.wopiHostId);
+		}
 
 		text = text.replace(/\u00A0/g, ' ');
 
@@ -464,39 +427,22 @@ class AboutDialog {
 	): AboutDialogElements {
 		const infoDiv = content.querySelector('#about-dialog-info') as HTMLElement;
 
-		const coolwsdLabel = AboutDialog.createElement('div', {
-			id: 'coolwsd-version-label',
-		});
-		coolwsdLabel.textContent = _('COOLWSD version:');
-		infoDiv.appendChild(coolwsdLabel);
-
 		const coolwsdVersionContainer = AboutDialog.createElement('div', {
 			className: 'about-dialog-info-div',
 		});
-		const coolwsdVersion = AboutDialog.createElement('div', {
+
+		const coolwsdLabel = AboutDialog.createElement('span', {
+			id: 'coolwsd-version-label',
+		});
+		coolwsdLabel.textContent = _('Version:') + '\xA0';
+		coolwsdVersionContainer.appendChild(coolwsdLabel);
+
+		const coolwsdVersion = AboutDialog.createElement('span', {
 			id: 'coolwsd-version',
 			attrs: { dir: 'ltr' },
 		});
 		coolwsdVersionContainer.appendChild(coolwsdVersion);
 		infoDiv.appendChild(coolwsdVersionContainer);
-
-		infoDiv.appendChild(
-			AboutDialog.createElement('div', { className: 'spacer' }),
-		);
-
-		const lokitLabel = AboutDialog.createElement('div', {
-			id: 'lokit-version-label',
-		});
-		lokitLabel.textContent = _('LOKit version:');
-		infoDiv.appendChild(lokitLabel);
-
-		const lokitVersionContainer = AboutDialog.createElement('div', {
-			className: 'about-dialog-info-div',
-		});
-
-		const lokitVersion = content.querySelector('#lokit-version') as HTMLElement;
-		lokitVersionContainer.appendChild(lokitVersion);
-		infoDiv.appendChild(lokitVersionContainer);
 
 		const servedBy = AboutDialog.createElement('div', { id: 'served-by' });
 		if (!window.ThisIsAMobileApp) {
@@ -538,7 +484,6 @@ class AboutDialog {
 
 		return {
 			coolwsdVersion,
-			lokitVersion,
 			servedBy,
 			slowProxy,
 			jsDialog,

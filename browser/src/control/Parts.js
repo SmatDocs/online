@@ -89,10 +89,12 @@ window.L.Map.include({
 		};
 
 		if (app.file.fileBasedView) {
-			if (!external) {
-				this._docLayer._checkSelectedPart();
-			}
 			docLayer._preview._scrollViewToPartPosition(docLayer._selectedPart);
+			// _checkSelectedPart's "most visible part" reconciliation is for
+			// free scroll; calling it after an explicit setPart would race
+			// notifyServer with a stale guess. Run only its UI side effects.
+			docLayer._preview._scrollToPart(docLayer._selectedPart);
+			docLayer.highlightCurrentPart(docLayer._selectedPart);
 			notifyServer(part);
 			return;
 		}
@@ -247,20 +249,27 @@ window.L.Map.include({
 		else maxHeight = Math.round(tileHeight * maxWidth / tileWidth);
 
 		if (fetchThumbnail) {
-			var mode = app.activeDocument.activeModes[0];
-			this._addPreviewToQueue(part, 'tile ' +
-							'nviewid=0' + ' ' +
-							'part=' + String(part) + ' ' +
-							'mode=' + String(mode) + ' ' +
-							'width=' + String(maxWidth * app.roundedDpiScale) + ' ' +
-							'height=' + String(maxHeight * app.roundedDpiScale) + ' ' +
-							'tileposx=' + '0 ' +
-							'tileposy=' + '0 ' +
-							'tilewidth=' + String(tileWidth) + ' ' +
-							'tileheight=' + String(tileHeight) + ' ' +
-							'id=' + String(id) +
-							(isSlideshow ? ' slideshow=1' : ''));
-			this._processPreviewQueue();
+			// For Impress/Draw, route thumbnails through the vector renderer.
+			// The slideshow path is using the server rendered bitmaps.
+			if (!isSlideshow && docLayer._vectorThumbnails &&
+				(docLayer._docType === 'presentation' || docLayer._docType === 'drawing')) {
+				docLayer._vectorThumbnails.requestThumbnail(id, part, maxWidth, maxHeight);
+			} else {
+				var mode = app.activeDocument.activeModes[0];
+				this._addPreviewToQueue(part, 'tile ' +
+								'nviewid=0' + ' ' +
+								'part=' + String(part) + ' ' +
+								'mode=' + String(mode) + ' ' +
+								'width=' + String(maxWidth * app.roundedDpiScale) + ' ' +
+								'height=' + String(maxHeight * app.roundedDpiScale) + ' ' +
+								'tileposx=' + '0 ' +
+								'tileposy=' + '0 ' +
+								'tilewidth=' + String(tileWidth) + ' ' +
+								'tileheight=' + String(tileHeight) + ' ' +
+								'id=' + String(id) +
+								(isSlideshow ? ' slideshow=1' : ''));
+				this._processPreviewQueue();
+			}
 		}
 
 		return {width: maxWidth, height: maxHeight};

@@ -13,6 +13,7 @@
 
 #include <QWebEngineView>
 #include <QObject>
+#include <QStringList>
 #include <QVariant>
 #include <string>
 #include <thread>
@@ -31,8 +32,6 @@ class Bridge : public QObject
     CODAWebEngineView* _webView;
     int _closeNotificationPipeForForwardingThread[2];
     std::thread _app2js;
-    // the state of the document modified status as reported by the core
-    bool _modified;
     // true between sending a copy/cut command and receiving its COMMANDRESULT
     bool _copyInProgress = false;
 
@@ -47,7 +46,6 @@ public:
         , _window(window)
         , _webView(webView)
         , _closeNotificationPipeForForwardingThread{ -1, -1 }
-        , _modified(false)
     {
     }
 
@@ -59,8 +57,6 @@ public:
 
     // send Online → JS
     void send2JS(const std::vector<char>& buffer);
-
-    bool isModified() const { return _modified; }
 
 public slots: // called from JavaScript
     // Called from JS via window.postMobileMessage

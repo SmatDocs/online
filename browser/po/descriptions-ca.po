@@ -1,13 +1,13 @@
 # Adolfo Jayme Barrientos <fitojb@ubuntu.com>, 2020, 2021.
 # Weblate <noreply@weblate.org>, 2020.
 # Joan Montané <joan@montane.cat>, 2021.
-# Ecron <ecron_89@hotmail.com>, 2025.
+# Ecron <ecron_89@hotmail.com>, 2025, 2026.
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-03-20 12:14+0200\n"
-"PO-Revision-Date: 2025-10-02 01:02+0000\n"
+"POT-Creation-Date: 2026-06-05 15:53+0200\n"
+"PO-Revision-Date: 2026-05-14 03:11+0000\n"
 "Last-Translator: Ecron <ecron_89@hotmail.com>\n"
 "Language-Team: Catalan <https://hosted.weblate.org/projects/collabora-online/"
 "app-store-descriptions/ca/>\n"
@@ -87,7 +87,7 @@ msgid ""
 "anything you enter in the bugtracker will be public."
 msgstr ""
 "Utilitzeu el gestor d'errors i adjunteu qualsevol fitxer que hagi causat "
-"problemes a través de <a href=\"https://col.la/android\">https://col.la/"
+"problemes a través de <a href=\"https://col.la/android\"> https://col.la/"
 "android</a>. Tingueu en compte que qualsevol cosa que envieu al gestor "
 "d'errors serà pública."
 

@@ -11,7 +11,7 @@
     <message>
         <location filename="../DocumentOperations.cpp" line="50"/>
         <source>Rich Text (.rtf)</source>
-        <translation type="unfinished"></translation>
+        <translation>Rich Text (.rtf)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="51"/>
@@ -21,22 +21,22 @@
     <message>
         <location filename="../DocumentOperations.cpp" line="52"/>
         <source>Word 2003 Document (.doc)</source>
-        <translation type="unfinished"></translation>
+        <translation>Word 2003-Dokument (.doc)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="58"/>
         <source>ODF spreadsheet (.ods)</source>
-        <translation type="unfinished"></translation>
+        <translation>ODF-Arbeitsmappe (.ods)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="59"/>
         <source>Excel Spreadsheet (.xlsx)</source>
-        <translation type="unfinished"></translation>
+        <translation>Excel-Arbeitsmappe (.xlsx)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="60"/>
         <source>Excel 2003 Spreadsheet (.xls)</source>
-        <translation type="unfinished"></translation>
+        <translation>Excel 2003-Arbeitsmappe (.xls)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="66"/>
@@ -51,7 +51,7 @@
     <message>
         <location filename="../DocumentOperations.cpp" line="68"/>
         <source>PowerPoint 2003 Presentation (.ppt)</source>
-        <translation type="unfinished"></translation>
+        <translation>PowerPoint 2003-Präsentation (.ppt)</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="74"/>
@@ -82,7 +82,7 @@
     <message>
         <location filename="../DocumentOperations.cpp" line="132"/>
         <source>Enter file path...</source>
-        <translation>Dateipfad eingeben...</translation>
+        <translation>Dateipfad eingeben…</translation>
     </message>
     <message>
         <location filename="../DocumentOperations.cpp" line="144"/>
@@ -137,71 +137,75 @@
         <translation type="vanished">Präsentationen (*.odp);;Alle Dateien (*)</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="739"/>
+        <location filename="../Bridge.cpp" line="737"/>
+        <location filename="../Bridge.cpp" line="805"/>
         <source>All Files (*)</source>
         <translation>Alle Dateien (*)</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="249"/>
+        <location filename="../Bridge.cpp" line="228"/>
         <source>Save Document</source>
         <translation>Dokument speichern</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="625"/>
+        <location filename="../Bridge.cpp" line="637"/>
         <source>Open File</source>
         <translation>Datei öffnen</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="626"/>
+        <location filename="../Bridge.cpp" line="638"/>
         <source>All Files (*);;Text Documents (*.odt *.ott *.doc *.docx *.rtf *.txt);;Spreadsheets (*.ods *.ots *.xls *.xlsx *.csv);;Presentations (*.odp *.otp *.ppt *.pptx)</source>
         <translation>Alle Dateien (*);;Textdokumente (*.odt *.ott *.doc *.docx *.rtf *.txt);;Tabellendokumente (*.ods *.ots *.xls *.xlsx *.csv);;Präsentationen (*.odp *.otp *.ppt *.pptx)</translation>
     </message>
     <message>
-        <location filename="../Bridge.cpp" line="737"/>
+        <location filename="../Bridge.cpp" line="735"/>
         <source>Export As</source>
         <translation>Exportieren als</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="156"/>
+        <location filename="../Bridge.cpp" line="803"/>
+        <source>Save File</source>
+        <translation>Datei speichern</translation>
+    </message>
+    <message>
+        <location filename="../WebView.cpp" line="158"/>
         <source>Presentation</source>
         <translation>Präsentation</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="161"/>
-        <location filename="../WebView.cpp" line="177"/>
+        <location filename="../WebView.cpp" line="163"/>
+        <location filename="../WebView.cpp" line="179"/>
         <source>Text Document</source>
         <translation>Textdokument</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="166"/>
+        <location filename="../WebView.cpp" line="168"/>
         <source>Spreadsheet</source>
-        <translation type="unfinished"></translation>
+        <translation>Arbeitsmappe</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="171"/>
+        <location filename="../WebView.cpp" line="173"/>
         <source>Drawing</source>
         <translation>Zeichnung</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="317"/>
+        <location filename="../WebView.cpp" line="304"/>
         <source>Presenting</source>
-        <translation type="unfinished">Präsentation</translation>
+        <translation>Präsentation</translation>
     </message>
 </context>
 <context>
     <name>WebView</name>
     <message>
-        <location filename="../WebView.cpp" line="233"/>
         <source>Unsaved Changes</source>
-        <translation>Nicht gespeicherte Änderungen</translation>
+        <translation type="vanished">Nicht gespeicherte Änderungen</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="234"/>
         <source>The document has unsaved changes. Do you want to close anyway?</source>
-        <translation>Das Dokument hat nicht gespeicherte Änderungen. Möchten Sie es trotzdem schließen?</translation>
+        <translation type="vanished">Das Dokument hat nicht gespeicherte Änderungen. Möchten Sie es trotzdem schließen?</translation>
     </message>
     <message>
-        <location filename="../WebView.cpp" line="609"/>
+        <location filename="../WebView.cpp" line="599"/>
         <source>Start</source>
         <translation>Start</translation>
     </message>

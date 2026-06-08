@@ -405,6 +405,13 @@ class LayerDrawing {
 			slideHash === this.nextRequestedSlideHash ||
 			slideHash === this.nextPrefetchedSlideHash
 		) {
+			// A non-prefetch request for a slide that is already being
+			// prefetched: upgrade to a regular request so the callback
+			// fires when the data arrives.
+			if (!prefetch && slideHash === this.prefetchedSlideHash) {
+				this.requestedSlideHash = this.prefetchedSlideHash;
+				this.prefetchedSlideHash = null;
+			}
 			app.console.debug(
 				'LayerDrawing.requestSlideImpl: no need to fetch slide again',
 			);
@@ -940,8 +947,12 @@ class LayerDrawing {
 	}
 
 	private computeInitialResolution() {
-		const viewWidth = window.screen.width;
-		const viewHeight = window.screen.height;
+		// window.screen dimensions are in CSS pixels; multiply by DPR so the
+		// tier selection matches the display's physical pixels and the canvas
+		// backing store isn't upscaled by CSS on HiDPI screens.
+		const dpr = window.devicePixelRatio || 1;
+		const viewWidth = window.screen.width * dpr;
+		const viewHeight = window.screen.height * dpr;
 		this.computeResolution(viewWidth, viewHeight);
 	}
 

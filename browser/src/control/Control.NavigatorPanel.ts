@@ -26,6 +26,10 @@ class NavigatorPanel extends SidebarBase {
 	focusQuickFind: boolean;
 	dirtyWidth: boolean = true;
 	currentWidth: number = 0;
+	// Set when the document editor regains focus after a search, so the next
+	// Enter on the search field re-runs the search instead of stepping through
+	// possibly stale results.
+	searchResultsStale: boolean = false;
 
 	constructor(map: any) {
 		super(map, SidebarType.Navigator);
@@ -37,6 +41,7 @@ class NavigatorPanel extends SidebarBase {
 		this.map.on('navigator', this.onNavigator, this);
 		this.map.on('doclayerinit', this.onDocLayerInit, this);
 		this.map.on('focussearch', this.focusSearch, this);
+		this.map.on('editorgotfocus', this.markSearchResultsStale, this);
 		this.navigationPanel = document.getElementById(`navigation-sidebar`);
 		this.navigationPanel.setAttribute('aria-label', _('Navigation Panel'));
 		this.navigationPanel.setAttribute('tabindex', '-1');
@@ -63,7 +68,12 @@ class NavigatorPanel extends SidebarBase {
 		this.map.off('navigator');
 		this.map.off('zoomend');
 		this.map.off('doclayerinit');
+		this.map.off('editorgotfocus', this.markSearchResultsStale, this);
 		this.dirtyWidth = true;
+	}
+
+	markSearchResultsStale() {
+		this.searchResultsStale = true;
 	}
 
 	onDocLayerInit() {
@@ -337,6 +347,11 @@ class NavigatorPanel extends SidebarBase {
 		if (navigatorData.action === 'close') {
 			this.closeSidebar();
 		} else if (navigatorData.children) {
+			// Whether the navigator was already open before this message, so
+			// focus is only moved into it on the closed-to-open transition and
+			// not pulled off the document each time it merely rebuilds.
+			const wasShown = app.showNavigator;
+
 			if (navigatorData.children.length) {
 				this.onResize();
 			}
@@ -344,11 +359,11 @@ class NavigatorPanel extends SidebarBase {
 			this.markNavigatorTreeView(navigatorData);
 
 			this.builder.build(this.container, [navigatorData], false);
+
 			// There is case where user can directly click navigator from notebookbar view option
 			// in that case we first show the navigation panel and then switch to tab view
 			this.showNavigationPanel(false);
-			// TODO: remove jQuery animation
-			$('#navigator-dock-wrapper').show(200);
+			this.navigatorDockWrapper.style.display = '';
 			app.showNavigator = true;
 			if (
 				app.map.isPresentationOrDrawing() &&
@@ -362,6 +377,8 @@ class NavigatorPanel extends SidebarBase {
 				this.switchNavigationTab('tab-quick-find');
 				this.focusSearch();
 				this.focusQuickFind = false;
+			} else if (!wasShown) {
+				this.focusNavigatorOnShow();
 			}
 		} else {
 			this.closeSidebar();
@@ -371,10 +388,19 @@ class NavigatorPanel extends SidebarBase {
 	}
 
 	onJSUpdate(e: FireEvent) {
+		// Only restore focus to a tree row if focus was actually inside the
+		// content tree. Checking the whole panel would also match the search
+		// box, stealing focus from it after the first typed character.
+		const treeHadFocus =
+			this.container && this.container.contains(document.activeElement);
 		if (this.highlightTerm && this.highlightTerm.trim().length > 0) {
 			e.data.control.highlightTerm = this.highlightTerm;
 		}
-		return super.onJSUpdate(e);
+		const retval = super.onJSUpdate(e);
+		if (treeHadFocus) {
+			this.focusNavigationItem();
+		}
+		return retval;
 	}
 
 	closeSidebar() {
@@ -465,6 +491,38 @@ class NavigatorPanel extends SidebarBase {
 
 			if (setFocus) this.navigationPanel.focus();
 		});
+	}
+
+	focusNavigationItem() {
+		const focusRow = this.navigationPanel.querySelector<HTMLElement>(
+			'.ui-treeview-tree [tabindex="0"]',
+		);
+		focusRow?.focus();
+	}
+
+	// Move keyboard focus into the navigator tree when the user opens it, the
+	// same way the sidebar focuses its first control on open. Deferred past the
+	// open animation so it does not shift the page, and skipped while a dialog
+	// is open so it does not steal focus from it.
+	focusNavigatorOnShow() {
+		app.timerRegistry.setTimeout(
+			'navigatorstealfocus',
+			() => {
+				app.layoutingService.appendLayoutingTask(() => {
+					if (
+						this.map.dialog.hasOpenedDialog() ||
+						(this.map.jsdialog && this.map.jsdialog.hasDialogOpened())
+					)
+						return;
+					// Focus may already have moved into the navigator before this
+					// deferred task runs (for example the user clicked the search
+					// box). Leave it where it is rather than yanking it to the tree.
+					if (this.navigationPanel.contains(document.activeElement)) return;
+					this.focusNavigationItem();
+				});
+			},
+			250,
+		);
 	}
 
 	isNavigationPanelVisible(): boolean {
@@ -568,11 +626,25 @@ class NavigatorPanel extends SidebarBase {
 			nextButton && (nextButton as any).checkVisibility();
 		const searchTerm = this.getSearchTerm();
 
-		if (!searchTerm) return; // There is something wrong. If search input doesn't exist, nothing to do below.
+		// Search input doesn't exist, nothing to do below.
+		if (searchTerm === null) return;
+
+		// Field cleared: forget the stored term and remove the Outline
+		// highlighting. Without this the yellow highlight stays and is
+		// re-applied on the next navigator update via onJSUpdate (which
+		// reuses highlightTerm).
+		if (searchTerm.trim() === '') {
+			this.highlightTerm = '';
+			const treeContainer = document.getElementById('contenttree') as any;
+			if (treeContainer) treeContainer.highlightEntries('');
+			return;
+		}
 
 		const termChanged = searchTerm !== this.highlightTerm;
 		this.highlightTerm = searchTerm;
-		const newSearch = termChanged || !nextButtonVisible;
+		const newSearch =
+			termChanged || !nextButtonVisible || this.searchResultsStale;
+		this.searchResultsStale = false;
 
 		if (newSearch) {
 			if (object.id === 'navigator-search-button')

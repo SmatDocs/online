@@ -28,6 +28,7 @@
 #include <common/JsonUtil.hpp>
 #include <common/LangUtil.hpp>
 #include <common/Log.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Protocol.hpp>
 #include <common/Util.hpp>
 #include <common/base64.hpp>
@@ -71,6 +72,7 @@
 #include <Poco/URI.h>
 #include <Poco/Util/LayeredConfiguration.h>
 
+#include <algorithm>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
@@ -203,11 +205,9 @@ bool isConfigAuthOk(const std::string& userProvidedUsr, const std::string& userP
         }
 
         std::vector<unsigned char> userProvidedPwdHash(tokens[4].size() / 2);
-        PKCS5_PBKDF2_HMAC(userProvidedPwd.c_str(), -1,
-                          saltData.data(), saltData.size(),
-                          std::stoi(tokens[2]),
-                          EVP_sha512(),
-                          userProvidedPwdHash.size(), userProvidedPwdHash.data());
+        PKCS5_PBKDF2_HMAC(userProvidedPwd.c_str(), -1, saltData.data(), saltData.size(),
+                          NumUtil::stoi(tokens[2]), EVP_sha512(), userProvidedPwdHash.size(),
+                          userProvidedPwdHash.data());
 
         std::stringstream stream;
         for (unsigned long j = 0; j < userProvidedPwdHash.size(); ++j)
@@ -233,6 +233,48 @@ std::string stringifyBoolFromConfig(const Poco::Util::LayeredConfiguration& conf
     return config.getBool(propertyName, defaultValue) ? "true" : "false";
 }
 
+/// Returns the canonical base url for a pre-canned AI provider id, or an
+/// empty view if the id is not pre-canned. Keep in sync with AI_PROVIDERS in
+/// browser/admin/src/integrator/AdminIntegratorSettings.ts.
+std::string_view preCannedAIProviderBaseUrl(std::string_view id)
+{
+    if (id == "openai")   return "https://api.openai.com";
+    if (id == "gemini")   return "https://generativelanguage.googleapis.com/v1beta/openai";
+    if (id == "groq")     return "https://api.groq.com/openai";
+    if (id == "together") return "https://api.together.xyz";
+    if (id == "mistral")  return "https://api.mistral.ai";
+    return {};
+}
+
+bool hasSuffix(const std::string& value, std::string_view suffix)
+{
+    return value.size() >= suffix.size()
+           && value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+std::string buildOpenAICompatibleEndpoint(std::string baseUrl, std::string_view endpoint)
+{
+    if (!baseUrl.empty() && baseUrl.back() == '/')
+        baseUrl.pop_back();
+
+    if (hasSuffix(baseUrl, "/v1") || hasSuffix(baseUrl, "/v1beta/openai"))
+        return baseUrl + std::string(endpoint);
+
+    return baseUrl + "/v1" + std::string(endpoint);
+}
+
+/// Returns true if the host is forbidden by KIT_HOST_ALLOWLIST, matching
+/// the convention of core's HostFilter::isForbidden.
+bool isForbiddenKitHost(const std::string& host)
+{
+    static const char* allowlist = std::getenv("KIT_HOST_ALLOWLIST");
+    if (!allowlist || allowlist[0] == '\0')
+        return false;
+
+    static const std::regex allowedRegex(allowlist);
+    return !std::regex_match(host, allowedRegex);
+}
+
 /// Returns true if the host is allowed, false otherwise.
 bool isAllowedWopiHost(const Poco::URI& uri)
 {
@@ -241,6 +283,9 @@ bool isAllowedWopiHost(const Poco::URI& uri)
 
     const std::string& targetHost = uri.getHost();
     if (HostUtil::allowedWopiHost(targetHost))
+        return true;
+
+    if (HostUtil::isWopiHostsEmpty() && net::isLocalhost(targetHost))
         return true;
 
     // Check if a resolved IP address is in the allowlist.
@@ -264,6 +309,7 @@ FileServerRequestHandler::FileServerRequestHandler(const std::string& root)
     {
         FileHash.reserve(4096); // We have ~3964 files.
         readDirToHash(root, "/browser/dist");
+        synthesizeExtensionsIndex();
     }
     catch (...)
     {
@@ -360,6 +406,7 @@ bool FileServerRequestHandler::authenticateAdmin(const Poco::Net::HTTPBasicCrede
     // bundlify appears to add an extra /dist -> dist/dist/admin
     cookie.setPath(COOLWSD::ServiceRoot + "/browser/dist/");
     cookie.setSecure(ConfigUtil::isSslEnabled());
+    cookie.setHttpOnly(true);
     response.addCookie(cookie.toString());
 
     return true;
@@ -895,6 +942,69 @@ const std::string *FileServerRequestHandler::getCompressedFile(const std::string
     return pair.second.empty() ? &pair.first : &pair.second;
 }
 
+void FileServerRequestHandler::synthesizeExtensionsIndex()
+{
+    // Walk FileHash for "/browser/dist/extensions/<id>/manifest.json" entries; <id> is
+    // the directory that an admin has dropped under $(DIST_FOLDER)/extensions/ to
+    // deploy an extension (see browser/Makefile.am and browser/extensions/README.md).
+    static const std::string prefix = "/browser/dist/extensions/";
+    static const std::string suffix = "/manifest.json";
+    std::vector<std::string> ids;
+    for (const auto& entry : FileHash)
+    {
+        const std::string& key = entry.first;
+        if (!key.starts_with(prefix) || !key.ends_with(suffix))
+            continue;
+        const std::string id =
+            key.substr(prefix.size(), key.size() - prefix.size() - suffix.size());
+        // Skip nested manifest.json files (only direct subdirectories of extensions/
+        // are extension roots):
+        if (id.find('/') != std::string::npos)
+            continue;
+        ids.push_back(id);
+    }
+    std::sort(ids.begin(), ids.end());
+
+    std::string json;
+    json.push_back('[');
+    bool first = true;
+    for (const auto& id : ids)
+    {
+        if (!first) json.push_back(',');
+        first = false;
+        json.push_back('"');
+        json.append(id);
+        json.push_back('"');
+    }
+    json.push_back(']');
+
+    // Pre-compress in step with the rest of readDirToHash so the request handler's
+    // gzip path serves correctly-encoded bytes; getCompressedFile silently falls back
+    // to the uncompressed entry on init/deflate failure here, matching readDirToHash.
+    std::string gzipped;
+    z_stream strm;
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    if (deflateInit2(&strm, Z_BEST_COMPRESSION, Z_DEFLATED, 31, 8, Z_DEFAULT_STRATEGY) == Z_OK)
+    {
+        const unsigned long bound = deflateBound(&strm, json.size());
+        gzipped.resize(bound);
+        strm.next_in = reinterpret_cast<unsigned char*>(json.data());
+        strm.avail_in = json.size();
+        strm.next_out = reinterpret_cast<unsigned char*>(gzipped.data());
+        strm.avail_out = bound;
+        if (deflate(&strm, Z_FINISH) == Z_STREAM_END)
+            gzipped.resize(bound - strm.avail_out);
+        else
+            gzipped.clear();
+        deflateEnd(&strm);
+    }
+
+    // Replaces any stale build-time index.json so the runtime view always wins:
+    FileHash[prefix + "index.json"] = std::make_pair(std::move(json), std::move(gzipped));
+}
+
 const std::string *FileServerRequestHandler::getUncompressedFile(const std::string &path)
 {
     return &FileHash[path].first;
@@ -1032,6 +1142,7 @@ static const std::string WOPI_SETTING_BASE_URL = "%WOPI_SETTING_BASE_URL%";
 static const std::string IFRAME_TYPE = "%IFRAME_TYPE%";
 static const std::string UI_THEME = "%UI_THEME%";
 static const std::string VERSION = "%VERSION%";
+static const std::string WOPI_HOST_ID = "%WOPI_HOST_ID%";
 static const std::string EXPERIMENTAL_FEATURES = "%EXPERIMENTAL_FEATURES%";
 
 /// Per user request variables.
@@ -1136,6 +1247,8 @@ public:
 
         extractVariable(form, "ui_theme", UI_THEME);
 
+        extractVariable(form, "host_session_id", WOPI_HOST_ID);
+
         std::string buyProduct;
         {
             std::lock_guard<std::mutex> lock(COOLWSD::RemoteConfigMutex);
@@ -1161,7 +1274,7 @@ public:
     }
 
 private:
-    std::unordered_map<std::string, std::string> _vars;
+    Util::UnorderedStringMap<std::string> _vars;
     const std::string _blank;
 };
 
@@ -1179,7 +1292,7 @@ void FileServerRequestHandler::replaceServiceRoot(const HTTPRequest& request,
                                                   const std::shared_ptr<StreamSocket>& socket)
 {
     const ServerURL cnxDetails(requestDetails);
-    const std::string responseRoot = cnxDetails.getResponseRoot();
+    const std::string& responseRoot = cnxDetails.getResponseRoot();
     const std::string relPath = getRequestPathname(request, requestDetails);
     LOG_DBG("Preprocessing file: " << relPath);
     std::string preprocess = *getUncompressedFile(relPath);
@@ -1228,7 +1341,7 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
         socketProxy = "true";
     Poco::replaceInPlace(preprocess, std::string("%SOCKET_PROXY%"), socketProxy);
 
-    const std::string responseRoot = cnxDetails.getResponseRoot();
+    const std::string& responseRoot = cnxDetails.getResponseRoot();
     std::string userInterfaceMode;
     std::string userInterfaceTheme;
     std::string savedUIState = "true";
@@ -1250,7 +1363,7 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
     Poco::replaceInPlace(preprocess, CHECK_FILE_INFO_OVERRIDE,
                          checkFileInfoToJSON(urv[CHECK_FILE_INFO_OVERRIDE]));
     Poco::replaceInPlace(preprocess, WOPI_SETTING_BASE_URL, urv[WOPI_SETTING_BASE_URL]);
-    Poco::replaceInPlace(preprocess, std::string("%WOPI_HOST_ID%"), form.get("host_session_id", ""));
+    Poco::replaceInPlace(preprocess, WOPI_HOST_ID, urv[WOPI_HOST_ID]);
     Poco::replaceInPlace(preprocess, EXPERIMENTAL_FEATURES,
                          std::string(EnableExperimental ? "true" : "false"));
 
@@ -1318,7 +1431,7 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
     Poco::replaceInPlace(preprocess, std::string("%ENABLE_WELCOME_MSG%"), enableWelcomeMessage);
     Poco::replaceInPlace(preprocess, std::string("%AUTO_SHOW_WELCOME%"), autoShowWelcome);
 
-    std::string enableAccessibility = stringifyBoolFromConfig(config, "accessibility.enable", false);
+    std::string enableAccessibility = stringifyBoolFromConfig(config, "accessibility.enable", Util::isMobileApp());
     Poco::replaceInPlace(preprocess, std::string("%ENABLE_ACCESSIBILITY%"), enableAccessibility);
 
     // the config value of 'notebookbar/tabbed' or 'classic/compact' overrides the UIMode
@@ -1418,6 +1531,13 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
     csp.appendDirective("img-src", "'self'");
     csp.appendDirective("img-src", "data:"); // Equivalent to unsafe-inline!
     csp.appendDirectiveUrl("img-src", "https://www.collaboraoffice.com/");
+
+    // When comment_avatar points at an http(s) image, the browser still needs
+    // an img-src entry for that origin or the iframe CSP refuses to load it.
+    // data: URLs are already covered above; other schemes are not useful here.
+    const std::string commentAvatarUrl = ConfigUtil::getString("comment_avatar", "");
+    if (commentAvatarUrl.starts_with("http://") || commentAvatarUrl.starts_with("https://"))
+        csp.appendDirectiveUrl("img-src", commentAvatarUrl);
 
     // Frame ancestors: Allow coolwsd host, wopi host and anything configured.
     // This is deprecated.
@@ -1679,7 +1799,7 @@ void FileServerRequestHandler::fetchWopiSettingConfigs(const Poco::Net::HTTPRequ
     if (!isAllowedWopiHost(sharedUri))
     {
         LOG_WRN("Rejected settings config request to untrusted host ["
-                << COOLWSD::anonymizeUrl(sharedConfigUrl) << ']');
+                << Anonymizer::anonymizeUrl(sharedConfigUrl) << ']');
         sendError(http::StatusCode::Forbidden, getRequestPath(request), socket, shortMessage,
                   "Target host is not in the allowed WOPI host list");
         return;
@@ -1693,7 +1813,7 @@ void FileServerRequestHandler::fetchWopiSettingConfigs(const Poco::Net::HTTPRequ
         sharedUri.addQueryParameter("no_auth_header", "1");
     }
 
-    const std::string& uriAnonym = COOLWSD::anonymizeUrl(sharedUri.toString());
+    const std::string& uriAnonym = Anonymizer::anonymizeUrl(sharedUri.toString());
 
     Authorization auth(Authorization::Type::Token, accessToken, noAuthHeader);
     auto httpRequest = StorageConnectionManager::createHttpRequest(sharedUri, auth);
@@ -1768,7 +1888,7 @@ void FileServerRequestHandler::fetchSettingFile(const Poco::Net::HTTPRequest& re
     if (!isAllowedWopiHost(dicUrl))
     {
         LOG_WRN("Rejected setting file request to untrusted host ["
-                << COOLWSD::anonymizeUrl(fileUrl) << ']');
+                << Anonymizer::anonymizeUrl(fileUrl) << ']');
         sendError(http::StatusCode::Forbidden, getRequestPath(request), socket,
                   "Failed to fetch setting file",
                   "Target host is not in the allowed WOPI host list");
@@ -1795,7 +1915,7 @@ void FileServerRequestHandler::fetchSettingFile(const Poco::Net::HTTPRequest& re
         dicUrl.addQueryParameter("no_auth_header", "1");
     }
 
-    const std::string& uriAnonym = COOLWSD::anonymizeUrl(dicUrl.toString());
+    const std::string& uriAnonym = Anonymizer::anonymizeUrl(dicUrl.toString());
     Authorization auth(Authorization::Type::Token, accessToken, noAuthHeader);
     auto httpRequest = StorageConnectionManager::createHttpRequest(dicUrl, auth);
     httpRequest.setVerb(http::Request::VERB_GET);
@@ -1860,25 +1980,44 @@ void FileServerRequestHandler::fetchModels(const Poco::Net::HTTPRequest& request
         return;
     }
 
-    if (provider == "custom" && baseUrl.empty())
+    // Ignore the client's baseUrl for non-custom providers so a caller
+    // cannot pair a pre-canned id with an arbitrary url to bypass the KIT
+    // allowlist.
+    const bool isCustom = provider == "custom";
+    if (!isCustom)
+    {
+        const std::string_view preCanned = preCannedAIProviderBaseUrl(provider);
+        if (preCanned.empty())
+        {
+            sendError(http::StatusCode::BadRequest, getRequestPath(request), socket, shortMessage,
+                      "Unknown provider");
+            return;
+        }
+        baseUrl.assign(preCanned);
+    }
+    else if (baseUrl.empty())
     {
         sendError(http::StatusCode::BadRequest, getRequestPath(request), socket, shortMessage,
                   "Missing baseUrl for custom provider");
         return;
     }
 
-    if (baseUrl.empty())
-    {
-        sendError(http::StatusCode::BadRequest, getRequestPath(request), socket, shortMessage,
-                  "Missing baseUrl for provider");
-        return;
-    }
-    if (baseUrl.back() == '/')
-        baseUrl.pop_back();
-    baseUrl += "/v1/models";
+    baseUrl = buildOpenAICompatibleEndpoint(std::move(baseUrl), "/models");
 
     Poco::URI uri(baseUrl);
-    const std::string& uriAnonym = COOLWSD::anonymizeUrl(uri.toString());
+
+    if (isCustom && isForbiddenKitHost(uri.getHost()))
+    {
+        LOG_WRN("Rejected fetch-models request to host not in KIT allowlist ["
+                << Anonymizer::anonymizeUrl(baseUrl) << ']');
+        // Use 421 rather than 403 so the browser can tell this local allowlist
+        // refusal apart from a genuine 403 forwarded from the upstream provider.
+        sendError(http::StatusCode::MisdirectedRequest, getRequestPath(request), socket,
+                  shortMessage, "Target host is not in the allowed host list");
+        return;
+    }
+
+    const std::string& uriAnonym = Anonymizer::anonymizeUrl(uri.toString());
 
     Authorization auth(Authorization::Type::Token, apiKey, false);
     auto httpRequest = StorageConnectionManager::createHttpRequest(uri, auth);
@@ -1948,7 +2087,7 @@ void FileServerRequestHandler::deleteWopiSettingConfigs(const Poco::Net::HTTPReq
     if (!isAllowedWopiHost(sharedUri))
     {
         LOG_WRN("Rejected settings delete request to untrusted host ["
-                << COOLWSD::anonymizeUrl(sharedConfigUrl) << ']');
+                << Anonymizer::anonymizeUrl(sharedConfigUrl) << ']');
         sendError(http::StatusCode::Forbidden, getRequestPath(request), socket, shortMessage,
                   "Target host is not in the allowed WOPI host list");
         return;
@@ -1960,7 +2099,7 @@ void FileServerRequestHandler::deleteWopiSettingConfigs(const Poco::Net::HTTPReq
     {
         sharedUri.addQueryParameter("no_auth_header", "1");
     }
-    const std::string& uriAnonym = COOLWSD::anonymizeUrl(sharedUri.toString());
+    const std::string& uriAnonym = Anonymizer::anonymizeUrl(sharedUri.toString());
 
     Authorization auth(Authorization::Type::Token, accessToken, noAuthHeader);
     auto httpRequest = StorageConnectionManager::createHttpRequest(sharedUri, auth);
@@ -2055,7 +2194,7 @@ void FileServerRequestHandler::uploadFileToIntegrator(const Poco::Net::HTTPReque
     if (!isAllowedWopiHost(wopiUri))
     {
         LOG_WRN("Rejected upload request to untrusted host ["
-                << COOLWSD::anonymizeUrl(wopiSettingBaseUrl) << ']');
+                << Anonymizer::anonymizeUrl(wopiSettingBaseUrl) << ']');
         sendError(http::StatusCode::Forbidden, getRequestPath(request), socket, shortMessage,
                   "Target host is not in the allowed WOPI host list");
         return;
@@ -2064,7 +2203,7 @@ void FileServerRequestHandler::uploadFileToIntegrator(const Poco::Net::HTTPReque
     const std::string& fileId = filePath + fileName;
     wopiUri.addQueryParameter("fileId", fileId);
     wopiUri.addQueryParameter("access_token", token);
-    const std::string& uriAnonym = COOLWSD::anonymizeUrl(wopiUri.toString());
+    const std::string& uriAnonym = Anonymizer::anonymizeUrl(wopiUri.toString());
 
     Authorization auth(Authorization::Type::Token, token, false);
     auto httpRequest = StorageConnectionManager::createHttpRequest(wopiUri, auth);
@@ -2121,7 +2260,7 @@ void FileServerRequestHandler::preprocessIntegratorAdminFile(const HTTPRequest& 
                                                             const std::shared_ptr<StreamSocket>& socket)
 {
     const ServerURL cnxDetails(requestDetails);
-    const std::string responseRoot = cnxDetails.getResponseRoot();
+    const std::string& responseRoot = cnxDetails.getResponseRoot();
     const auto& config = Application::instance().config();
 
     static const std::string scriptJS("<script src=\"%s/browser/" COOLWSD_VERSION_HASH "/%s.js\"></script>");
@@ -2147,7 +2286,7 @@ void FileServerRequestHandler::preprocessIntegratorAdminFile(const HTTPRequest& 
     Poco::replaceInPlace(adminFile, std::string("%ENABLE_DEBUG%"),
                          std::string(Util::isDebugEnabled() ? "true" : "false"));
 
-    std::string enableAccessibility = stringifyBoolFromConfig(config, "accessibility.enable", false);
+    std::string enableAccessibility = stringifyBoolFromConfig(config, "accessibility.enable", Util::isMobileApp());
     Poco::replaceInPlace(adminFile, std::string("%ENABLE_ACCESSIBILITY%"), enableAccessibility);
 
     // AI settings are disabled if the WOPI integrator requests it
@@ -2156,9 +2295,18 @@ void FileServerRequestHandler::preprocessIntegratorAdminFile(const HTTPRequest& 
     Poco::replaceInPlace(adminFile, std::string("%DISABLE_AI_SETTINGS%"),
                          std::string(disableAISettings ? "true" : "false"));
 
+    // The in-document Options dialog renders the iframe in a modal and opts in
+    // to the section navigation sidebar. Other integrators (e.g. Nextcloud's
+    // own settings page) embed the iframe directly, so the sidebar would clash
+    // with the host's own navigation - default to off.
+    const std::string showLeftNav = form.get("show_left_nav", "false");
+    Poco::replaceInPlace(adminFile, std::string("%SHOW_LEFT_NAV%"),
+                         std::string(showLeftNav == "true" ? "true" : "false"));
+
     updateThemeResources(adminFile, responseRoot, urv[BRANDING_THEME], config);
 
-    Poco::replaceInPlace(adminFile, std::string("%UI_LANG%"), requestDetails.getParam("lang"));
+    const std::string escapedLang = Uri::encode(requestDetails.getParam("lang"), "'");
+    Poco::replaceInPlace(adminFile, std::string("%UI_LANG%"), escapedLang);
     Poco::replaceInPlace(adminFile, std::string("%VERSION%"), std::string(COOLWSD_VERSION_HASH));
     Poco::replaceInPlace(adminFile, std::string("%SERVICE_ROOT%"), responseRoot);
 
@@ -2220,7 +2368,7 @@ void FileServerRequestHandler::preprocessAdminFile(const HTTPRequest& request,
     }
 
     const ServerURL cnxDetails(requestDetails);
-    const std::string responseRoot = cnxDetails.getResponseRoot();
+    const std::string& responseRoot = cnxDetails.getResponseRoot();
 
     const std::string relPath = getRequestPathname(request, requestDetails);
     LOG_DBG("Preprocessing file: " << relPath);

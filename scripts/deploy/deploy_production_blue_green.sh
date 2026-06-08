@@ -26,6 +26,7 @@ set -euo pipefail
 # - PRODUCTION_DEPLOY_STATE_DIR
 # - PRODUCTION_SWITCH_TO_BLUE_CMD / PRODUCTION_SWITCH_TO_GREEN_CMD
 # - PRODUCTION_SHUTDOWN_OLD_SLOT=true|false
+# - PRODUCTION_ENGINE_ASSETS_URL
 # - PRODUCTION_BLUE_HEALTH_URL / PRODUCTION_GREEN_HEALTH_URL
 # - PRODUCTION_HEALTH_MAX_ATTEMPTS / PRODUCTION_HEALTH_SLEEP_SECONDS / PRODUCTION_HEALTH_CONSECUTIVE_SUCCESS
 
@@ -77,6 +78,7 @@ HEALTH_SLEEP_SECONDS="${PRODUCTION_HEALTH_SLEEP_SECONDS:-2}"
 HEALTH_CONSECUTIVE_SUCCESS="${PRODUCTION_HEALTH_CONSECUTIVE_SUCCESS:-2}"
 MAKE_JOBS="${PRODUCTION_MAKE_JOBS:-$(nproc)}"
 DEFAULT_DEPLOY_REF="${PRODUCTION_DEPLOY_REF:-prod}"
+ENGINE_ASSETS_URL="${PRODUCTION_ENGINE_ASSETS_URL:-https://github.com/CollaboraOnline/online/releases/download/for-code-assets/engine-main-assets.tar.gz}"
 BLUE_HEALTH_URL="${PRODUCTION_BLUE_HEALTH_URL:-http://127.0.0.1:${BLUE_PORT}/hosting/discovery}"
 GREEN_HEALTH_URL="${PRODUCTION_GREEN_HEALTH_URL:-http://127.0.0.1:${GREEN_PORT}/hosting/discovery}"
 
@@ -260,33 +262,131 @@ extract_configure_args() {
   printf '%s' "$configure_args"
 }
 
-configure_slot() {
+slot_uses_monorepo_engine() {
+  local slot_root="$1"
+  [[ -d "$slot_root/engine/include" ]]
+}
+
+ensure_engine_assets() {
+  local slot="$1"
+  local archive_path=""
+  local tmp_archive_path=""
+
+  set_slot_context "$slot"
+  if ! slot_uses_monorepo_engine "$SLOT_ROOT"; then
+    return
+  fi
+
+  if [[ -x "$SLOT_ROOT/engine/instdir/program/soffice.bin" ]]; then
+    return
+  fi
+
+  archive_path="$SLOT_ROOT/engine-main-assets.tar.gz"
+  tmp_archive_path="${archive_path}.tmp"
+  echo "[prod] Preparing monorepo engine assets for $slot in $SLOT_ROOT"
+
+  if [[ ! -f "$archive_path" ]]; then
+    if command -v curl >/dev/null 2>&1; then
+      curl -fL --retry 3 --retry-delay 5 -o "$tmp_archive_path" "$ENGINE_ASSETS_URL"
+    elif command -v wget >/dev/null 2>&1; then
+      wget -O "$tmp_archive_path" "$ENGINE_ASSETS_URL"
+    else
+      echo "[prod] Cannot download engine assets: curl/wget not found" >&2
+      exit 1
+    fi
+    mv -f "$tmp_archive_path" "$archive_path"
+  fi
+
+  tar xzf "$archive_path" -C "$SLOT_ROOT/engine"
+  if [[ ! -x "$SLOT_ROOT/engine/instdir/program/soffice.bin" ]]; then
+    echo "[prod] Engine assets did not create $SLOT_ROOT/engine/instdir/program/soffice.bin" >&2
+    exit 1
+  fi
+}
+
+configure_args_for_slot() {
+  local slot="$1"
+  local configure_args=""
+  local normalized_args=()
+  local arg=""
+
+  set_slot_context "$slot"
+  configure_args="$(extract_configure_args)"
+  if ! slot_uses_monorepo_engine "$SLOT_ROOT"; then
+    printf '%s' "$configure_args"
+    return
+  fi
+
+  read -r -a normalized_args <<< "$configure_args"
+  for arg in "${!normalized_args[@]}"; do
+    case "${normalized_args[$arg]}" in
+      --with-lokit-path=*|--with-lo-path=*)
+        unset 'normalized_args[$arg]'
+        ;;
+    esac
+  done
+  normalized_args+=("--with-lokit-path=$SLOT_ROOT/engine/include")
+  normalized_args+=("--with-lo-path=$SLOT_ROOT/engine/instdir")
+  printf '%s ' "${normalized_args[@]}"
+}
+
+config_status_uses_slot_engine() {
   local slot="$1"
   set_slot_context "$slot"
+  grep -F -- "--with-lokit-path=$SLOT_ROOT/engine/include" "$SLOT_ROOT/config.status" >/dev/null 2>&1 &&
+    grep -F -- "--with-lo-path=$SLOT_ROOT/engine/instdir" "$SLOT_ROOT/config.status" >/dev/null 2>&1
+}
+
+run_configure_for_slot() {
+  local slot="$1"
+  local configure_args="$2"
+
+  set_slot_context "$slot"
+  (
+    cd "$SLOT_ROOT"
+    if slot_uses_monorepo_engine "$SLOT_ROOT"; then
+      export COCOREPATH="$SLOT_ROOT/engine"
+    fi
+    if [[ ! -x "./configure" ]]; then
+      echo "[prod] Generating configure script in $SLOT_ROOT"
+      ./autogen.sh
+    fi
+    # shellcheck disable=SC2086
+    ./configure ${configure_args}
+    ./config.status config_version.h
+  )
+}
+
+configure_slot() {
+  local slot="$1"
+  local configure_args=""
+  set_slot_context "$slot"
+
+  ensure_engine_assets "$slot"
 
   if [[ -x "$SLOT_ROOT/config.status" ]]; then
+    if slot_uses_monorepo_engine "$SLOT_ROOT" && ! config_status_uses_slot_engine "$slot"; then
+      configure_args="$(configure_args_for_slot "$slot")"
+      echo "[prod] Reconfiguring $SLOT_ROOT for monorepo engine assets"
+      run_configure_for_slot "$slot" "$configure_args"
+      return
+    fi
+
     echo "[prod] Rechecking configure in $SLOT_ROOT"
     (
       cd "$SLOT_ROOT"
+      if slot_uses_monorepo_engine "$SLOT_ROOT"; then
+        export COCOREPATH="$SLOT_ROOT/engine"
+      fi
       ./config.status --recheck
       ./config.status config_version.h
     )
     return
   fi
 
-  local configure_args
-  configure_args="$(extract_configure_args)"
+  configure_args="$(configure_args_for_slot "$slot")"
   echo "[prod] Bootstrapping configure in $SLOT_ROOT from blue slot settings"
-  (
-    cd "$SLOT_ROOT"
-    if [[ ! -x "./configure" ]]; then
-      echo "[prod] Generating configure script in $SLOT_ROOT"
-      eval "./autogen.sh ${configure_args}"
-    else
-      eval "./configure ${configure_args}"
-    fi
-    ./config.status config_version.h
-  )
+  run_configure_for_slot "$slot" "$configure_args"
 }
 
 sync_slot_runtime_files() {

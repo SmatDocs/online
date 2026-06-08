@@ -28,6 +28,7 @@ window.L.Control.MobileWizardBuilder = window.L.Control.JSDialogBuilder.extend({
 		this._controlHandlers['checkbox'] = this._checkboxControl;
 		this._controlHandlers['combobox'] = JSDialog.mobileCombobox;
 		this._controlHandlers['comboboxentry'] = JSDialog.mobileComboboxEntry;
+		this._controlHandlers['fixedtext'] = JSDialog.fixedtextControl;
 		this._controlHandlers['edit'] = this._editControl;
 		this._controlHandlers['frame'] = this._frameHandler;
 		this._controlHandlers['grid'] = this._gridHandler;
@@ -88,11 +89,12 @@ window.L.Control.MobileWizardBuilder = window.L.Control.JSDialogBuilder.extend({
 		data.parent = parent;
 	},
 
+	/* todo: merge this with JSDialog.baseSpinField */
 	baseSpinField: function(parentContainer, data, builder, customCallback) {
 		var controls = {};
 		if (data.label) {
 			var fixedTextData = { text: data.label };
-			builder._fixedtextControl(parentContainer, fixedTextData, builder);
+			JSDialog.fixedtextControl(parentContainer, fixedTextData, builder);
 		}
 
 		var div = window.L.DomUtil.create('div', 'spinfieldcontainer', parentContainer);
@@ -261,6 +263,48 @@ window.L.Control.MobileWizardBuilder = window.L.Control.JSDialogBuilder.extend({
 			iconPath = app.LOUtil.getIconNameOfCommand(data.command);
 
 		builder._explorableEntry(parentContainer, data, contentNode, builder, valueNode, iconPath);
+
+		// JSDialog action handlers for partial updates
+		var mainContainer = builder._getItemById(parentContainer, data.id);
+		if (mainContainer) {
+			var entryTexts = data.entries;
+			var updateHeaderText = function (text) {
+				if (valueNode) {
+					valueNode.textContent = text;
+				} else {
+					var titleSpan = mainContainer.querySelector('.ui-header-left span');
+					if (titleSpan)
+						titleSpan.textContent = text;
+				}
+			};
+
+			mainContainer.onSelect = function (pos) {
+				var content = mainContainer.querySelector('.ui-content');
+				if (content) {
+					var nodeEntries = content.querySelectorAll('p');
+					for (var i = 0; i < nodeEntries.length; i++)
+						window.L.DomUtil.removeClass(nodeEntries[i], 'selected');
+					if (nodeEntries[pos])
+						window.L.DomUtil.addClass(nodeEntries[pos], 'selected');
+				}
+
+				if (entryTexts && entryTexts[pos] !== undefined)
+					updateHeaderText(entryTexts[pos]);
+			};
+
+			mainContainer.onUnSelect = function (pos) {
+				var content = mainContainer.querySelector('.ui-content');
+				if (!content)
+					return;
+				var nodeEntries = content.querySelectorAll('p');
+				if (nodeEntries[pos])
+					window.L.DomUtil.removeClass(nodeEntries[pos], 'selected');
+			};
+
+			mainContainer.onSetText = function (text) {
+				updateHeaderText(text);
+			};
+		}
 
 		return false;
 	},
@@ -653,7 +697,7 @@ window.L.Control.MobileWizardBuilder = window.L.Control.JSDialogBuilder.extend({
 			builder.map.sendUnoCommand(command, params);
 		};
 
-		builder._spinfieldControl(parentContainer, lineData, builder, callbackFunction);
+		JSDialog.spinfieldControl(parentContainer, lineData, builder, callbackFunction);
 	},
 
 	_panelHandler: function(parentContainer, data, builder) {

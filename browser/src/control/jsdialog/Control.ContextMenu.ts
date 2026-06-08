@@ -223,6 +223,7 @@ class ContextMenuControl extends JSControl {
 			'',
 			false,
 			true /* earlyCallbackCall? */,
+			true /* noDefaultSelection? */,
 		);
 	}
 
@@ -240,12 +241,18 @@ class ContextMenuControl extends JSControl {
 			}
 
 			if (!value.items) {
+				// Shortcut is set only on leaf entries. Submenu entries use the
+				// .ui-has-menu fixed-column grid with a chevron in the trailing
+				// column, leaving no room for a shortcut span.
+				const shortcutText = JSDialog.ShortcutsUtil.getShortcutText(command);
 				entries.push({
 					id: command,
 					uno: command,
 					type: 'comboboxentry',
 					text: value.name,
 					img: command,
+					class: this._commandClass(command),
+					shortcut: JSDialog.ShortcutsUtil.getShortcutText(command),
 				});
 				continue;
 			}
@@ -258,10 +265,16 @@ class ContextMenuControl extends JSControl {
 				text: value.name,
 				items: items,
 				img: command,
+				class: this._commandClass(value.command || command),
 			});
 		}
 
 		return entries;
+	}
+
+	private _commandClass(command: string): string {
+		// allow only latin characters and numbers in a class name we generate
+		return command.replace(/[^a-zA-Z0-9]/g, '');
 	}
 
 	private _amendContextMenuData(obj: any): void {
@@ -369,10 +382,8 @@ class ContextMenuControl extends JSControl {
 					Util.ensureValue(item.text);
 					itemName = item.text;
 					contextMenu[item.command] = {
-						name: window.mode.isSmallScreenDevice()
-							? _(itemName)
-							: app.IconUtil.createMenuItemLink(itemName, item.command),
-						isHtmlName: true,
+						name: _(itemName),
+						isHtmlName: false,
 					};
 					isLastItemText = true;
 					continue;
@@ -495,7 +506,7 @@ class ContextMenuControl extends JSControl {
 
 	// Prevents right mouse button's mouseup event from triggering menu item accidentally.
 	public stopRightMouseUpEvent(): void {
-		const menuItems = document.getElementsByClassName('context-menu-item');
+		const menuItems = document.getElementsByClassName('ui-combobox-entry');
 
 		for (let i = 0; i < menuItems.length; i++) {
 			menuItems[i].addEventListener('mouseup', function (eo: Event) {

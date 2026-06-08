@@ -11,7 +11,7 @@
 
 /*
  * Kit process callback queue management and optimization.
- * Classes: KitQueue, Callback - LOK callback handling and deduplication
+ * Classes: KitQueue, Callback - COKit callback handling and deduplication
  */
 
 #include <config.h>
@@ -31,7 +31,7 @@
                                                       const std::string& payload)
 {
     std::ostringstream str;
-    str << view << ' ' << lokCallbackTypeToString(type) << ' '
+    str << view << ' ' << kitCallbackTypeToString(type) << ' '
         << COOLProtocol::getAbbreviatedMessage(payload);
     return str.str();
 }
@@ -163,7 +163,7 @@ void KitQueue::putCallback(int view, int type, const std::string &payload)
 
 bool KitQueue::elideDuplicateCallback(int view, int type, const std::string &payload)
 {
-    const auto callbackType = static_cast<LibreOfficeKitCallbackType>(type);
+    const auto callbackType = static_cast<COKitCallbackType>(type);
 
     // Nothing to combine in this case:
     if (_callbacks.empty())
@@ -171,7 +171,7 @@ bool KitQueue::elideDuplicateCallback(int view, int type, const std::string &pay
 
     switch (callbackType)
     {
-        case LOK_CALLBACK_INVALIDATE_TILES: // invalidation
+        case KIT_CALLBACK_INVALIDATE_TILES: // invalidation
         {
             StringVector tokens = StringVector::tokenize(payload);
 
@@ -284,7 +284,7 @@ bool KitQueue::elideDuplicateCallback(int view, int type, const std::string &pay
         }
         break;
 
-        case LOK_CALLBACK_STATE_CHANGED: // state changed
+        case KIT_CALLBACK_STATE_CHANGED: // state changed
         {
             constexpr std::string_view unoPrefix(".uno:");
             if (!payload.starts_with(unoPrefix))
@@ -323,18 +323,18 @@ bool KitQueue::elideDuplicateCallback(int view, int type, const std::string &pay
         }
         break;
 
-        case LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR: // the cursor has moved
-        case LOK_CALLBACK_CURSOR_VISIBLE: // the cursor visibility has changed
-        case LOK_CALLBACK_STATUS_INDICATOR_SET_VALUE: // setting the indicator value
-        case LOK_CALLBACK_DOCUMENT_SIZE_CHANGED: // setting the document size
-        case LOK_CALLBACK_CELL_CURSOR: // the cell cursor has moved
-        case LOK_CALLBACK_INVALIDATE_VIEW_CURSOR: // the view cursor has moved
-        case LOK_CALLBACK_CELL_VIEW_CURSOR: // the view cell cursor has moved
-        case LOK_CALLBACK_VIEW_CURSOR_VISIBLE: // the view cursor visibility has changed
+        case KIT_CALLBACK_INVALIDATE_VISIBLE_CURSOR: // the cursor has moved
+        case KIT_CALLBACK_CURSOR_VISIBLE: // the cursor visibility has changed
+        case KIT_CALLBACK_STATUS_INDICATOR_SET_VALUE: // setting the indicator value
+        case KIT_CALLBACK_DOCUMENT_SIZE_CHANGED: // setting the document size
+        case KIT_CALLBACK_CELL_CURSOR: // the cell cursor has moved
+        case KIT_CALLBACK_INVALIDATE_VIEW_CURSOR: // the view cursor has moved
+        case KIT_CALLBACK_CELL_VIEW_CURSOR: // the view cell cursor has moved
+        case KIT_CALLBACK_VIEW_CURSOR_VISIBLE: // the view cursor visibility has changed
         {
-            const bool isViewCallback = (callbackType == LOK_CALLBACK_INVALIDATE_VIEW_CURSOR ||
-                                         callbackType == LOK_CALLBACK_CELL_VIEW_CURSOR ||
-                                         callbackType == LOK_CALLBACK_VIEW_CURSOR_VISIBLE);
+            const bool isViewCallback = (callbackType == KIT_CALLBACK_INVALIDATE_VIEW_CURSOR ||
+                                         callbackType == KIT_CALLBACK_CELL_VIEW_CURSOR ||
+                                         callbackType == KIT_CALLBACK_VIEW_CURSOR_VISIBLE);
 
             const std::string viewId
                 = (isViewCallback ? extractViewId(payload) : std::string());
@@ -627,6 +627,20 @@ TileCombined KitQueue::popTileQueue(std::vector<TileDesc>& tileQueue, TilePriori
             prioritized = static_cast<int>(i);
         }
     }
+
+    // Among equal priority tiles advance past the last row we serviced, only
+    // falling back to that front tile once we run off the end, so one busy row
+    // cannot hold the front of a shared queue.
+    for (std::size_t i = 0; i < tileQueue.size(); ++i)
+    {
+        if (_prio.getTilePriority(tileQueue[i]) == priority &&
+            tileQueue[i].getTilePosY() > _lastServicedPosY)
+        {
+            prioritized = static_cast<int>(i);
+            break;
+        }
+    }
+    _lastServicedPosY = tileQueue[prioritized].getTilePosY();
 
     const TileDesc msg = tileQueue[prioritized];
 

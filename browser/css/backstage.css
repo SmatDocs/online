@@ -1,13 +1,16 @@
 /* Backstage View Styles */
 
 .backstage-view {
-	/* Using doc-type color based on document type */
-	--color-primary: rgb(var(--doc-type, 92, 41, 131));
+	/* Backstage-specific accent color, varies by document type. Not the
+	 * same as --color-primary, which stays as the global brand color so
+	 * that generic widgets (e.g. .button-primary) keep their app-wide look
+	 * when rendered inside the backstage. */
+	--doc-type-color: rgb(var(--doc-type, 92, 41, 131));
 	--color-on-primary: #ffffff;
 	--color-primary-text: #ffffff;
+	--color-accent-background: var(--color-background-lighter);
 
 	user-select: none;
-	-webkit-user-select: none; /* Safari / WKWebView */
 
 	position: fixed;
 	top: 0;
@@ -21,18 +24,22 @@
 	font-family: var(--cool-font);
 }
 
+[data-theme='dark'] .backstage-view {
+	--color-accent-background: var(--doc-type-color);
+}
+
 .backstage-view.hidden {
 	display: none;
 }
 
 .backstage-header {
 	height: 48px;
-	background-color: var(--color-primary);
+	background-color: var(--doc-type-color);
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	padding: 0 16px 0 20px;
-	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+	box-shadow: 0 1px 2px var(--color-black-5);
 	color: var(--color-on-primary);
 }
 
@@ -43,7 +50,7 @@
 	color: var(--color-on-primary);
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	gap: var(--spacing-s);
 }
 
 .backstage-header-title::before {
@@ -99,7 +106,7 @@
 	border-right: 1px solid var(--color-toolbar-border);
 	padding: 16px 0;
 	overflow-y: auto;
-	box-shadow: 1px 0 3px rgba(0, 0, 0, 0.05);
+	box-shadow: 1px 0 3px var(--color-black-5);
 	display: flex;
 	flex-direction: column;
 	height: 100%;
@@ -111,7 +118,7 @@
 	justify-content: flex-start;
 	width: auto;
 	margin: 0 24px;
-	color: var(--color-primary);
+	color: var(--doc-type-color);
 	cursor: pointer;
 	background: transparent;
 	padding-bottom: 1rem;
@@ -125,7 +132,7 @@
 	display: flex;
 	flex-direction: column;
 	flex: 1;
-	gap: 4px;
+	gap: var(--spacing-s);
 	min-height: 0;
 	margin-bottom: 30px;
 }
@@ -143,17 +150,17 @@
 	margin: 2px 8px;
 	border-radius: var(--border-radius);
 	--icon-primary-color: rgb(58, 58, 56);
-	--icon-secondary-color: var(--color-primary);
-}
-
-.backstage-sidebar-item:hover {
-	background-color: var(--color-background-dark);
+	--icon-secondary-color: var(--doc-type-color);
 }
 
 .backstage-sidebar-item.active {
 	background-color: transparent;
-	color: var(--color-primary);
-	--icon-primary-color: var(--color-primary);
+	color: var(--color-main-text);
+	--icon-primary-color: var(--doc-type-color);
+}
+
+.backstage-sidebar-item:hover {
+	background-color: var(--color-background-dark);
 }
 
 .backstage-sidebar-item.disabled {
@@ -194,7 +201,7 @@
 	align-items: center;
 	justify-content: center;
 	padding: 12px 8px;
-	gap: 8px;
+	gap: var(--spacing-m);
 }
 
 
@@ -235,7 +242,7 @@
 
 .backstage-content-description {
 	font-size: var(--default-font-size);
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	margin-bottom: 24px;
 	line-height: 1.5;
 	margin-top: 0px;
@@ -274,14 +281,14 @@
 }
 
 .backstage-home-more-button {
-	background: var(--color-background-lighter);
+	background: var(--color-accent-background);
 	border: 1px solid var(--color-border);
 	border-radius: 4px;
 	padding: 0 8px;
 	height: 24px;
 	font-size: 12px;
 	font-weight: 600;
-	color: var(--color-primary);
+	color: var(--color-main-text);
 	cursor: pointer;
 	transition: all 0.2s ease;
 	white-space: nowrap;
@@ -292,14 +299,14 @@
 
 .backstage-home-more-button:hover {
 	background-color: var(--color-background-dark);
-	border-color: var(--color-primary);
+	border-color: var(--doc-type-color);
 }
 
 .backstage-templates-empty {
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
-	gap: 16px;
+	gap: var(--spacing-xl);
 	margin-top: 32px;
 	padding: 24px;
 	border: 1px dashed var(--color-border);
@@ -310,11 +317,11 @@
 .backstage-templates-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
-	gap: 16px;
+	gap: var(--spacing-xl);
 }
 
 .backstage-template-card {
-	padding: 12px;
+	padding: var(--spacing-l);
 	cursor: pointer;
 	text-align: center;
 	transition: all 0.2s ease;
@@ -327,7 +334,7 @@
 
 .backstage-template-card:hover {
 	background-color: var(--color-background-dark);
-	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+	box-shadow: 0 4px 8px var(--color-black-10);
 }
 
 .template-thumbnail {
@@ -352,7 +359,7 @@
 }
 
 .backstage-template-card:hover .template-thumbnail img {
-	border-color: var(--color-primary);
+	border-color: var(--doc-type-color);
 }
 
 .template-name {
@@ -369,12 +376,12 @@
 .backstage-template-explorer {
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
+	gap: var(--spacing-l);
 }
 
 .template-filter-bar {
 	display: flex;
-	gap: 8px;
+	gap: var(--spacing-m);
 	flex-wrap: wrap;
 }
 
@@ -390,8 +397,8 @@
 
 .template-type-button.active,
 .template-type-button:hover {
-	background: var(--color-primary);
-	border-color: var(--color-primary);
+	background: var(--doc-type-color);
+	border-color: var(--doc-type-color);
 	color: var(--color-on-primary);
 }
 
@@ -412,14 +419,14 @@
 
 .template-search-input:focus {
 	outline: none;
-	border-color: var(--color-primary);
-	box-shadow: 0 0 0 1px var(--color-primary);
+	border-color: var(--doc-type-color);
+	box-shadow: 0 0 0 1px var(--doc-type-color);
 }
 
 .template-featured-row {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
-	gap: 16px;
+	gap: var(--spacing-xl);
 	overflow-x: auto;
 	padding-bottom: 8px;
 }
@@ -431,7 +438,7 @@
 .template-grid-empty {
 	grid-column: 1 / -1;
 	text-align: center;
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	padding: 24px 0;
 	font-size: 14px;
 }
@@ -440,7 +447,7 @@
 .backstage-formats-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-	gap: 12px;
+	gap: var(--spacing-l);
 	margin-top: 20px;
 }
 
@@ -452,25 +459,25 @@
 	border-radius: var(--border-radius-large);
 	text-align: center;
 	transition: all 0.2s ease;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+	box-shadow: 0 1px 3px var(--color-black-5);
 	display: flex;
 	flex-direction: column;
 	justify-content: center;
 	align-items: center;
-	gap: 8px;
+	gap: var(--spacing-m);
 }
 
 .backstage-format-card:hover {
 	background-color: var(--color-background-dark);
-	border-color: var(--color-primary);
-	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+	border-color: var(--doc-type-color);
+	box-shadow: 0 2px 6px var(--color-black-10);
 	transform: translateY(-1px);
 }
 
 .format-icon {
 	font-size: var(--medium-font-size);
 	font-weight: 600;
-	color: var(--color-primary);
+	color: var(--doc-type-color);
 	min-height: 24px;
 	display: flex;
 	align-items: center;
@@ -479,12 +486,12 @@
 
 .format-description {
 	font-size: calc(var(--default-font-size) - 1px);
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	margin-top: 4px;
 }
 
 .backstage-action-button {
-	background: var(--color-primary);
+	background: var(--doc-type-color);
 	color: var(--color-primary-text);
 	border: none;
 	padding: 12px 32px;
@@ -493,20 +500,20 @@
 	margin-top: 12px;
 	border-radius: var(--border-radius);
 	font-weight: 600;
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	box-shadow: 0 2px 4px var(--color-black-10);
 	transition: all 0.2s ease;
 }
 
 .backstage-action-button:hover {
-	background-color: var(--color-primary);
-	box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+	background-color: var(--doc-type-color);
+	box-shadow: 0 3px 6px var(--color-black-15);
 	transform: translateY(-1px);
 	opacity: 0.9;
 }
 
 .backstage-action-button:active {
 	transform: translateY(0);
-	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+	box-shadow: 0 1px 2px var(--color-black-10);
 }
 
 .backstage-info-properties {
@@ -534,7 +541,7 @@
 
 .property-label {
 	font-size: var(--medium-font-size);
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	min-width: 6rem;
 }
 
@@ -561,7 +568,7 @@
 
 .backstage-recent-documents-header-cell {
 	font-size: var(--medium-font-size);
-	color: var(--color-primary);
+	color: var(--color-main-text);
 	font-weight: 500;
 	text-align: left;
 	padding: 8px 16px;
@@ -598,7 +605,7 @@
 
 .backstage-recent-document-time-cell {
 	padding-left: 32px;
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	font-size: var(--default-font-size);
 	font-weight: 400;
 }
@@ -612,7 +619,7 @@
 .backstage-recent-document-text-wrapper {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: var(--spacing-s);
 	flex: 1;
 	min-width: 0;
 }
@@ -628,7 +635,7 @@
 
 .backstage-recent-document-path-text {
 	font-size: calc(var(--default-font-size) - 1px);
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	font-weight: 400;
 	overflow: hidden;
 	text-overflow: ellipsis;

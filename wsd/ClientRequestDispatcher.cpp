@@ -25,6 +25,7 @@
 
 #include <common/Anonymizer.hpp>
 #include <common/ConfigUtil.hpp>
+#include <common/HexUtil.hpp>
 #include <common/JsonUtil.hpp>
 #include <common/NumUtil.hpp>
 #include <common/StateEnum.hpp>
@@ -78,7 +79,7 @@
 std::map<std::string, std::string> ClientRequestDispatcher::StaticFileContentCache;
 
 std::size_t ClientRequestDispatcher::NextRvsCleanupSize = RvsLowWatermark;
-std::unordered_map<std::string, std::shared_ptr<RequestVettingStation>>
+Util::UnorderedStringMap<std::shared_ptr<RequestVettingStation>>
     ClientRequestDispatcher::RequestVettingStations;
 
 extern std::map<std::string, std::shared_ptr<DocumentBroker>> DocBrokers;
@@ -133,8 +134,8 @@ findOrCreateDocBroker(DocumentBroker::ChildType type, const std::string& uri,
 {
     LOG_INF("Find or create DocBroker for docKey ["
             << docKey << "] for session [" << id << "] on url ["
-            << COOLWSD::anonymizeUrl(uriPublic.toString()) << ']'
-            << " with configid " << configId);
+            << Anonymizer::anonymizeUrl(uriPublic.toString()) << ']' << " with configid "
+            << configId);
 
     std::unique_lock<std::mutex> docBrokersLock(DocBrokersMutex);
 
@@ -205,6 +206,7 @@ findOrCreateDocBroker(DocumentBroker::ChildType type, const std::string& uri,
         LOG_DBG("New DocumentBroker for docKey [" << docKey << ']');
         docBroker = std::make_shared<DocumentBroker>(type, uri, uriPublic, docKey,
                                                      configId, mobileAppDocId);
+        docBroker->loadTimings().record("docBrokerCreated");
         DocBrokers.emplace(docKey, docBroker);
         LOG_TRC("Have " << DocBrokers.size() << " DocBrokers after inserting [" << docKey << ']');
     }
@@ -406,7 +408,7 @@ public:
     }
 };
 
-/// Constructs ConvertToBroker implamentation based on request type
+/// Constructs ConvertToBroker implementation based on request type
 static std::shared_ptr<ConvertToBroker>
 getConvertToBrokerImplementation(const std::string& requestType, const std::string& fromPath,
                                  const Poco::URI& uriPublic, const std::string& docKey,
@@ -606,8 +608,7 @@ bool ClientRequestDispatcher::allowPostFrom(const std::string& address)
 
 bool ClientRequestDispatcher::allowConvertTo(const std::string& address,
                                              const Poco::Net::HTTPRequest& request,
-                                             bool capabilityQuery,
-                                             AsyncFn asyncCb)
+                                             bool capabilityQuery, const AsyncFn& asyncCb)
 {
     const bool allow = allowPostFrom(address) || HostUtil::allowedWopiHost(request.getHost());
     if (!allow)
@@ -667,7 +668,7 @@ std::atomic<uint64_t> ClientRequestDispatcher::NextConnectionId(1);
 void ClientRequestDispatcher::onConnect(const std::shared_ptr<StreamSocket>& socket)
 {
     assert(socket && "Expected a valid socket in ClientRequestDispatcher::onConnect()");
-    _id = Util::encodeId(NextConnectionId++, 3);
+    _id = HexUtil::encodeId(NextConnectionId++, 3);
     _socket = socket;
     _lastSeenHTTPHeader = socket->getLastSeenTime();
     setLogContext(socket->getFD());
@@ -683,7 +684,7 @@ namespace
 /// yet, and we're proactively trying to authenticate the client.
 void launchAsyncCheckFileInfo(
     const std::string& id, const FileServerRequestHandler::ResourceAccessDetails& accessDetails,
-    std::unordered_map<std::string, std::shared_ptr<RequestVettingStation>>& requestVettingStations,
+    Util::UnorderedStringMap<std::shared_ptr<RequestVettingStation>>& requestVettingStations,
     const std::size_t highWatermark)
 {
     const std::string requestKey = RequestDetails::getRequestKey(
@@ -733,8 +734,8 @@ void launchAsyncCheckFileInfo(
     }
 }
 
-void socketEraseConsumedBytes(const std::shared_ptr<StreamSocket>& socket, ssize_t headerSize,
-                              ssize_t contentSize, bool servedSync)
+void socketEraseConsumedBytes(const std::shared_ptr<StreamSocket>& socket, size_t headerSize,
+                              size_t contentSize, bool servedSync)
 {
     if( socket->getInBuffer().size() > 0 ) // erase request from inBuffer if not cleared by ignoreInput
     {
@@ -811,7 +812,6 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
     }
 
     size_t inBufferSize = socket->getInBuffer().size();
-    Poco::MemoryInputStream startmessage(socket->getInBuffer().data(), inBufferSize);
 
 #if 0 // debug a specific command's payload
         if (Util::findInVector(socket->getInBuffer(), "insertfile") != std::string::npos)
@@ -823,7 +823,7 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
         }
 #endif
 
-    headerSize = socket->readHeader("Client", startmessage, inBufferSize, request, delayMs);
+    headerSize = readHeader(socket, request, delayMs);
     if (headerSize < 0)
         return;
 
@@ -832,12 +832,14 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
     // start streaming condition
     const bool canStreamToFile =
         request.getMethod() == Poco::Net::HTTPRequest::HTTP_POST &&
-        request.getContentLength() != Poco::Net::HTTPMessage::UNKNOWN_CONTENT_LENGTH &&
+        request.getContentLength() > MaxInMemoryHttpRequestSize && // avoid disk I/O for small data
         !request.getChunkedTransferEncoding() && // ignore chunked transfer for now
-        request.find("ProxyPrefix") == request.end(); // proxy mode assumes nothing consumed
+        !request.has("ProxyPrefix"); // proxy mode assumes nothing consumed
 
-    if (canStreamToFile && request.getContentLength() > 0)
+    if (canStreamToFile)
     {
+        assert(request.getContentLength() != Poco::Net::HTTPMessage::UNKNOWN_CONTENT_LENGTH &&
+               "Expected a known Content-Length");
         _postFileDir = std::make_unique<FileUtil::OwnedFile>(FileUtil::createRandomTmpDir(
                     COOLWSD::ChildRoot + JailUtil::CHILDROOT_TMP_INCOMING_PATH) + '/', true);
         std::string postFilename = _postFileDir->_file + "poststream";
@@ -923,6 +925,102 @@ void ClientRequestDispatcher::handleIncomingMessage(SocketDisposition& dispositi
 #endif // MOBILEAPP
 }
 
+ssize_t ClientRequestDispatcher::readHeader(const std::shared_ptr<StreamSocket>& socket,
+                                            Poco::Net::HTTPRequest& request,
+                                            std::chrono::duration<float, std::milli> delayMs)
+{
+    const std::string_view buffer = socket->getInBuffer().view();
+    assert(_headerPos <= buffer.size() &&
+           "Unexpected buffer shrunk under us — _headerPos is stale");
+    _headerPos = _headerPos > buffer.size() ? 0 : _headerPos; // Recover in release builds.
+
+    // Find the end of the header, if any.
+    constexpr std::string_view marker("\r\n\r\n");
+    const auto headerSize = buffer.find(marker, _headerPos);
+    if (headerSize == std::string_view::npos)
+    {
+        // A partial marker could span the boundary, so back up by marker.size()-1.
+        _headerPos = buffer.size() >= marker.size() ? buffer.size() - marker.size() + 1 : 0;
+        LOG_TRC("parseHeader: doesn't have enough data for the header yet. delay "
+                << delayMs.count() << "ms");
+        return -1;
+    }
+
+    // We found the end-of-header marker; Clear to allow for scanning again.
+    _headerPos = 0;
+
+    constexpr std::chrono::duration<float, std::milli> DelayMax =
+        std::chrono::duration_cast<std::chrono::milliseconds>(SocketPoll::DefaultPollTimeoutMicroS);
+    const size_t messagesize = buffer.size();
+    try
+    {
+        // Include the marker.
+        Poco::MemoryInputStream startmessage(socket->getInBuffer().data(),
+                                             headerSize + marker.size());
+        request.read(startmessage);
+    }
+    catch (const Poco::Net::NotAuthenticatedException& exc)
+    {
+        LOG_DBG("parseHeader: Exception caught with "
+                << messagesize << " bytes, shutdown: " << exc.displayText() << ", delay "
+                << delayMs.count() << "ms");
+        socket->asyncShutdown();
+        return 0; //FIXME: Why not -1 as we've closed the socket already?
+    }
+    catch (const Poco::Net::UnsupportedRedirectException& exc)
+    {
+        LOG_DBG("parseHeader: Exception caught with "
+                << messagesize << " bytes, shutdown: " << exc.displayText() << ", delay "
+                << delayMs.count() << "ms");
+        socket->asyncShutdown();
+        return -1;
+    }
+    catch (const Poco::Net::HTTPException& exc)
+    {
+        LOG_DBG("parseHeader: Exception caught with "
+                << messagesize << " bytes, shutdown: " << exc.displayText() << ", delay "
+                << delayMs.count() << "ms");
+        socket->asyncShutdown();
+        return -1;
+    }
+    catch (const Poco::Exception& exc)
+    {
+        if (delayMs > DelayMax)
+        {
+            LOG_DBG("parseHeader: Exception caught with "
+                    << messagesize << " bytes, shutdown: " << exc.displayText() << ", delay "
+                    << delayMs.count() << "ms");
+            socket->asyncShutdown();
+        }
+        else
+        {
+            LOG_DBG("parseHeader: Exception caught with "
+                    << messagesize << " bytes, continue: " << exc.displayText() << ", delay "
+                    << delayMs.count() << "ms");
+        }
+        return -1;
+    }
+    catch (const std::exception& exc)
+    {
+        if (delayMs > DelayMax)
+        {
+            LOG_DBG("parseHeader: Exception caught with "
+                    << messagesize << " bytes, shutdown: " << exc.what() << ", delay "
+                    << delayMs.count() << "ms");
+            socket->asyncShutdown();
+        }
+        else
+        {
+            LOG_DBG("parseHeader: Exception caught with "
+                    << messagesize << " bytes, continue: " << exc.what() << ", delay "
+                    << delayMs.count() << "ms");
+        }
+        return -1;
+    }
+
+    return headerSize + marker.size();
+}
+
 namespace
 {
 
@@ -997,8 +1095,8 @@ void ClientRequestDispatcher::handleFullMessage(Poco::Net::HTTPRequest& request,
                                                 std::istream& message,
                                                 SocketDisposition& disposition,
                                                 const std::shared_ptr<StreamSocket>& socket,
-                                                ssize_t headerSize,
-                                                ssize_t contentSize,
+                                                size_t headerSize,
+                                                size_t contentSize,
                                                 bool eraseMessageFromSocket,
                                                 std::chrono::steady_clock::time_point now)
 {
@@ -1026,7 +1124,7 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
                                                                               std::istream& message,
                                                                               SocketDisposition& disposition,
                                                                               const std::shared_ptr<StreamSocket>& socket,
-                                                                              ssize_t headerSize)
+                                                                              size_t headerSize)
 {
     const bool closeConnection = !request.getKeepAlive(); // HTTP/1.1: closeConnection true w/ "Connection: close" only!
     LOG_DBG("Handling request: " << request << ", closeConnection: " << closeConnection);
@@ -1101,35 +1199,21 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
         {
             // File server
             assert(socket && "Must have a valid socket");
-            constexpr std::string_view ProxyRemote = "/remote/";
-            constexpr auto ProxyRemoteLen = ProxyRemote.size();
             constexpr std::string_view ProxyRemoteStatic = "/remote/static/";
-            const auto uri = requestDetails.getURI();
+            const auto& uri = requestDetails.getURI();
             const auto pos = uri.find(ProxyRemoteStatic);
             if (pos != std::string::npos)
             {
-                if (uri.ends_with("lokit-extra-img.svg"))
-                {
-                    std::string proxyRatingServer =
-                        !isUnitTesting ? ProxyRequestHandler::getProxyRatingServer()
-                                       : UnitWSD::get().getProxyRatingServer();
-                    ProxyRequestHandler::handleRequest(uri.substr(pos + ProxyRemoteLen - 1), socket,
-                                                       proxyRatingServer);
-                    servedSync = true;
-                }
 #if ENABLE_FEATURE_LOCK
-                else
+                const Poco::URI unlockImageUri =
+                    CommandControl::LockManager::getUnlockImageUri();
+                if (!unlockImageUri.empty())
                 {
-                    const Poco::URI unlockImageUri =
-                        CommandControl::LockManager::getUnlockImageUri();
-                    if (!unlockImageUri.empty())
-                    {
-                        const std::string& serverUri =
-                            unlockImageUri.getScheme() + "://" + unlockImageUri.getAuthority();
-                        ProxyRequestHandler::handleRequest(
-                            uri.substr(pos + sizeof("/remote/static") - 1), socket, serverUri);
-                        servedSync = true;
-                    }
+                    const std::string& serverUri =
+                        unlockImageUri.getScheme() + "://" + unlockImageUri.getAuthority();
+                    ProxyRequestHandler::handleRequest(
+                        uri.substr(pos + sizeof("/remote/static") - 1), socket, serverUri);
+                    servedSync = true;
                 }
 #endif
                 if (!servedSync)
@@ -1158,14 +1242,28 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
             // Admin connections
             LOG_INF("Admin request: " << request.getURI());
             const bool allowed = allowedOrigin(request, requestDetails);
-            if (AdminSocketHandler::handleInitialRequest(_socket, request, allowed))
+            if (allowed && AdminSocketHandler::handleInitialRequest(_socket, request, allowed))
             {
                 // Hand the socket over to the Admin poll.
                 disposition.setTransfer(Admin::instance(),
                                         [](const std::shared_ptr<Socket>& /*moveSocket*/) {});
             }
             else
-                HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket);
+            {
+                if (!allowed)
+                {
+                    LOG_ERR(
+                        "Rejecting admin WebSocket upgrade due to disallowed origin for request: "
+                        << request);
+                    HttpHelper::sendErrorAndShutdown(http::StatusCode::Forbidden, socket);
+                }
+                else
+                {
+                    LOG_ERR("Rejecting admin WebSocket upgrade due to bad/invalid request: "
+                            << request);
+                    HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket);
+                }
+            }
         }
         else if (requestDetails.equals(RequestDetails::Field::Type, "cool") &&
                  requestDetails.equals(1, "getMetrics"))
@@ -1255,7 +1353,9 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
             servedSync = handleSignatureRequest(request, socket);
         }
 
-        else if (requestDetails.isProxy() && requestDetails.equals(2, "ws"))
+        else if (requestDetails.isProxy() &&
+                 (requestDetails.equals(1, "ws") || requestDetails.equals(2, "ws")))
+            // The new WebSocket URL has 'ws' as the second segment; support both old and new.
             servedSync = handleClientProxyRequest(request, requestDetails, message, disposition);
         else if (requestDetails.isWebSocket() &&
                  requestDetails.equals(RequestDetails::Field::Type, "cool") &&
@@ -1715,7 +1815,7 @@ bool ClientRequestDispatcher::handleClipboardRequest(const Poco::Net::HTTPReques
                   << "] on request to URL: " << request.getURI());
 
         // we got the wrong request.
-        HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket, "wrong server");
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket, "wrong server, this is likely an issue with your reverse proxy configuration, See https://sdk.collaboraonline.com/docs/installation/Proxy_settings.html");
         return true;
     }
 
@@ -1989,7 +2089,7 @@ bool ClientRequestDispatcher::handlePostRequest(const RequestDetails& requestDet
 {
     assert(socket && "Must have a valid socket");
 
-    LOG_INF("Post request: [" << COOLWSD::anonymizeUrl(requestDetails.getURI()) << ']');
+    LOG_INF("Post request: [" << Anonymizer::anonymizeUrl(requestDetails.getURI()) << ']');
 
     if (requestDetails.equals(1, "convert-to") ||
         requestDetails.equals(1, "extract-link-targets") ||
@@ -2231,7 +2331,7 @@ bool ClientRequestDispatcher::handlePostRequest(const RequestDetails& requestDet
         const Poco::Path filePath(FileUtil::buildLocalPathToJail(COOLWSD::EnableMountNamespaces,
                                                                  COOLWSD::ChildRoot + jailId,
                                                                  JAILED_DOCUMENT_ROOT + decoded));
-        const std::string filePathAnonym = COOLWSD::anonymizeUrl(filePath.toString());
+        const std::string filePathAnonym = Anonymizer::anonymizeUrl(filePath.toString());
 
         if (foundDownloadId && filePath.isAbsolute() && Poco::File(filePath).exists())
         {
@@ -2347,17 +2447,20 @@ bool ClientRequestDispatcher::handleClientProxyRequest(const Poco::Net::HTTPRequ
     LOG_INF("URL [" << url << "] for Proxy request.");
     auto uriPublic = RequestDetails::sanitizeURI(url);
     const auto docKey = RequestDetails::getDocKey(uriPublic);
-    const std::string fileId = Uri::getFilenameFromURL(Uri::decode(docKey));
-    Anonymizer::mapAnonymized(fileId,
-                              fileId); // Identity mapping, since fileId is already obfuscated
+    if (Anonymizer::enabled())
+    {
+        const std::string fileId = Uri::getFilenameFromURL(Uri::decode(docKey));
+        Anonymizer::mapAnonymized(fileId,
+                                  fileId); // Identity mapping, since fileId is already obfuscated
+    }
 
-    LOG_INF("Starting Proxy request handler for session [" << _id << "] on url ["
-                                                           << COOLWSD::anonymizeUrl(url) << "].");
+    LOG_INF("Starting Proxy request handler for session ["
+            << _id << "] on url [" << Anonymizer::anonymizeUrl(url) << "].");
 
     // Check if readonly session is required.
     const bool isReadOnly = Uri::hasReadonlyPermission(uriPublic.toString());
 
-    LOG_INF("URL [" << COOLWSD::anonymizeUrl(url) << "] is "
+    LOG_INF("URL [" << Anonymizer::anonymizeUrl(url) << "] is "
                     << (isReadOnly ? "readonly" : "writable") << '.');
     (void)request;
     (void)message;
@@ -2437,6 +2540,13 @@ bool ClientRequestDispatcher::handleClientWsUpgrade(const Poco::Net::HTTPRequest
 
     // First Upgrade.
     const bool allowed = allowedOrigin(request, requestDetails);
+    if (!allowed)
+    {
+        LOG_ERR("Rejecting WebSocket upgrade due to disallowed origin for request: " << request);
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Forbidden, socket);
+        return true; // Handled.
+    }
+
     auto ws = std::make_shared<WebSocketHandler>(socket, request, allowed);
 
     // Response to clients beyond this point is done via WebSocket.

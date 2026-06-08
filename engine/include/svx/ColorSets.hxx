@@ -1,0 +1,56 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/*
+ * This file is part of the Collabora Office project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#pragma once
+
+#include <svx/svxdllapi.h>
+#include <svl/SfxBroadcaster.hxx>
+#include <docmodel/theme/ColorSet.hxx>
+
+namespace svx
+{
+
+class SVXCORE_DLLPUBLIC ColorSets : public SfxBroadcaster
+{
+private:
+    std::vector<model::ColorSet> maColorSets;
+    OUString maUserFolder;
+
+    ColorSets();
+public:
+    // Re-scans the configured theme paths. Idempotent. Online's COKit
+    // re-invokes this from ThemeColorsPaneBase::initColorSets() because
+    // the constructor's initial scan ran during forkit preinit, when
+    // $(UserInstallation) was a transient temp directory, and the
+    // kit's asyncInstallPresets places user .theme files only later.
+    void init();
+
+    static ColorSets& get();
+    static model::ColorSet const* getDefault();
+
+    const std::vector<model::ColorSet>& getColorSetVector() const
+    {
+        return maColorSets;
+    }
+
+    model::ColorSet const& getColorSet(sal_uInt32 nIndex) const
+    {
+        return maColorSets[nIndex];
+    }
+
+    model::ColorSet const* getColorSet(std::u16string_view rName) const;
+
+    void insert(model::ColorSet const& rColorSet);
+    void writeToUserFolder(model::ColorSet const& rNewColorSet);
+
+};
+
+} // end of namespace svx
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

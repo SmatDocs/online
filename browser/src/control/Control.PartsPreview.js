@@ -12,7 +12,7 @@
  * window.L.Control.PartsPreview
  */
 
-/* global _ app $ Hammer _UNO cool */
+/* global _ app $ Hammer _UNO cool JSDialog */
 window.L.Control.PartsPreview = window.L.Control.extend({
 	options: {
 		fetchThumbnail: true,
@@ -44,6 +44,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		this._width = 0;
 		this._height = 0;
 		this.scrollTimer = null;
+		this._menuPosEl = null;
 
 		document.body.addEventListener('click', (e) => {
 			if (!e.partsFocusedApplied && this.partsFocused)
@@ -54,6 +55,8 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 	onAdd: function (map) {
 		this._previewInitialized = false;
 		this._previewTiles = [];
+		this._sectionHeaders = []; // Section header DOM elements
+		this._collapsedSections = new Set(); // Names of sections collapsed by the user
 		this._direction = this.options.allowOrientation ?
 			(!window.mode.isDesktop() && window.L.DomUtil.isPortrait() ? 'x' : 'y') :
 			this.options.axis;
@@ -68,6 +71,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		map.on('scrolllimits', this._invalidateParts, this);
 		map.on('scrolltopart', this._scrollToPart, this);
 		map.on('beforerequestpreview', this._beforeRequestPreview, this);
+		map.on('updatesections', this._updateSections, this);
 
 		window.addEventListener('resize', window.L.bind(this._resize, this));
 	},
@@ -110,6 +114,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 					window.L.DomUtil.addClass(this._previewTiles[selectedPart], 'preview-img-currentpart');
 				this._ensureVisiblePreviews(); // Load previews.
 				this._previewInitialized = true;
+				this._updateSelectedSection();
 			}
 			else
 			{
@@ -126,6 +131,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 							window.L.DomUtil.addClass(this._previewTiles[j], 'preview-img-selectedpart');
 					}
 				}
+				this._updateSelectedSection();
 			}
 
 			if (!this.options.allowOrientation) {
@@ -181,6 +187,16 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 			return !((x > nLeft && x < width - nRight) && (y > nTop && y < height - nBottom));
 	},
 
+	_getMenuPosEl: function () {
+		if (!this._menuPosEl) {
+			this._menuPosEl = document.createElement('div');
+			this._menuPosEl.id = 'slide-context-menu-pos';
+			this._menuPosEl.style.position = 'absolute';
+			this._container.appendChild(this._menuPosEl);
+		}
+		return this._menuPosEl;
+	},
+
 	_createPreview: function (i, hashCode) {
 		var frameClass = 'preview-frame ' + this.options.frameClass;
 		var frame = window.L.DomUtil.create('div', frameClass, this._partsPreviewCont);
@@ -229,8 +245,6 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 					document.activeElement.blur();
 				}
 			}
-			if (app.file.fileBasedView)
-				this._map._docLayer._checkSelectedPart();
 			img.focus();
 		}, this);
 
@@ -245,12 +259,9 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		var that = this;
 		window.L.DomEvent.on(frame, 'contextmenu', function(e) {
 			var isMasterView = this._map['stateChangeHandler'].getItemValue('.uno:SlideMasterPage');
-			var pcw = document.getElementById('presentation-controls-wrapper');
-			var $trigger = $(pcw);
-			if (isMasterView === 'true' || app.map.isReadOnlyMode()) {
-				$trigger.contextMenu(false);
+			if (isMasterView === 'true' || app.map.isReadOnlyMode())
 				return;
-			}
+			e.preventDefault();
 
 			var nPos = undefined;
 			if (this.isPaddingClick(frame, e, 'top'))
@@ -260,137 +271,218 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 			else if (this.isPaddingClick(frame, e, 'right') || this.isPaddingClick(frame, e, 'left'))
 				nPos = that._findClickedPart(frame);
 
-			$trigger.contextMenu(true);
 			if (!that._isSelected(e))
 				that._setPart(e);
-			$.contextMenu({
-				selector: '#'+frame.id,
-				className: 'cool-font',
-				items: {
-					paste: {
-						name: app.IconUtil.createMenuItemLink(_('Paste'), 'Paste'),
-						isHtmlName: true,
-						callback: function(key, options) {
-								if (nPos === undefined)
-									nPos = that._findClickedPart(options.$trigger[0]);
-								that._pasteSlide(nPos);
-						},
-						visible: function() {
-							// Show paste if we have a local copied slide OR
-							// the system clipboard API is available (may have content from another tab)
-							return that.copiedSlide || window.L.Browser.clipboardApiAvailable;
-						}
-					},
-					newslide: {
-						name: app.IconUtil.createMenuItemLink( _UNO(that._map._docLayer._docType == 'presentation' ? '.uno:InsertSlide' : '.uno:InsertPage', 'presentation'), 'InsertPage'),
-						isHtmlName: true,
-						callback: function() { that._map.insertPage(nPos); }
-					}
-				},
-				events: {
-					hide: function() {
-						img.focus();
-					}
-				}
+			img.focus();
+
+			var entries = [];
+			// Offer Paste whenever we can read the clipboard: the browser Clipboard
+			// API, or the Mac app's native clipboard bridge. (The other apps drive
+			// slide copy/paste through their own native clipboard, which is not
+			// wired up for slides yet, so leave them on the Clipboard-API check.)
+			if (window.L.Browser.clipboardApiAvailable || window.ThisIsTheMacOSApp) {
+				entries.push({
+					id: 'paste',
+					type: 'comboboxentry',
+					text: _('Paste'),
+					img: 'Paste',
+					pos: 0,
+				});
+			}
+			entries.push({
+				id: 'newslide',
+				type: 'comboboxentry',
+				text: _UNO(that._map._docLayer._docType == 'presentation' ? '.uno:InsertSlide' : '.uno:InsertPage', 'presentation'),
+				img: 'InsertPage',
+				pos: 0,
 			});
+
+			var menuPosEl = that._getMenuPosEl();
+			var rect = that._container.getBoundingClientRect();
+			menuPosEl.style.left = (e.clientX - rect.left) + 'px';
+			menuPosEl.style.top = (e.clientY - rect.top) + 'px';
+
+			var callback = function(objectType, eventType, object, data, entry) {
+				if (eventType !== 'selected')
+					return false;
+				if (entry.id === 'paste') {
+					if (nPos === undefined)
+						nPos = that._findClickedPart(frame);
+					that._pasteSlide(nPos);
+				} else if (entry.id === 'newslide') {
+					that._map.insertPage(nPos);
+				}
+				JSDialog.CloseAllDropdowns();
+				return true;
+			};
+
+			JSDialog.OpenDropdown(
+				'slide-frame-menu',
+				menuPosEl,
+				entries,
+				callback,
+				'',
+				false,
+				false,
+				true,
+			);
 		}, this);
 
 		window.L.DomEvent.on(img, 'contextmenu', function(e) {
+			e.stopPropagation();
 			var isMasterView = this._map['stateChangeHandler'].getItemValue('.uno:SlideMasterPage');
-			var $trigger = $('#' + img.id);
-			if (isMasterView === 'true' || app.map.isReadOnlyMode()) {
-				$trigger.contextMenu(false);
+			if (isMasterView === 'true' || app.map.isReadOnlyMode())
 				return;
-			}
-			$trigger.contextMenu(true);
+			e.preventDefault();
+
 			if (!that._isSelected(e))
 				that._setPart(e);
+			img.focus();
 
-			$.contextMenu({
-				selector: '#' + img.id,
-				className: 'cool-font',
-				items: {
-					copy: {
-						name: app.IconUtil.createMenuItemLink(_('Copy'), 'Copy'),
-						isHtmlName: true,
-						callback: function() {
-							that.copiedSlide = e;
-							that._map._clip.clearSelection();
-							that._map._clip.setTextSelectionType('slide');
-							that._map._clip._execCopyCutPaste('copy', '.uno:CopySlide');
-						},
-						visible: function() {
-							return !(app.impress.hasOverviewPage && that._map._docLayer._selectedPart === 0);
-						}
-					},
-					paste: {
-						name: app.IconUtil.createMenuItemLink(_('Paste'), 'Paste'),
-						isHtmlName: true,
-						callback: function() {
-							that._pasteSlide();
-						},
-					},
-					newslide: {
-						name: app.IconUtil.createMenuItemLink(_UNO(that._map._docLayer._docType == 'presentation' ? '.uno:InsertSlide' : '.uno:InsertPage', 'presentation'), 'InsertPage'),
-						isHtmlName: true,
-						callback: function() { that._map.insertPage(); }
-					},
-					duplicateslide: {
-						name: app.IconUtil.createMenuItemLink(_UNO(that._map._docLayer._docType == 'presentation' ? '.uno:DuplicateSlide' : '.uno:DuplicatePage', 'presentation'), 'DuplicatePage'),
-						isHtmlName: true,
-						callback: function() { that._map.duplicatePage(); }
-					},
-					delete: {
-						name: app.IconUtil.createMenuItemLink(_UNO(that._map._docLayer._docType == 'presentation' ? '.uno:DeleteSlide' : '.uno:DeletePage', 'presentation'), 'DeletePage'),
-						isHtmlName: true,
-						callback: function() { app.dispatcher.dispatch('deletepage'); },
-						visible: function() {
-							return that._map._docLayer._parts > 1;
-						}
-					},
-					slideproperties: {
-						name: app.IconUtil.createMenuItemLink(_UNO(that._map._docLayer._docType == 'presentation' ? '.uno:SlideSetup' : '.uno:PageSetup', 'presentation'), 'PageSetup'),
-						isHtmlName: true,
-						callback: function() {
-							app.socket.sendMessage('uno .uno:PageSetup');
-						}
-					},
-					showslide: {
-						name: app.IconUtil.createMenuItemLink(_UNO('.uno:ShowSlide', 'presentation'), 'ShowSlide'),
-						isHtmlName: true,
-						callback: function(key, options) {
-							var part = that._findClickedPart(options.$trigger[0].parentNode);
-							if (part !== null) {
-								that._map.showSlide();
-							}
-						},
-						visible: function(key, options) {
-							var part = that._findClickedPart(options.$trigger[0].parentNode);
-							return that._map._docLayer._docType === 'presentation' && app.impress.isSlideHidden(parseInt(part) - 1);
-						}
-					},
-					hideslide: {
-						name: app.IconUtil.createMenuItemLink(_UNO('.uno:HideSlide', 'presentation'), 'Hideslide'),
-						isHtmlName: true,
-						callback: function(key, options) {
-							var part = that._findClickedPart(options.$trigger[0].parentNode);
-							if (part !== null) {
-								that._map.hideSlide();
-							}
-						},
-						visible: function(key, options) {
-							var part = that._findClickedPart(options.$trigger[0].parentNode);
-							return that._map._docLayer._docType === 'presentation' && !app.impress.isSlideHidden(parseInt(part) - 1);
-						}
-					}
-				},
-				events: {
-					hide: function() {
-						// Restore focus to the element that opened the menu
-						img.focus();
+			var part = that._findClickedPart(img.parentNode);
+			var partIndex = parseInt(part) - 1;
+			var isPresentation = that._map._docLayer._docType === 'presentation';
+
+			var entries = [];
+			if (!(app.impress.hasOverviewPage && that._map._docLayer._selectedPart === 0)) {
+				entries.push({
+					id: 'copy',
+					type: 'comboboxentry',
+					text: _('Copy'),
+					img: 'Copy',
+					pos: 0,
+				});
+			}
+			entries.push({
+				id: 'paste',
+				type: 'comboboxentry',
+				text: _('Paste'),
+				img: 'Paste',
+				pos: 0,
+			});
+			entries.push({
+				id: 'newslide',
+				type: 'comboboxentry',
+				text: _UNO(isPresentation ? '.uno:InsertSlide' : '.uno:InsertPage', 'presentation'),
+				img: 'InsertPage',
+				pos: 0,
+			});
+			entries.push({
+				id: 'duplicateslide',
+				type: 'comboboxentry',
+				text: _UNO(isPresentation ? '.uno:DuplicateSlide' : '.uno:DuplicatePage', 'presentation'),
+				img: 'DuplicatePage',
+				pos: 0,
+			});
+			if (that._map._docLayer._parts > 1) {
+				entries.push({
+					id: 'delete',
+					type: 'comboboxentry',
+					text: _UNO(isPresentation ? '.uno:DeleteSlide' : '.uno:DeletePage', 'presentation'),
+					img: 'DeletePage',
+					pos: 0,
+				});
+			}
+			entries.push({
+				id: 'slideproperties',
+				type: 'comboboxentry',
+				text: _UNO(isPresentation ? '.uno:SlideSetup' : '.uno:PageSetup', 'presentation'),
+				img: 'PageSetup',
+				pos: 0,
+			});
+			if (isPresentation && app.impress.isSlideHidden(partIndex)) {
+				entries.push({
+					id: 'showslide',
+					type: 'comboboxentry',
+					text: _UNO('.uno:ShowSlide', 'presentation'),
+					img: 'ShowSlide',
+					pos: 0,
+				});
+			}
+			if (isPresentation && !app.impress.isSlideHidden(partIndex)) {
+				entries.push({
+					id: 'hideslide',
+					type: 'comboboxentry',
+					text: _UNO('.uno:HideSlide', 'presentation'),
+					img: 'Hideslide',
+					pos: 0,
+				});
+			}
+
+			// if not the first section slide then add entry for section
+			var isFirstSectionSlide = false;
+			const sections = app.impress.sections;
+			if (sections) {
+				for (let i = 0; i < sections.length; i++) {
+					if (sections[i].startIndex === partIndex) {
+						isFirstSectionSlide = true;
+						break;
 					}
 				}
-			});
+			}
+			if (!isFirstSectionSlide) {
+				entries.push({
+					id: 'addsection',
+					type: 'comboboxentry',
+					text: _('Add Section'),
+					img: 'addslidesection',
+					pos: 0,
+				});
+			}
+
+			var menuPosEl = that._getMenuPosEl();
+			var rect = that._container.getBoundingClientRect();
+			menuPosEl.style.left = (e.clientX - rect.left) + 'px';
+			menuPosEl.style.top = (e.clientY - rect.top) + 'px';
+
+			var callback = function(objectType, eventType, object, data, entry) {
+				if (eventType !== 'selected')
+					return false;
+				switch (entry.id) {
+				case 'copy':
+					that._map._clip.clearSelection();
+					that._map._clip.setTextSelectionType('slide');
+					that._map._clip._execCopyCutPaste('copy', '.uno:CopySlide');
+					break;
+				case 'paste':
+					that._pasteSlide(part);
+					break;
+				case 'newslide':
+					that._map.insertPage();
+					break;
+				case 'duplicateslide':
+					that._map.duplicatePage();
+					break;
+				case 'delete':
+					app.dispatcher.dispatch('deletepage');
+					break;
+				case 'slideproperties':
+					app.socket.sendMessage('uno .uno:PageSetup');
+					break;
+				case 'showslide':
+					that._map.showSlide();
+					break;
+				case 'hideslide':
+					that._map.hideSlide();
+					break;
+				case 'addsection':
+					app.socket.sendMessage('uno .uno:AddSlideSection');
+					break;
+				}
+				JSDialog.CloseAllDropdowns();
+				return true;
+			};
+
+			JSDialog.OpenDropdown(
+				'slide-img-menu',
+				menuPosEl,
+				entries,
+				callback,
+				'',
+				false,
+				false,
+				true,
+			);
 		}, this);
 
 		var imgSize = this._map.getPreview(i, i,
@@ -407,10 +499,424 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		return img;
 	},
 
+	_updateSections: function (e) {
+		if (!this._previewInitialized)
+			return;
+
+		var sections = e.sections || [];
+
+		// Remove existing section headers
+		for (var i = 0; i < this._sectionHeaders.length; i++) {
+			window.L.DomUtil.remove(this._sectionHeaders[i]);
+		}
+		this._sectionHeaders = [];
+
+		if (!sections || sections.length === 0) {
+			this._collapsedSections.clear();
+			return;
+		}
+
+		// Drop any remembered names that no longer correspond to a section
+		// (e.g. after a rename or removal).
+		var liveNames = new Set();
+		for (var ln = 0; ln < sections.length; ln++)
+			liveNames.add(sections[ln].name);
+		this._collapsedSections.forEach(function (name) {
+			if (!liveNames.has(name))
+				this._collapsedSections.delete(name);
+		}, this);
+
+		// Insert section headers before the frame of each section's first slide.
+		// The container children are: #first-drop-site, frame0, frame1, ...
+		// So slide index N corresponds to child index N+1.
+		for (var s = 0; s < sections.length; s++) {
+			var section = sections[s];
+			var slideIndex = section.startIndex;
+
+			if (slideIndex < 0 || slideIndex >= this._previewTiles.length)
+				continue;
+
+			var header = this._createSectionHeader(section, s);
+			this._sectionHeaders.push(header);
+
+			// Insert before the frame of this section's first slide
+			var slideFrame = this._previewTiles[slideIndex].parentNode;
+			slideFrame.parentNode.insertBefore(header, slideFrame);
+		}
+
+		this._applyAllSectionsCollapse();
+
+		this._updateSelectedSection();
+	},
+
+	_updateSelectedSection: function () {
+		if (!this._sectionHeaders || this._sectionHeaders.length === 0)
+			return;
+
+		var sections = (app.impress && app.impress.sections) || [];
+		var partList = (app.impress && app.impress.partList) || [];
+		var fullySelected = new Set();
+		for (var s = 0; s < sections.length; s++) {
+			var start = sections[s].startIndex;
+			var end = (s + 1 < sections.length)
+				? sections[s + 1].startIndex - 1
+				: this._previewTiles.length - 1;
+			if (start < 0 || end < start)
+				continue;
+
+			var allSelected = true;
+			for (var p = start; p <= end; p++) {
+				if (!partList[p] || !partList[p].selected) {
+					allSelected = false;
+					break;
+				}
+			}
+			if (allSelected)
+				fullySelected.add(s);
+		}
+
+		for (var h = 0; h < this._sectionHeaders.length; h++) {
+			var header = this._sectionHeaders[h];
+			var nameSpan = header.querySelector('.slide-section-name');
+			if (!nameSpan)
+				continue;
+			var headerSectionIndex = parseInt(header.getAttribute('data-section-index'), 10);
+			if (fullySelected.has(headerSectionIndex))
+				window.L.DomUtil.addClass(nameSpan, 'selected');
+			else
+				window.L.DomUtil.removeClass(nameSpan, 'selected');
+		}
+	},
+
+	_createSectionHeader: function (section, sectionIndex) {
+		var that = this;
+
+		var header = window.L.DomUtil.create('div', 'slide-section-header');
+		header.setAttribute('data-section-index', sectionIndex);
+		header.setAttribute('data-start-index', section.startIndex);
+		header.setAttribute('draggable', 'false');
+
+		var toggleBtn = window.L.DomUtil.create('button', 'slide-section-toggle ui-expander-btn', header);
+		toggleBtn.type = 'button';
+		toggleBtn.setAttribute('aria-label',
+			_('Toggle section %1').replace('%1', section.name));
+
+		var nameSpan = window.L.DomUtil.create('span', 'slide-section-name', header);
+		nameSpan.textContent = section.name;
+		nameSpan.setAttribute('title', section.name);
+
+		window.L.DomEvent.on(toggleBtn, 'click', function (e) {
+			window.L.DomEvent.stopPropagation(e);
+			window.L.DomEvent.preventDefault(e);
+			that._toggleSectionCollapse(sectionIndex);
+		}, this);
+
+		// Click on the header (but not the toggle) selects all slides in the section.
+		window.L.DomEvent.on(header, 'click', function (e) {
+			if (toggleBtn.contains(e.target))
+				return;
+			window.L.DomEvent.stopPropagation(e);
+			window.L.DomEvent.preventDefault(e);
+			that._selectSection(sectionIndex);
+		}, this);
+
+		// Section context menu
+		if (this._map.isEditMode()) {
+			window.L.DomEvent.on(header, 'contextmenu', function(e) {
+				window.L.DomEvent.stopPropagation(e);
+				window.L.DomEvent.preventDefault(e);
+
+				if (app.map.isReadOnlyMode())
+					return;
+
+				that._openSectionContextMenu(section, sectionIndex, e);
+			}, this);
+		}
+
+		// Drop target: dropping a slide onto a section header makes it the
+		// new first slide of that section.  Dropping above the header (on
+		// the preceding slide frame) keeps the default behaviour of placing
+		// the slide outside the section.
+		if (!app.file.fileBasedView) {
+			header.addEventListener('dragenter', function (e) {
+				if (e.preventDefault) e.preventDefault();
+			});
+			header.addEventListener('dragover', function (e) {
+				if (e.preventDefault) e.preventDefault();
+				e.dataTransfer.dropEffect = 'move';
+				header.classList.add('slide-section-dropsite');
+				return false;
+			});
+			header.addEventListener('dragleave', function () {
+				header.classList.remove('slide-section-dropsite');
+			});
+			header.addEventListener('drop', function (e) {
+				if (e.stopPropagation) e.stopPropagation();
+				if (e.preventDefault) e.preventDefault();
+				header.classList.remove('slide-section-dropsite');
+				var startIndex = section.startIndex;
+				var position = startIndex > 0 ? startIndex - 1 : -1;
+				app.socket.sendMessage(
+					'moveselectedclientparts position=' + position +
+					' intoSection=' + sectionIndex);
+				return false;
+			});
+		}
+
+		return header;
+	},
+
+	_selectSection: function (sectionIndex) {
+		var sections = app.impress && app.impress.sections;
+		if (!sections || !sections[sectionIndex])
+			return;
+
+		var start = sections[sectionIndex].startIndex;
+		var end = (sectionIndex + 1 < sections.length)
+			? sections[sectionIndex + 1].startIndex - 1
+			: this._previewTiles.length - 1;
+
+		if (start < 0 || end < start)
+			return;
+
+		var applyRange = () => {
+			this._map.selectPart(start, 1, false);
+			for (var id = start + 1; id <= end; ++id)
+				this._map.selectPart(id, 1, false);
+			this._selectedPartRange = [start, end];
+		};
+
+		this._map.deselectAll();
+
+		if (this._map._docLayer._selectedPart === start) {
+			applyRange();
+			return;
+		}
+
+		// setPart(start) triggers SwitchPage in core, which posts itself
+		// for async execution when a paint is in progress (common under
+		// CI load). SwitchPage deselects every page before selecting the
+		// new current one, so issuing the multi-select before it runs
+		// loses slides start+1..end. Wait for the kit's setpart:
+		// confirmation - it only fires after SwitchPage actually
+		// completes - before extending the selection.
+		var done = false;
+		var onSetPart = function () {
+			if (done) return;
+			done = true;
+			applyRange();
+		};
+		this._map.once('setpart', onSetPart);
+		// Safety net in case setpart: never arrives.
+		setTimeout(onSetPart, 2000);
+
+		this._map.setPart(start);
+	},
+
+	_toggleSectionCollapse: function (sectionIndex) {
+		var sections = app.impress.sections || [];
+		var section = sections[sectionIndex];
+		if (!section)
+			return;
+
+		if (this._collapsedSections.has(section.name))
+			this._collapsedSections.delete(section.name);
+		else
+			this._collapsedSections.add(section.name);
+
+		this._applySectionCollapse(sectionIndex);
+		// Expanding may reveal thumbnails whose images were never fetched.
+		this._ensureVisiblePreviews();
+	},
+
+	// Apply the collapsed class to one section's header and its slide frames.
+	_applySectionCollapse: function (sectionIndex) {
+		var section = app.impress.sections && app.impress.sections[sectionIndex];
+		if (!section)
+			return;
+
+		var collapsed = this._collapsedSections.has(section.name);
+		var end = section.startIndex + section.slideCount;
+
+		var header = this._sectionHeaders[sectionIndex];
+		if (header) {
+			var toggleBtn = header.querySelector('.slide-section-toggle');
+			header.classList.toggle('collapsed', collapsed);
+			if (toggleBtn)
+				toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+		}
+
+		for (var i = section.startIndex; i < end; i++) {
+			var frame = this._previewTiles[i] && this._previewTiles[i].parentNode;
+			if (frame)
+				frame.classList.toggle('section-collapsed', collapsed);
+		}
+	},
+
+	// Apply collapsed state to every section.
+	_applyAllSectionsCollapse: function () {
+		var sections = app.impress.sections || [];
+		for (var s = 0; s < sections.length; s++)
+			this._applySectionCollapse(s);
+	},
+
+	// Collapse every section.
+	_collapseAllSections: function () {
+		const sections = app.impress.sections || [];
+		if (sections.length === 0)
+			return;
+		for (let i = 0; i < sections.length; i++)
+			this._collapsedSections.add(sections[i].name);
+		this._applyAllSectionsCollapse();
+	},
+
+	// Expand every section.
+	_expandAllSections: function () {
+		if (this._collapsedSections.size === 0)
+			return;
+		this._collapsedSections.clear();
+		this._applyAllSectionsCollapse();
+		// Expanding may reveal thumbnails whose images were never fetched.
+		this._ensureVisiblePreviews();
+	},
+
+	_openSectionContextMenu: function (section, sectionIndex, e) {
+		var that = this;
+		var sections = app.impress.sections || [];
+
+		const hasCollapsed = this._collapsedSections.size > 0;
+		const hasExpanded = this._collapsedSections.size < sections.length;
+
+		var entries = [{
+			id: 'renameSection',
+			type: 'comboboxentry',
+			text: _('Rename Section'),
+			img: 'renameslidesection',
+			pos: 0,
+		}];
+		entries.push({
+			id: 'removeSection',
+			type: 'comboboxentry',
+			text: _('Remove Section'),
+			img: 'removeslidesection',
+			pos: 0,
+		});
+		if (sectionIndex > 0) {
+			entries.push({
+				id: 'moveSectionUp',
+				type: 'comboboxentry',
+				text: _('Move Section Up'),
+				img: 'movesectionup',
+				pos: 0,
+			});
+		}
+		if (sectionIndex < sections.length - 1) {
+			entries.push({
+				id: 'moveSectionDown',
+				type: 'comboboxentry',
+				text: _('Move Section Down'),
+				img: 'movesectiondown',
+				pos: 0,
+			});
+		}
+		if (sections.length > 1 && hasExpanded) {
+			entries.push({
+				id: 'collapseAllSections',
+				type: 'comboboxentry',
+				text: _('Collapse All Sections'),
+				pos: 0,
+			});
+		}
+		if (sections.length > 1 && hasCollapsed) {
+			entries.push({
+				id: 'expandAllSections',
+				type: 'comboboxentry',
+				text: _('Expand All Sections'),
+				pos: 0,
+			});
+		}
+
+		var menuPosEl = this._getMenuPosEl();
+		var rect = this._container.getBoundingClientRect();
+		menuPosEl.style.left = (e.clientX - rect.left) + 'px';
+		menuPosEl.style.top = (e.clientY - rect.top) + 'px';
+
+		var callback = function (objectType, eventType, object, data, entry) {
+			if (eventType !== 'selected')
+				return false;
+			switch (entry.id) {
+			case 'renameSection':
+				that._renameSection(section, sectionIndex);
+				break;
+			case 'moveSectionUp':
+				that._map.setPart(section.startIndex);
+				that._map.selectPart(section.startIndex, 1, false);
+				app.socket.sendMessage('uno .uno:MoveSlideSectionUp');
+				break;
+			case 'moveSectionDown':
+				that._map.setPart(section.startIndex);
+				that._map.selectPart(section.startIndex, 1, false);
+				app.socket.sendMessage('uno .uno:MoveSlideSectionDown');
+				break;
+			case 'removeSection':
+				that._map.setPart(section.startIndex);
+				that._map.selectPart(section.startIndex, 1, false);
+				app.socket.sendMessage('uno .uno:RemoveSlideSection');
+				break;
+			case 'collapseAllSections':
+				that._collapseAllSections();
+				break;
+			case 'expandAllSections':
+				that._expandAllSections();
+				break;
+			}
+			JSDialog.CloseAllDropdowns();
+			return true;
+		};
+
+		JSDialog.OpenDropdown(
+			'slide-section-menu',
+			menuPosEl,
+			entries,
+			callback,
+			'',
+			false,
+			false,
+			true,
+		);
+	},
+
+	_renameSection: function (section, sectionIndex) {
+		var currentName = section.name;
+
+		app.map.uiManager.showInputModal(
+			'rename-section',
+			_('Rename Section'),
+			_('Enter new section name:'),
+			currentName,
+			_('OK'),
+			function (newName) {
+				if (newName && newName !== currentName) {
+					var command = {
+						'SectionIndex': {
+							'type': 'long',
+							'value': sectionIndex
+						},
+						'Name': {
+							'type': 'string',
+							'value': newName
+						}
+					};
+					app.socket.sendMessage('uno .uno:RenameSlideSection ' + JSON.stringify(command));
+				}
+			}
+		);
+	},
+
 	_scrollToPart: function(part) {
 		var partNo = part !== undefined ? part : this._map.getCurrentPartNumber();
-		//var sliderSize, nodePos, nodeOffset, nodeMargin;
-		var node = this._partsPreviewCont.children[partNo];
+		// Use the preview tile's parent frame directly instead of child index
+		var node = this._previewTiles[partNo] ? this._previewTiles[partNo].parentNode : null;
 
 		if (node && (!this._previewTiles[partNo] || !this._isPreviewVisible(partNo))) {
 			if (this.scrollTimer) clearTimeout(this.scrollTimer);
@@ -422,12 +928,17 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		}
 	},
 
-	// We will use this function because IE doesn't support "Array.from" feature.
+	// Returns the logical child index (counting only frames, not section headers).
 	_findClickedPart: function (element) {
+		var frameIndex = 0;
 		for (var i = 0; i < this._partsPreviewCont.children.length; i++) {
-			if (this._partsPreviewCont.children[i] === element || this._partsPreviewCont.children[i] === element.parentNode) {
-				return i;
+			var child = this._partsPreviewCont.children[i];
+			if (child === element || child === element.parentNode) {
+				return frameIndex;
 			}
+			// Only count non-section-header children as frames
+			if (!child.classList.contains('slide-section-header'))
+				frameIndex++;
 		}
 		return -1;
 	},
@@ -440,10 +951,19 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		if (partNumber < 0) partNumber = 0;
 		if (partNumber >= this._map._docLayer._parts) partNumber = this._map._docLayer._parts - 1;
 
-		var partHeightPixels = Math.round((this._map._docLayer._partHeightTwips + this._map._docLayer._spaceBetweenParts) * app.twipsToPixels);
-		var scrollTop = partHeightPixels * partNumber;
 		var viewHeight = app.sectionContainer.getViewSize()[1];
 		var currentScrollX = app.activeDocument.activeLayout.viewedRectangle.pX1;
+
+		var layout = app.activeDocument.activeLayout;
+		var scrollTop;
+		var partHeightPixels;
+		if (layout.viewRectangles && layout.viewRectangles[partNumber]) {
+			scrollTop = layout.viewRectangles[partNumber].pY1;
+			partHeightPixels = layout.viewRectangles[partNumber].pHeight + Math.round(this._map._docLayer._spaceBetweenParts * app.twipsToPixels);
+		} else {
+			partHeightPixels = Math.round((this._map._docLayer._partHeightTwips + this._map._docLayer._spaceBetweenParts) * app.twipsToPixels);
+			scrollTop = partHeightPixels * partNumber;
+		}
 
 		if (viewHeight > partHeightPixels && partNumber > 0)
 			scrollTop -= Math.round((viewHeight - partHeightPixels) * 0.5);
@@ -466,54 +986,55 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		app.sectionContainer.getSectionWithName(app.CSections.Scroll.name).onScrollBy({x: currentScrollX, y: buttonType === 'prev' ? -scrollBySize : scrollBySize});
 	},
 
-	// Paste a slide, preferring the system clipboard for cross-tab pastes.
+	// Paste a slide. Always read from the system clipboard and force-upload
+	// to the local Kit (skipping the same-tab pTransferClip shortcut),
+	// so that a copy from another tab/document wins over any stale local copy.
 	// nPos: insertion position for the frame context menu (may be undefined for img context menu).
 	_pasteSlide: async function(nPos) {
-		// Guard against concurrent invocations (e.g. rapid double-click).
 		if (this._pastePending)
 			return;
 		this._pastePending = true;
 		try {
-			if (this.copiedSlide) {
-				// Check if the system clipboard has been updated by a different
-				// tab/session since our last copy. If so, prefer the system clipboard.
-				let useInternalCopy = true;
-				if (window.L.Browser.clipboardApiAvailable) {
-					try {
-						const items = await navigator.clipboard.read();
-						if (items.length > 0 && items[0].types.includes('text/html')) {
-							const blob = await items[0].getType('text/html');
-							const html = await blob.text();
-							const clip = this._map._clip;
-							const meta = clip.getMetaOrigin(html);
-							const id = clip.getMetaPath(0);
-							const idOld = clip.getMetaPath(1);
-							// If meta origin does not match this tab's clipboard, use system clipboard
-							if (meta !== '' && (id === '' || meta.indexOf(id) < 0) && (idOld === '' || meta.indexOf(idOld) < 0)) {
-								useInternalCopy = false;
-							}
+			if (nPos !== undefined)
+				this._map.setPart(Math.max(0, nPos - 1));
+
+			const clip = this._map._clip;
+
+			// In the browser, read the system clipboard directly so a copy from
+			// another tab/document wins over a stale local copy. The Mac app skips
+			// this: its native clipboard bridge does the read (and going through
+			// navigator.clipboard.read() would pop up the WebView's system "Paste"
+			// confirmation), so it falls through to filterExecCopyPaste below.
+			if (window.L.Browser.clipboardApiAvailable && !window.ThisIsTheMacOSApp) {
+				let html = '';
+				try {
+					let foundItem = null;
+					const items = await navigator.clipboard.read();
+					for (const item of items) {
+						if (item.types.includes('text/html')) {
+							foundItem = item;
+							break;
 						}
-					} catch (e) {
-						// clipboard read failed or permission denied - keep using internal copy
 					}
+
+					if (foundItem) {
+						const blob = await foundItem.getType('text/html');
+						html = await blob.text();
+					}
+				} catch (e) {
+					html = '';
 				}
-				if (useInternalCopy) {
-					// Same-tab paste: use duplicate which allows insertion at a position
-					this._setPart(this.copiedSlide);
-					this._map.duplicatePage(nPos);
-				} else {
-					// System clipboard is from a different tab - use it
-					this.copiedSlide = null;
-					if (nPos !== undefined)
-						this._map.setPart(Math.max(0, nPos - 1));
-					this._map._clip.filterExecCopyPaste('.uno:Paste');
+				if (html) {
+					// preferInternal=false skips the pTransferClip shortcut,
+					// so the most recent system-clipboard content wins.
+					clip.dataTransferToDocument(null, false, html, false);
+					return;
 				}
-			} else {
-				// Cross-tab/browser paste: use system clipboard
-				if (nPos !== undefined)
-					this._map.setPart(Math.max(0, nPos - 1)); // new slide is inserted after set slide
-				this._map._clip.filterExecCopyPaste('.uno:Paste');
 			}
+
+			// The Clipboard API is unavailable, or this is the Mac app: let the
+			// paste event / native clipboard bridge drive things.
+			clip.filterExecCopyPaste('.uno:Paste');
 		} finally {
 			this._pastePending = false;
 		}
@@ -562,7 +1083,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 		}
 	},
 
-	_selectPartRange: function (start, end) {
+	_selectPartRange: function (start, end, scrollToEnd = true) {
 		if (start === undefined || start === null)
 			start = this._map._docLayer._selectedPart;
 
@@ -587,7 +1108,8 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 			}
 		}
 		this._selectedPartRange = [start, end];
-		this._scrollToPart(end);
+		if (scrollToEnd)
+			this._scrollToPart(end);
 	},
 
 	_modifySelectedPartRange: function (direction) {
@@ -841,6 +1363,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 
 	_handleTouchCancel: function(e) {
 		$('.preview-frame').removeClass('preview-img-dropsite');
+		$('.slide-section-dropsite').removeClass('slide-section-dropsite');
 		$(this.draggedSlide).remove();
 		this._removeDnDTouchHandlers(e);
 	},
@@ -859,6 +1382,7 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 			}
 		}
 		$('.preview-frame').removeClass('preview-img-dropsite');
+		$('.slide-section-dropsite').removeClass('slide-section-dropsite');
 		$(this.draggedSlide).remove();
 		this._removeDnDTouchHandlers(e);
 		return false;
@@ -927,6 +1451,9 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 
 	_handleDragEnd: function () {
 		this.classList.remove('preview-img-dropsite');
+		document.querySelectorAll('.slide-section-dropsite').forEach(function (el) {
+			el.classList.remove('slide-section-dropsite');
+		});
 	},
 
 	_invalidateParts: function () {
@@ -938,11 +1465,13 @@ window.L.Control.PartsPreview = window.L.Control.extend({
 
 		for (var part = 0; part < this._previewTiles.length; part++) {
 			this._previewTiles[part].fetched = false;
-			this._map.getPreview(part, part,
+			var imgSize = this._map.getPreview(part, part,
 					     this.options.maxWidth,
 					     this.options.maxHeight,
 					     {autoUpdate: this.options.autoUpdate,
 					      fetchThumbnail: this.options.fetchThumbnail});
+			window.L.DomUtil.setStyle(this._previewTiles[part], 'width', imgSize.width + 'px');
+			window.L.DomUtil.setStyle(this._previewTiles[part], 'height', imgSize.height + 'px');
 		}
 
 	},

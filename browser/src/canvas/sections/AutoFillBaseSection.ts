@@ -66,6 +66,10 @@ class AutoFillBaseSection extends CanvasSectionObject {
 		);
 	}
 
+	setPosition(x: number, y: number): void {
+		setCalcRTLAwareDocumentObjectPosition(this, x, y);
+	}
+
 	protected setMarkerPosition() {
 		var center: number = 0;
 		if (!(<any>window).mode.isDesktop()) {
@@ -130,7 +134,7 @@ class AutoFillBaseSection extends CanvasSectionObject {
 		var translation = desktop
 			? [this.size[0], this.size[1]]
 			: [Math.floor(this.size[0] * 0.5), Math.floor(this.size[1] * 0.5)];
-		const adjustForRTL = app.map._docLayer.isCalcRTL();
+		const adjustForRTL = app.calc.isRTL();
 		const transformX = (xcoord: number) => {
 			return adjustForRTL ? this.size[0] - xcoord : xcoord;
 		};
@@ -186,8 +190,16 @@ class AutoFillBaseSection extends CanvasSectionObject {
 		point: cool.SimplePoint,
 	): cool.SimplePoint {
 		const p2 = point.clone();
-		p2.pX += this.position[0];
-		p2.pY += this.position[1];
+		// myTopLeft sits at the visual (mirrored in RTL) position, so
+		// `point.pX` is measured from the visual left edge. In RTL the
+		// visual axis is flipped relative to LTR document coordinates;
+		// convert back so `_postMouseEvent` gets an LTR doc pX.
+		if (app.calc.isRTL()) {
+			p2.pX = this.position[0] + this.size[0] - point.pX;
+		} else {
+			p2.pX = this.position[0] + point.pX;
+		}
+		p2.pY = this.position[1] + point.pY;
 		return p2;
 	}
 
@@ -196,6 +208,16 @@ class AutoFillBaseSection extends CanvasSectionObject {
 		p2.pX += this.position[0] + this.size[0] * 0.5;
 		p2.pY += this.position[1] + this.size[1] * 0.5;
 		return p2;
+	}
+
+	// On mobile, setMarkerPosition shifts the marker left by half the cell
+	// width so it sits visually under the cell. Core's autofill hit-test is at
+	// the cell's bottom-right corner, so undo that shift before posting events.
+	private adjustForMobileCenterOffset(p: cool.SimplePoint): void {
+		if (!(<any>window).mode.isDesktop()) {
+			Util.ensureValue(app.calc.cellCursorRectangle);
+			p.pX += app.calc.cellCursorRectangle.pWidth * 0.5;
+		}
 	}
 
 	protected autoScroll(point: cool.SimplePoint) {
@@ -225,6 +247,7 @@ class AutoFillBaseSection extends CanvasSectionObject {
 			return; // No dragging or no event handling or auto fill marker is not visible.
 
 		const p2 = this.getDocumentPositionFromLocal(point);
+		this.adjustForMobileCenterOffset(p2);
 		app.map._docLayer._postMouseEvent('move', p2.x, p2.y, 1, 1, 0);
 
 		if (
@@ -236,6 +259,7 @@ class AutoFillBaseSection extends CanvasSectionObject {
 
 	public onMouseUp(point: cool.SimplePoint, e: MouseEvent) {
 		const p2 = this.getDocumentPositionFromLocal(point);
+		this.adjustForMobileCenterOffset(p2);
 		app.map._docLayer._postMouseEvent('buttonup', p2.x, p2.y, 1, 1, 0);
 	}
 
@@ -243,6 +267,7 @@ class AutoFillBaseSection extends CanvasSectionObject {
 		// revert coordinates to global and fire event again with position in the center
 		// inverse of convertPositionToCanvasLocale
 		const p2 = this.getCenterRegardingDocument();
+		this.adjustForMobileCenterOffset(p2);
 
 		app.map._docLayer._postMouseEvent('buttondown', p2.x, p2.y, 1, 1, 0);
 	}
@@ -257,6 +282,7 @@ class AutoFillBaseSection extends CanvasSectionObject {
 
 	public onDoubleClick(point: cool.SimplePoint, e: MouseEvent) {
 		const pos = this.getCenterRegardingDocument();
+		this.adjustForMobileCenterOffset(pos);
 		this.sectionProperties.docLayer._postMouseEvent(
 			'buttondown',
 			pos.x,

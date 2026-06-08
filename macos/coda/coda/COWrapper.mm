@@ -11,7 +11,7 @@
 #include <config.h>
 
 #define LIBO_INTERNAL_ONLY
-#include <LibreOfficeKit/LibreOfficeKit.hxx>
+#include <COKit/COKit.hxx>
 
 #import <WebKit/WebKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -25,7 +25,9 @@
 #include <string>
 #include <common/Clipboard.hpp>
 #include <common/LangUtil.hpp>
+#include <common/SettingsStorage.hpp>
 #include <common/Log.hpp>
+#include <common/ProcUtil.hpp>
 #include <common/MobileApp.hpp>
 #include <common/Util.hpp>
 #include <net/FakeSocket.hpp>
@@ -33,6 +35,14 @@
 
 // Declare the coolwsd pointer at global scope
 COOLWSD *coolwsd = nullptr;
+
+// Tracks the system pasteboard state right after our own copy. A later paste can
+// then tell whether the pasteboard still holds that copy, and if so reuse the
+// engine's full-fidelity in-memory transferable instead of overwriting it with a
+// serialized format read back from the pasteboard. This mirrors the ownsClipboard
+// check the Qt (Bridge.cpp) and Windows (do_paste_or_read) app variants do.
+static NSInteger sOwnedPasteboardChangeCount = -1;
+static unsigned sOwnedClipboardDocId = 0;
 
 static int closeNotificationPipeForForwardingThread[2];
 static std::thread coolwsdThread;
@@ -52,7 +62,7 @@ static std::thread coolwsdThread;
 #else
     Log::initialize("Mobile", "information");
 #endif
-    Util::setThreadName("main");
+    ProcUtil::setThreadName("main");
 
     // Set up the logging callback
     fakeSocketSetLoggingCallback([](const std::string& line) {
@@ -69,7 +79,7 @@ static std::thread coolwsdThread;
             "coda"
         };
 
-        Util::setThreadName("app");
+        ProcUtil::setThreadName("app");
 
         coolwsd = new COOLWSD();
         coolwsd->run(args);
@@ -101,7 +111,7 @@ static std::thread coolwsdThread;
     // Start another thread to read responses and forward them to the JavaScript
     dispatch_async(dispatch_get_global_queue( DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),
                    ^{
-                       Util::setThreadName("app2js");
+                       ProcUtil::setThreadName("app2js");
                        while (true) {
                            struct pollfd p[2];
                            p[0].fd = document.fakeClientFd;
@@ -168,164 +178,204 @@ static std::thread coolwsdThread;
 }
 
 /**
- * Call the LOKit getClipboard and return it so that it can be used in Swift.
+ * Map an engine mime type to the pasteboard type other applications expect for
+ * it. The common interchange formats map to their system UTI (text/html becomes
+ * public.html, and so on). Everything else - notably the internal engine formats
+ * - keeps its raw mime string, which is exactly what desktop LibreOffice
+ * advertises and reads on the Mac pasteboard, see vcl/osx/DataFlavorMapping.cxx.
  */
-+ (NSArray<id<NSPasteboardWriting>> * _Nullable) getClipboardInternalWith:(Document *_Nonnull)document mimeTypes:(const char**)mimeTypes {
++ (NSString *)pasteboardTypeForMime:(NSString *_Nonnull)mime {
+    // Drop any parameters such as the charset in "text/plain;charset=utf-8" before
+    // the UTI lookup, which would otherwise fail to match.
+    NSString * baseMime = [[mime componentsSeparatedByString:@";"] firstObject];
+
+    if ([baseMime isEqualToString:@"text/plain"]) {
+        // Normalise to the canonical plain-text type so a single representation
+        // wins, and so that other plain-text-like flavours (such as text/markdown)
+        // do not collide with it.
+        return UTTypeUTF8PlainText.identifier;
+    }
+
+    UTType * uti = [UTType typeWithMIMEType:baseMime];
+    return (uti != nil && !uti.dynamic) ? uti.identifier : mime;
+}
+
+/**
+ * Fetch the requested flavours from the engine and put them all on the system
+ * pasteboard as raw, unaltered bytes, each under the pasteboard type other apps
+ * expect. Returns NO when there was nothing to write.
+ *
+ * We write through the declareTypes/setData API (the same one desktop LibreOffice
+ * uses, see vcl/osx/clipboard.cxx) rather than NSPasteboardItem, because the
+ * internal engine formats carry raw mime strings as their type names rather than
+ * UTIs. That API accepts them unchanged, which is what lets a paste into desktop
+ * LibreOffice keep full fidelity.
+ */
++ (BOOL)putOnPasteboard:(const char**)mimeTypes for:(Document *_Nonnull)document {
     size_t outCount = 0;
     char  **outMimeTypes = nullptr;
     size_t *outSizes = nullptr;
     char  **outStreams = nullptr;
 
-    if (DocumentData::get(document.appDocId).loKitDocument->getClipboard(mimeTypes,
-                                                                         &outCount, &outMimeTypes,
-                                                                         &outSizes, &outStreams))
+    if (!DocumentData::get(document.appDocId).loKitDocument->getClipboard(mimeTypes,
+                                                                          &outCount, &outMimeTypes,
+                                                                          &outSizes, &outStreams))
     {
-        // return early
-        if (outCount == 0)
-            return nil;
-
-        NSMutableArray<id<NSPasteboardWriting>> *result = [NSMutableArray array];
-
-        for (size_t i = 0; i < outCount; ++i) {
-            NSString * identifier = [NSString stringWithUTF8String:outMimeTypes[i]];
-
-            // For interop with other apps, if this mime-type is known we can export it
-            UTType * uti = [UTType typeWithMIMEType:identifier];
-            if (uti != nil && !uti.dynamic) {
-                if ([uti conformsToType:UTTypePlainText] && outStreams[i] != nullptr) {
-                    [result addObject:[NSString stringWithUTF8String:outStreams[i]]];
-                }
-                else if ([uti conformsToType:UTTypeImage]) {
-                    [result addObject:[[NSImage alloc] initWithData:[NSData dataWithBytes:outStreams[i] length:outSizes[i]]]];
-                }
-            }
-
-            // Also preserve the data we need, we'll always also export the raw, unaltered bytes
-            NSPasteboardItem * item = [[NSPasteboardItem alloc] init];
-            [item setData:[NSData dataWithBytes:outStreams[i] length:outSizes[i]] forType:identifier];
-        }
-
-        return result;
-    }
-    else
         LOG_DBG("failed to fetch mime-types");
+        return NO;
+    }
 
-    return nil;
+    // Collect one representation per pasteboard type, keeping the first we see.
+    NSMutableArray<NSPasteboardType> * types = [NSMutableArray array];
+    NSMutableDictionary<NSPasteboardType, NSData *> * dataByType = [NSMutableDictionary dictionary];
+
+    for (size_t i = 0; i < outCount; ++i) {
+        if (outStreams[i] == nullptr || outSizes[i] == 0)
+            continue;
+
+        NSString * type = [COWrapper pasteboardTypeForMime:[NSString stringWithUTF8String:outMimeTypes[i]]];
+        if (dataByType[type] != nil)
+            continue;
+
+        dataByType[type] = [NSData dataWithBytes:outStreams[i] length:outSizes[i]];
+        [types addObject:type];
+    }
+
+    if (types.count == 0)
+        return NO;
+
+    NSPasteboard * pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard declareTypes:types owner:nil];
+    for (NSPasteboardType type in types)
+        [pasteboard setData:dataByType[type] forType:type];
+
+    return YES;
 }
 
 /**
- * Get the clipboard content. Defaults to fetching text and/or html only, when a generic query fails.
+ * Put the current clipboard content on the system pasteboard. Defaults to text
+ * and/or html only when the generic query yields nothing.
  */
-+ (NSArray<id<NSPasteboardWriting>> * _Nullable) getClipboardWith:(Document *_Nonnull)document {
-    NSArray<id<NSPasteboardWriting>> * result = [COWrapper getClipboardInternalWith:document mimeTypes:nullptr];
-    if (result != nil)
-        return result;
++ (BOOL)writeClipboardFor:(Document *_Nonnull)document {
+    BOOL written = [COWrapper putOnPasteboard:nullptr for:document];
+    if (!written) {
+        const char* textMimeTypes[] = {
+            "text/plain;charset=utf-8",
+            "text/html",
+            nullptr
+        };
+        written = [COWrapper putOnPasteboard:textMimeTypes for:document];
+    }
 
-    const char* textMimeTypes[] = {
-        "text/plain;charset=utf-8",
-        "text/html",
-        nullptr
-    };
+    if (written)
+        [COWrapper noteClipboardWrittenBy:document];
 
-    return [COWrapper getClipboardInternalWith:document mimeTypes:textMimeTypes];
+    return written;
+}
+
+/**
+ * Remember the pasteboard state right after we wrote it ourselves.
+ */
++ (void)noteClipboardWrittenBy:(Document *_Nonnull)document {
+    sOwnedPasteboardChangeCount = [NSPasteboard generalPasteboard].changeCount;
+    sOwnedClipboardDocId = document.appDocId;
+}
+
+/**
+ * Whether the pasteboard still holds the copy this document last wrote. When it
+ * does, a paste should use the engine's own clipboard rather than reading the
+ * pasteboard back, which both preserves full fidelity and avoids the transfer.
+ */
++ (BOOL)pasteboardOwnedBy:(Document *_Nonnull)document {
+    return sOwnedPasteboardChangeCount >= 0
+        && [NSPasteboard generalPasteboard].changeCount == sOwnedPasteboardChangeCount
+        && sOwnedClipboardDocId == document.appDocId;
 }
 
 /**
  * Sets the LOKit internal clipboard with the content of NSPasteboard.
  */
 + (void)setClipboardWith:(Document *_Nonnull)document from:(NSPasteboard *_Nonnull)pasteboard {
-    NSMutableDictionary * pasteboardItems = [NSMutableDictionary new];
+    // Read every flavour on the pasteboard through the pasteboard-level types API
+    // (the same one desktop LibreOffice reads with, see vcl/osx/OSXTransferable.cxx),
+    // not just the first item. That way the internal engine formats
+    // (application/x-openoffice-*) that another LibreOffice build puts there reach
+    // the engine, so a paste from LibreOffice into CODA reconstructs the
+    // full-fidelity transferable rather than falling back to RTF or HTML.
+    NSMutableArray<NSString *> * orderedMimes = [NSMutableArray array];
+    NSMutableDictionary<NSString *, NSData *> * dataByMime = [NSMutableDictionary dictionary];
 
-    if (pasteboard.pasteboardItems.count != 0) {
-        NSPasteboardItem *item = pasteboard.pasteboardItems.firstObject;
+    for (NSPasteboardType identifier in pasteboard.types) {
+        UTType * uti = [UTType typeWithIdentifier:identifier];
 
-        for (NSPasteboardType identifier in item.types)
-        {
-            UTType * uti = [UTType typeWithIdentifier:identifier];
-            NSString * mime = uti? uti.preferredMIMEType: identifier;
-
-            if (mime == nil) {
-                LOG_WRN("UTI " << [identifier UTF8String] << " did not have associated mime type when deserializing clipboard, skipping...");
+        NSString * mime;
+        if (uti != nil && [uti conformsToType:UTTypePlainText]) {
+            // Several plain-text UTIs (utf8, utf16-external, ...) describe the same
+            // text. Keep only the UTF-8 one and tell the engine its charset, so we
+            // neither feed duplicates nor mislabel UTF-16 bytes as UTF-8.
+            if (![identifier isEqualToString:UTTypeUTF8PlainText.identifier])
                 continue;
-            }
-
-            NSData * value = [item dataForType:identifier];
-            if (value == nil)
-                continue;
-
-            if (uti != nil && [pasteboardItems objectForKey:mime] != nil) {
-                // We export both mime and UTI keys, don't overwrite the mime-type ones with the UTI ones
-                continue;
-            }
-
-            [pasteboardItems setObject:value forKey:mime];
+            mime = @"text/plain;charset=utf-8";
+        } else {
+            // No system UTI means an internal engine format whose type name is its
+            // raw mime string, which we pass through unchanged.
+            mime = uti ? uti.preferredMIMEType : identifier;
         }
+
+        if (mime == nil) {
+            LOG_WRN("UTI " << [identifier UTF8String] << " did not have associated mime type when deserializing clipboard, skipping...");
+            continue;
+        }
+
+        // Keep the first representation we see for a given mime.
+        if (dataByMime[mime] != nil)
+            continue;
+
+        NSData * value = [pasteboard dataForType:identifier];
+        if (value == nil)
+            continue;
+
+        dataByMime[mime] = value;
+        [orderedMimes addObject:mime];
     }
 
-    const char * pInMimeTypes[pasteboardItems.count];
-    size_t pInSizes[pasteboardItems.count];
-    const char * pInStreams[pasteboardItems.count];
+    if (orderedMimes.count == 0)
+        return;
+
+    std::vector<const char *> pInMimeTypes(orderedMimes.count);
+    std::vector<size_t> pInSizes(orderedMimes.count);
+    std::vector<const char *> pInStreams(orderedMimes.count);
 
     size_t i = 0;
-
-    for (NSString * mime in pasteboardItems) {
+    for (NSString * mime in orderedMimes) {
         pInMimeTypes[i] = [mime UTF8String];
-        pInStreams[i] = (const char*)[pasteboardItems[mime] bytes];
-        pInSizes[i] = [pasteboardItems[mime] length];
+        pInStreams[i] = (const char *)[dataByMime[mime] bytes];
+        pInSizes[i] = [dataByMime[mime] length];
         i++;
     }
 
-    DocumentData::get(document.appDocId).loKitDocument->setClipboard(pasteboardItems.count, pInMimeTypes, pInSizes, pInStreams);
+    DocumentData::get(document.appDocId).loKitDocument->setClipboard(orderedMimes.count,
+                                                                     pInMimeTypes.data(),
+                                                                     pInSizes.data(),
+                                                                     pInStreams.data());
 }
 
 /**
  * Insert data into the internal clipboard. The content's format is mimeType\nlegth\ndata\n[...repeat for more mimetypes...].
  */
 + (bool)sendToInternalWith:(Document *_Nonnull)document content:(NSString *_Nonnull)content {
-    std::vector<char> html;
+    // If we still own the pasteboard from our own copy, the engine's in-memory
+    // transferable is the richer representation, so keep it.
+    if ([COWrapper pasteboardOwnedBy:document])
+        return true;
 
-    ClipboardData data;
-    size_t nInCount;
-
-    if ([content hasPrefix:@"<!DOCTYPE html>"]) {
-        // Content is just HTML
-        const char * _Nullable content_cstr = [content cStringUsingEncoding:NSUTF8StringEncoding];
-        html = std::vector(content_cstr, content_cstr + [content lengthOfBytesUsingEncoding:NSUTF8StringEncoding]);
-        nInCount = 1;
-    }
-    else {
-        // objcString -> std::string (keeps embedded NULs, no extra copy for UTF-8)
-        std::string buffer(static_cast<const char*>([content UTF8String]),
-                           [content lengthOfBytesUsingEncoding:NSUTF8StringEncoding]);
-
-        // put the buffer into a std::stringbuf, treated as binary (allow NULs in there), and create the input stream
-        std::stringbuf sb(buffer, std::ios::in | std::ios::binary);
-        std::istream stream(&sb);
-
-        // read the data
-        data.read(stream);
-        nInCount = data.size();
-        // DEBUG: data.dumpState(std::cout);
-    }
-
-    std::vector<size_t> pInSizes(nInCount);
-    std::vector<const char*> pInMimeTypes(nInCount);
-    std::vector<const char*> pInStreams(nInCount);
-
-    if (html.empty()) {
-        for (size_t i = 0; i < nInCount; ++i) {
-            pInSizes[i] = data._content[i].length();
-            pInStreams[i] = data._content[i].c_str();
-            pInMimeTypes[i] = data._mimeTypes[i].c_str();
-        }
-    }
-    else {
-        pInSizes[0] = html.size();
-        pInStreams[0] = html.data();
-        pInMimeTypes[0] = "text/html";
-    }
-
-    return DocumentData::get(document.appDocId).loKitDocument->setClipboard(nInCount, pInMimeTypes.data(), pInSizes.data(), pInStreams.data());
+    // Otherwise the content came from another app. Ignore the serialized HTML the
+    // JavaScript handed us and read every flavour straight off the pasteboard
+    // instead. The internal engine formats that desktop LibreOffice puts there
+    // never reach the browser's DataTransfer, and they are what a full-fidelity
+    // paste needs.
+    [COWrapper setClipboardWith:document from:[NSPasteboard generalPasteboard]];
+    return true;
 }
 
 /**
@@ -371,6 +421,19 @@ static std::atomic<int> appDocIdCounter(1);
 
 + (bool)isRtlLanguage:(NSString *)language {
     return LangUtil::isRtlLanguage(std::string([language UTF8String]));
+}
+
++ (bool)darkModeWithSystemDefault:(bool)systemDefault {
+    // TODO: persist via Desktop::getDarkMode() once common/SettingsStorage.cpp
+    // is added to coda.xcodeproj (it isn't today, so we can't link the
+    // Desktop:: layer here). For now follow the system theme on every launch.
+    return systemDefault;
+}
+
++ (void)setDarkMode:(bool)value {
+    // TODO: persist via Desktop::setDarkMode() once SettingsStorage.cpp is in
+    // the Xcode project. Silently no-op for now.
+    (void)value;
 }
 
 @end

@@ -16,25 +16,31 @@
 
 #pragma once
 
-#include <iosfwd>
+#include <common/Common.hpp>
+#include <common/Log.hpp>
+#include <common/ProcUtil.hpp>
+#include <common/Rectangle.hpp>
+#include <wsd/TileDesc.hpp>
+
+#include <chrono>
 #include <memory>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 
-#include <Rectangle.hpp>
-
-#include <common/Log.hpp>
-#include <Common.hpp>
-#include <TileDesc.hpp>
-
 class ClientSession;
+
+/// The stale-render sweep (TileCache::takeStaleRendersForReissue, called
+/// from DocumentBroker::pollThread) always runs and cleans up stale entries.
+/// This flag controls only whether the swept tiles are actually re-sent to
+/// the kit, which is off by default because re-issuing can waste renders on
+/// areas the user has scrolled past.
+#define ENABLE_STALE_TILE_REISSUE 0
 
 // The cache cares about only some properties.
 struct TileDescCacheCompareEq final
 {
-    inline bool operator()(const TileDesc& l, const TileDesc& r) const
+    bool operator()(const TileDesc& l, const TileDesc& r) const
     {
         return l.getPart() == r.getPart() &&
                l.getWidth() == r.getWidth() &&
@@ -51,7 +57,7 @@ struct TileDescCacheCompareEq final
 // The cache cares about only some properties.
 struct TileDescCacheHasher final
 {
-    inline size_t operator()(const TileDesc& t) const
+    size_t operator()(const TileDesc& t) const
     {
         size_t hash = t.getPart();
 
@@ -259,7 +265,6 @@ public:
 
     enum StreamType : std::uint8_t
     {
-        Font,
         Style,
         CmdValues,
         Last
@@ -296,6 +301,15 @@ public:
 
     int getTileBeingRenderedVersion(const TileDesc& tileDesc);
 
+    /// Sweep for renderings older than COMMAND_TIMEOUT_MS - typically
+    /// caused by a slow or stuck kit. As a side effect:
+    ///  - entries whose subscribers have all gone are removed,
+    ///  - the start time of returned entries is reset to @p now so the
+    ///    very next sweep does not see them as stale again.
+    /// Returns the tile descriptors that should be re-issued to the kit.
+    std::vector<TileDesc>
+    takeStaleRendersForReissue(std::chrono::steady_clock::time_point now);
+
     /// Set the high watermark for tilecache size
     void setMaxCacheSize(size_t cacheSize);
 
@@ -304,8 +318,21 @@ public:
 
     // Debugging bits ...
     void dumpState(std::ostream& os);
-    void setThreadOwner(const std::thread::id& id) { _owner = id; }
+    void setThreadOwner(const ProcUtil::ThreadId id) { _owner = id; }
     void assertCacheSize();
+
+#ifdef BUILDING_TESTS
+    /// Test-only: register a tile as being rendered with the given start
+    /// time, bypassing the need for a real ClientSession subscriber.
+    /// Used to simulate scenarios where the kit has stalled or hung.
+    /// If subscriber is non-null, it is added to the rendering's
+    /// subscriber list (held as a weak_ptr) so takeStaleRendersForReissue
+    /// sees a live subscriber.
+    void injectTileBeingRenderedForTest(
+        const TileDesc& tile,
+        std::chrono::steady_clock::time_point startTime,
+        const std::shared_ptr<ClientSession>& subscriber = {});
+#endif
 
 private:
     void ensureCacheSize();
@@ -345,7 +372,7 @@ private:
 
     const std::string _docURL;
 
-    std::thread::id _owner;
+    ProcUtil::ThreadId _owner;
 
     /// Approximate size of tilecache in bytes
     size_t _cacheSize;

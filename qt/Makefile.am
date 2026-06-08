@@ -1,3 +1,5 @@
+MAINTAINERCLEANFILES = Makefile.in
+
 bin_PROGRAMS = coda-qt
 
 include_paths = -I${top_srcdir}/common -I${top_srcdir}/net -I${top_srcdir}/kit -I${top_srcdir}/wsd -I${top_srcdir} ${ZSTD_CFLAGS} ${QT6_CFLAGS}
@@ -21,6 +23,7 @@ AM_LDFLAGS = -pthread ${QT6_LIBS} -ldl $(ZSTD_LIBS) ${PNG_LIBS} -lPocoZip
 # Android's CMakefile list re-worked:
 
 cmake_list= \
+            ../common/AIHttpTransport.cpp \
             ../common/Authorization.cpp \
             ../common/ConfigUtil.cpp \
             ../common/SettingsStorage.cpp \
@@ -32,6 +35,7 @@ cmake_list= \
             ../common/Log-poco.cpp \
             ../common/MobileApp.cpp \
             ../common/TraceEvent.cpp \
+            ../common/ProcUtil.cpp \
             ../common/Protocol.cpp \
             ../common/RegexUtil.cpp \
             ../common/Simd.cpp \
@@ -54,6 +58,8 @@ cmake_list= \
             ../kit/KitWebSocket.cpp \
             ../net/FakeSocket.cpp \
             ../net/Socket.cpp \
+            ../wsd/AIChatSession.cpp \
+            ../wsd/AIUtil.cpp \
             ../wsd/ClientSession.cpp \
             ../wsd/DocumentBroker.cpp \
             ../wsd/COOLWSD.cpp \
@@ -84,7 +90,7 @@ coda_qt_CXXFLAGS += -mno-direct-extern-access
 endif
 endif
 
-coda_qt_SOURCES = coda-qt.cpp Application.cpp Bridge.cpp QtClipboard.cpp DocumentOperations.cpp WebView.cpp DBusService.cpp Document.cpp $(cmake_list)
+coda_qt_SOURCES = coda-qt.cpp Application.cpp AIHttpTransport.cpp Bridge.cpp CoolUrlSchemeHandler.cpp QtClipboard.cpp DocumentOperations.cpp WebView.cpp DBusService.cpp Document.cpp $(cmake_list)
 nodist_coda_qt_SOURCES = $(BUILT_SOURCES)
 
 metainfodir = $(datadir)/metainfo
@@ -121,9 +127,9 @@ QM_FILES = $(TS_FILES:.ts=.qm)
 	mkdir -p $(dir $@)
 	@$(LRELEASE) $< -qm $@
 
-# Update .ts files from source code
+# Update .ts files from source code (Qt app only)
 update-translations:
-	@$(LUPDATE) $(top_srcdir) -ts $(TS_FILES)
+	@$(LUPDATE) $(srcdir) -ts $(TS_FILES)
 
 # Build all translations
 translations: $(QM_FILES)
@@ -182,3 +188,6 @@ EXTRA_DIST += \
 	$(TEST_DIR)/specs/open-file.spec.ts
 
 ### --- WebdriverIO test integration end ---
+
+distclean-local:
+	rm -rf .deps

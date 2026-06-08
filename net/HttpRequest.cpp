@@ -268,8 +268,10 @@ FieldParseState StatusLine::parse(const char* p, int64_t& len)
         LOG_ERR("StatusLine::parse: expected valid integer number");
         return FieldParseState::Invalid;
     }
-    _statusCode = NumUtil::safe_atoi(&p[off], len - off);
-    if (_statusCode < MinValidStatusCode || _statusCode > MaxValidStatusCode)
+
+    bool res = false;
+    std::tie(_statusCode, res) = NumUtil::u32FromString(std::string(&p[off], len - off));
+    if (!res || _statusCode < MinValidStatusCode || _statusCode > MaxValidStatusCode)
     {
         LOG_ERR("StatusLine::parse: Invalid StatusCode [" << _statusCode << "]");
         return FieldParseState::Invalid;
@@ -641,7 +643,7 @@ int64_t RequestParser::readData(const char* p, const int64_t len)
                 // This is a chunked transfer.
                 // Find the start of the chunk, which is
                 // the length of the chunk in hex.
-                // each chunk is preceeded by its length in hex.
+                // each chunk is preceded by its length in hex.
                 while (available)
                 {
 #ifdef DEBUG_HTTP
@@ -880,7 +882,7 @@ int64_t Response::readData(const char* p, int64_t len)
             // This is a chunked transfer.
             // Find the start of the chunk, which is
             // the length of the chunk in hex.
-            // each chunk is preceeded by its length in hex.
+            // each chunk is preceded by its length in hex.
             while (available)
             {
 #ifdef DEBUG_HTTP

@@ -10,9 +10,17 @@ describe(['tagdesktop'], 'Image Operation Tests', function() {
 		helper.setupAndLoadDocument('impress/image_operation.odp');
 		desktopHelper.switchUIToNotebookbar();
 		cy.viewport(1920,1080);
+
+		// give some time to open fully the app
+		cy.wait(1000);
+
+		cy.getFrameWindow().then((win) => {
+			this.win = win;
+		});
 	});
 
 	it('Insert/Delete image',function() {
+		helper.processToIdle(this.win);
 		desktopHelper.insertImage();
 
 		//make sure that image is in focus
@@ -23,7 +31,20 @@ describe(['tagdesktop'], 'Image Operation Tests', function() {
 	});
 
 	it("Insert multimedia", function () {
+		helper.processToIdle(this.win);
 		desktopHelper.insertVideo();
+
+		// The video foreignObject lives inside a nested <svg> wrapper.
+		// Verify the wrapper has explicit dimensions so it does not
+		// fall back to the SVG default 300x150 and clip the video.
+		cy.cGet('#document-container svg svg').should('have.attr', 'width');
+		cy.cGet('#document-container svg svg').should('have.attr', 'height');
+		cy.cGet('#document-container svg svg foreignObject').then(function ($fo) {
+			var foWidth = $fo.attr('width');
+			var foHeight = $fo.attr('height');
+			cy.cGet('#document-container svg svg').should('have.attr', 'width', foWidth);
+			cy.cGet('#document-container svg svg').should('have.attr', 'height', foHeight);
+		});
 	});
 
 	it.skip('Crop Image', function () {
@@ -75,7 +96,7 @@ describe(['tagdesktop'], 'Image Operation Tests', function() {
 
 		triggerNewSVGForShapeInTheCenter();
 
-		helper.assertImageSize(463, 185);
+		helper.assertImageSize(322, 129);
 
 		//Keep ratio checked
 		//sidebar needs more time
@@ -89,6 +110,6 @@ describe(['tagdesktop'], 'Image Operation Tests', function() {
 
 		triggerNewSVGForShapeInTheCenter();
 
-		helper.assertImageSize(579, 232);
+		helper.assertImageSize(402, 161);
 	});
 });

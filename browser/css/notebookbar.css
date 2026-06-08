@@ -25,6 +25,7 @@
 }
 
 label.notebookbar,
+span.notebookbar.static-label,
 .notebookbar.ui-radiobutton label {
 	line-height: var(--default-font-size);
 	font-family: var(--cool-font);
@@ -206,7 +207,7 @@ html[data-theme='dark'] .savemodified.unotoolbutton:not(.notebookbar) .unobutton
 .hasnotebookbar .notebookbar-shortcuts-bar #Menubar > li > a {
 	cursor: pointer;
 	border: none;
-	padding: 4px;
+	padding: var(--spacing-s);
 }
 
 .hasnotebookbar #shortcuts-menubar-icon {
@@ -215,7 +216,6 @@ html[data-theme='dark'] .savemodified.unotoolbutton:not(.notebookbar) .unobutton
 	left: 6px;
 	height: 2px;
 	width: 16px;
-	-webkit-transition: all 0.25s;
 	transition: all 0.25s;
 }
 
@@ -257,7 +257,7 @@ html[data-theme='dark'] .savemodified.unotoolbutton:not(.notebookbar) .unobutton
 	width: max-content;
 	display: grid;
 	grid-auto-flow: row;
-	grid-gap: 4px;
+	grid-gap: var(--spacing-s);
 }
 
 .notebookbar.ui-separator.vertical {
@@ -271,7 +271,7 @@ html[data-theme='dark'] .savemodified.unotoolbutton:not(.notebookbar) .unobutton
 .horizontal.notebookbar {
 	display: grid;
 	grid-auto-flow: column;
-	grid-gap: 4px;
+	grid-gap: var(--spacing-s);
 	align-items: center;
 	justify-items: center;
 	width: max-content;
@@ -345,10 +345,6 @@ html[data-theme='dark'] .savemodified.unotoolbutton:not(.notebookbar) .unobutton
 	height: var(--btn-img-size);
 }
 
-.has-dropdown--color.notebookbar {
-	height: var(--btn-size) !important;
-}
-
 .unotoolbutton.notebookbar .unolabel {
 	font-size: var(--header-font-size);
 	font-family: var(--cool-font);
@@ -363,21 +359,15 @@ html[data-theme='dark'] .savemodified.unotoolbutton:not(.notebookbar) .unobutton
 	flex-direction: row;
 }
 
-label.notebookbar {
-	padding-inline-start: 0;
-}
 label.notebookbar.ui-checkbox-label {
 	font-family: var(--cool-font);
 	font-size: var(--header-font-size);
 	white-space: nowrap;
+	padding-left: 0;
 }
 
-.notebookbar.ui-combobox-label {
-	margin-inline-start: 0;
-}
-
-.notebookbar #table-style-options #chk_filter_buttons2 {
-	margin-bottom: 23px;
+.notebookbar #table-options #chk_empty_row {
+	visibility: hidden;
 }
 
 #table-HomeTab .unospan-uptoolbar:not(.disabled) {
@@ -399,14 +389,14 @@ label.notebookbar.ui-checkbox-label {
 #table-HomeTab .unospan-uptoolbar img, #table-HomeTab .unospan-downtoolbar img {
 	width: 18px !important;
 	height: 18px !important;
-	padding: 4px;
+	padding: var(--spacing-s);
 }
 
 .unotoolbutton.notebookbar.disabled:not(.unospan-shortcutstoolbox),
 .unotoolbutton[disabled]:not(.unospan-shortcutstoolbox),
 .mobile-wizard-widebutton.disabled,
 .locking-disabled {
-	opacity: 0.65;
+	opacity: var(--opacity-icon-disabled);
 	cursor: not-allowed;
 }
 
@@ -421,7 +411,6 @@ label.notebookbar.ui-checkbox-label {
 .unotoolbutton.notebookbar.disabled img,
 .mobile-wizard-widebutton.disabled img,
 .unotoolbutton[disabled] img {
-	-webkit-filter: grayscale(100%) brightness(100%);
 	filter: grayscale(100%) brightness(100%);
 }
 
@@ -658,7 +647,6 @@ label.notebookbar.ui-checkbox-label {
 
 [id^='stylesview'] .ui-iconview-entry:not(.selected):hover {
 	border: 1px solid var(--color-border-dark);
-	-webkit-box-shadow: 0 0 2px 0 var(--color-background-darker);
 	box-shadow: 0 0 2px 0 var(--color-background-darker);
 	cursor: pointer;
 	background-color: transparent;
@@ -670,6 +658,7 @@ label.notebookbar.ui-checkbox-label {
 	width: 100%;
 	position: relative;
 	justify-content: start;
+	color: var(--color-main-text);
 }
 
 #stylesview-dropdown hr {
@@ -720,6 +709,10 @@ label.notebookbar.ui-checkbox-label {
 
 #numbertype select {
 	flex: 1 0;
+}
+
+.notebookbar.unoAlignBottom {
+	width: calc((var(--btn-size) + var(--btn-padding)) * 2);
 }
 
 /* Review Tab */
@@ -905,7 +898,6 @@ label.notebookbar.ui-checkbox-label {
 	margin: 0;
 	position: absolute;
 	top: 50%;
-	-ms-transform: translateY(-50%);
 	transform: translateY(-50%);
 	width: 100%;
 	text-align: center;
@@ -1014,6 +1006,10 @@ label.notebookbar.ui-checkbox-label {
 
 [class*='as-html-submenu-icon'] {
 	background: url('images/lc_downloadas-html.svg') center;
+}
+
+[class*='as-md-submenu-icon'] {
+	background: url('images/lc_downloadas-md.svg') center;
 }
 
 #context-toolbar {

@@ -41,6 +41,7 @@ class Socket {
 	private _inLayerTransaction: boolean;
 	private _slurpDuringTransaction: boolean;
 	private _accessTokenExpireTimeout: TimeoutHdl | undefined;
+	private _accessTokenExpireWarningCount: number = 0;
 	private _reconnecting: boolean;
 	private _slurpTimer: TimeoutHdl | undefined;
 	private _renderEventTimer: TimeoutHdl | undefined;
@@ -48,6 +49,8 @@ class Socket {
 	private _slurpTimerDelay: number | undefined;
 	private _slurpTimerLaunchTime: number | undefined;
 	private _zoomBeforeRenameReload: number | undefined;
+	private _renameZoomRestoreTimer: TimeoutHdl | undefined;
+	private _renameZoomRestoreAttempts: number = 0;
 	private timer: ReturnType<typeof setInterval> | undefined;
 	private workers: Worker[] = [];
 	private workerMessageHandlers: Map<string, any> = new Map();
@@ -75,6 +78,8 @@ class Socket {
 		this._slurpTimerDelay = undefined;
 		this._slurpTimerLaunchTime = undefined;
 		this._zoomBeforeRenameReload = undefined;
+		this._renameZoomRestoreTimer = undefined;
+		this._renameZoomRestoreAttempts = 0;
 		this.timer = undefined;
 		this.socket = undefined;
 		this.traceEvents = new TraceEvents(this);
@@ -148,6 +153,81 @@ class Socket {
 
 	public disableTaskWorkers() {
 		this.onWorkerError(null);
+	}
+
+	public captureZoomBeforeRenameReload(): void {
+		if (this._zoomBeforeRenameReload !== undefined) return;
+
+		const zoom = this._map.getZoom();
+		if (Number.isFinite(zoom)) {
+			if (this._renameZoomRestoreTimer) {
+				clearTimeout(this._renameZoomRestoreTimer);
+				this._renameZoomRestoreTimer = undefined;
+			}
+			this._zoomBeforeRenameReload = zoom;
+			this._renameZoomRestoreAttempts = 0;
+		}
+	}
+
+	public isRestoringZoomAfterRenameReload(): boolean {
+		return (
+			typeof this._zoomBeforeRenameReload === 'number' &&
+			Number.isFinite(this._zoomBeforeRenameReload)
+		);
+	}
+
+	private _restoreZoomAfterRenameReload(): void {
+		const zoom = this._zoomBeforeRenameReload;
+		if (typeof zoom !== 'number' || !Number.isFinite(zoom)) {
+			this._zoomBeforeRenameReload = undefined;
+			this._renameZoomRestoreAttempts = 0;
+			return;
+		}
+
+		if (this._renameZoomRestoreTimer)
+			clearTimeout(this._renameZoomRestoreTimer);
+
+		if (this._map.getZoom() !== zoom)
+			this._map.setZoom(zoom, { animate: false }, false);
+
+		this._renameZoomRestoreAttempts++;
+		if (this._renameZoomRestoreAttempts >= 40) {
+			this._zoomBeforeRenameReload = undefined;
+			this._renameZoomRestoreTimer = undefined;
+			this._renameZoomRestoreAttempts = 0;
+			return;
+		}
+
+		this._renameZoomRestoreTimer = setTimeout(() => {
+			this._restoreZoomAfterRenameReload();
+		}, 100);
+	}
+
+	// Wrap the active socket in a DelaySocket so all incoming and outgoing
+	// messages are delayed by delayMs (preserving FIFO order). No-op if
+	// already wrapped or no socket is connected.
+	public enableMessageDelay(delayMs: number): void {
+		if (!this.socket || this.socket instanceof DelaySocket) return;
+
+		const wrapper = new DelaySocket(this.socket, delayMs);
+		wrapper.onerror = this._onSocketError.bind(this);
+		wrapper.onclose = this._onSocketClose.bind(this);
+		wrapper.onopen = this._onSocketOpen.bind(this);
+		wrapper.onmessage = this._slurpMessage.bind(this);
+		this.socket = wrapper;
+	}
+
+	// Unwrap a previously-installed DelaySocket, restoring the raw socket.
+	// No-op if there is no wrapper.
+	public disableMessageDelay(): void {
+		if (!this.socket || !(this.socket instanceof DelaySocket)) return;
+
+		const inner = this.socket.unwrap();
+		inner.onerror = this._onSocketError.bind(this);
+		inner.onclose = this._onSocketClose.bind(this);
+		inner.onopen = this._onSocketOpen.bind(this);
+		inner.onmessage = this._slurpMessage.bind(this);
+		this.socket = inner;
 	}
 
 	public sendMessage(msg: MessageInterface): void {
@@ -238,8 +318,8 @@ class Socket {
 	}
 
 	private getWebSocketBaseURI(map: MapInterface): string {
-		if (window.enableExperimentalFeatures) {
-			// Use the new Cool WS URL.
+		if (window.enableExperimentalFeatures && map.options.wopiSrc) {
+			// Use the new Cool WS URL for WOPI documents.
 			return window.makeWopiCoolWsUrl(
 				window.makeWsUrl('/cool'),
 				$.param(map.options.docParams),
@@ -298,22 +378,38 @@ class Socket {
 
 		this._connectCount++;
 		this._faultInjection();
-		if (
-			map.options.docParams.access_token &&
-			parseInt(map.options.docParams.access_token_ttl as string)
-		) {
-			const tokenExpiryWarning = 900 * 1000; // Warn when 15 minutes remain
-			clearTimeout(this._accessTokenExpireTimeout);
-			this._accessTokenExpireTimeout = setTimeout(
-				this._sessionExpiredWarning.bind(this),
-				parseInt(map.options.docParams.access_token_ttl as string) -
-					Date.now() -
-					tokenExpiryWarning,
-			);
-		}
+		this.resetTokenExpiryTimer();
 
 		// process messages for early socket connection
 		this._emptyQueue();
+	}
+
+	public resetTokenExpiryTimer(): void {
+		clearTimeout(this._accessTokenExpireTimeout); // Always clear the old timer.
+		this._accessTokenExpireWarningCount = 0;
+		const ttl = parseInt(
+			this._map.options.docParams.access_token_ttl as string,
+		);
+		if (this._map.options.docParams.access_token && ttl) {
+			const tokenExpiryWarning = 900 * 1000; // Warn when 15 minutes remain
+			const delayMs = ttl - Date.now() - tokenExpiryWarning;
+			if (delayMs > 0) {
+				this._accessTokenExpireTimeout = setTimeout(
+					this._sessionExpiredWarning.bind(this),
+					delayMs,
+				);
+			} else {
+				// Token is already inside the 15-minute warning window (or has
+				// expired). Fire immediately; _sessionExpiredWarning picks the
+				// right "expiring" vs "expired" message based on ttl - now().
+				this._sessionExpiredWarning();
+				// Retrigger every 2 minutes, as a reminder.
+				this._accessTokenExpireTimeout = setTimeout(
+					this.resetTokenExpiryTimer.bind(this),
+					2 * 60 * 1000,
+				);
+			}
+		}
 	}
 
 	public close(code?: number, reason?: string): void {
@@ -656,11 +752,27 @@ class Socket {
 		const timerepr = dateTime.toLocaleDateString(String.locale, dateOptions);
 		this._map.fire('warn', { msg: expirymsg.replace('{time}', timerepr) });
 
-		// If user still doesn't refresh the session, warn again periodically
-		this._accessTokenExpireTimeout = setTimeout(
-			this._sessionExpiredWarning.bind(this),
-			120 * 1000,
-		);
+		// Notify the host so it can refresh the token programmatically.
+		const remainingMs =
+			parseInt(this._map.options.docParams.access_token_ttl as string) -
+			Date.now();
+		this._map.fire('postMessage', {
+			msgId: 'App_TokenExpiring',
+			args: {
+				Timeout: Math.max(remainingMs, 0),
+			},
+		});
+
+		// If user still doesn't refresh the session, warn again periodically.
+		// Cap at 10 retries (~20 minutes, i.e. ~5 minutes after the access_token
+		// expires) so we don't spam the host indefinitely.
+		this._accessTokenExpireWarningCount++;
+		if (this._accessTokenExpireWarningCount < 10) {
+			this._accessTokenExpireTimeout = setTimeout(
+				this._sessionExpiredWarning.bind(this),
+				120 * 1000,
+			);
+		}
 	}
 
 	public setUnloading(): void {
@@ -1039,14 +1151,30 @@ class Socket {
 			// has set the viewid
 			this._handleDelayedMessages(this._map._docLayer);
 
-			if (this._zoomBeforeRenameReload !== undefined) {
-				const zoom = this._zoomBeforeRenameReload;
-				this._zoomBeforeRenameReload = undefined;
-
-				if (Number.isFinite(zoom) && this._map.getZoom() !== zoom)
-					this._map.setZoom(zoom, { animate: false }, false);
-			}
+			this._restoreZoomAfterRenameReload();
 		}
+
+		this._maybeOfferExternalLinks(command);
+	}
+
+	// Offer per-document consent for the document's disabled external links.
+	// Editors only; the choice lasts the session.
+	private _maybeOfferExternalLinks(command: ServerCommand): void {
+		const disabled =
+			command.externallinksdisabled === true ||
+			(command.externallinksdisabled as unknown) === 'true';
+		if (!disabled || this._map.isReadOnlyMode()) return;
+
+		this._map.uiManager.showSnackbar(
+			_('This document has links to external content.'),
+			_('Allow'),
+			() => {
+				this.sendMessage('allowlinkupdate');
+			},
+			-1 /* no timeout */,
+			false /* no progress */,
+			true /* dismissable - dismiss keeps links blocked */,
+		);
 	}
 
 	private _onJSDialog(
@@ -1130,6 +1258,24 @@ class Socket {
 			this._onOsInfoMsg(textMsg);
 		} else if (textMsg.startsWith('clipboardkey: ')) {
 			this._onClipboardKeyMsg(textMsg);
+		} else if (textMsg.startsWith('executescriptresult: ')) {
+			try {
+				const result = JSON.parse(
+					textMsg.substring('executescriptresult: '.length),
+				);
+				this._map.fire('executescriptresult', result);
+			} catch (e) {
+				app.console.error('Failed to parse executescriptresult: ' + e);
+			}
+			return;
+		} else if (textMsg.startsWith('proxycall: ')) {
+			try {
+				const call = JSON.parse(textMsg.substring('proxycall: '.length));
+				this._map.fire('proxycall', call);
+			} catch (ex) {
+				app.console.error('Failed to parse proxycall: ' + ex);
+			}
+			return;
 		} else if (textMsg.startsWith('perm:')) {
 			this._onPermMsg(textMsg);
 			return;
@@ -1152,6 +1298,13 @@ class Socket {
 		} else if (textMsg.startsWith('migrate:') && window.indirectSocket) {
 			this._onMigrateMsg(textMsg);
 			return;
+		} else if (textMsg.startsWith('tokenexpired')) {
+			// Server got a 401 on save. Ask the host for a fresh token.
+			this._map.fire('postMessage', {
+				msgId: 'App_TokenExpired',
+				args: {},
+			});
+			return;
 		} else if (textMsg.startsWith('close: ')) {
 			this._onCloseMsg(textMsg);
 			return;
@@ -1165,6 +1318,11 @@ class Socket {
 			this._map._debug.reportPong(
 				command.rendercount ? command.rendercount : 0,
 			);
+		} else if (textMsg.startsWith('serverloadtimings: ')) {
+			this._onServerLoadTimingsMsg(
+				textMsg.substring('serverloadtimings: '.length),
+			);
+			return;
 		} else if (
 			textMsg.startsWith('saveas:') ||
 			textMsg.startsWith('renamefile:')
@@ -1221,7 +1379,6 @@ class Socket {
 		} else if (
 			!textMsg.startsWith('tile:') &&
 			!textMsg.startsWith('delta:') &&
-			!textMsg.startsWith('renderfont:') &&
 			!textMsg.startsWith('slidelayer:') &&
 			!textMsg.startsWith('zstdslidelayer:') &&
 			!textMsg.startsWith('windowpaint:')
@@ -1274,6 +1431,15 @@ class Socket {
 				textMsg.substring('viewsetting:'.length + 1),
 			);
 			app.serverConnectionService.onViewSetting(settingJSON);
+
+			// Desktop bootstrap: the native bridge syncs the raw
+			// viewsetting.json at startup (no aiConfigured/aiModelName yet).
+			// Push it back via updateviewsettings so the session applies the
+			// AI credentials. The handleUpdateViewSettings echo carries
+			// aiConfigured, which is how we avoid re-sending and looping.
+			if (window.ThisIsAMobileApp && settingJSON.aiConfigured === undefined) {
+				this.sendMessage('updateviewsettings ' + JSON.stringify(settingJSON));
+			}
 		}
 
 		if (textMsg.startsWith('downloadas:') || textMsg.startsWith('exportas:')) {
@@ -1315,7 +1481,6 @@ class Socket {
 				e.data.startsWith('tile:') ||
 				e.data.startsWith('tilecombine:') ||
 				e.data.startsWith('delta:') ||
-				e.data.startsWith('renderfont:') ||
 				e.data.startsWith('rendersearchlist:') ||
 				e.data.startsWith('slidelayer:') ||
 				e.data.startsWith('zstdslidelayer:') ||
@@ -1348,7 +1513,6 @@ class Socket {
 		if (
 			!isTile &&
 			!isDelta &&
-			!e.textMsg.startsWith('renderfont:') &&
 			!e.textMsg.startsWith('slidelayer:') &&
 			!e.textMsg.startsWith('windowpaint:')
 		)
@@ -1612,6 +1776,8 @@ class Socket {
 
 			if (textMsg.startsWith('renamefile:')) {
 				this._map.uiManager.documentNameInput.showLoadingAnimation();
+				if (command.filename)
+					this._map['wopi'].onRenameFile(decodeURIComponent(command.filename));
 				this._map.fire('postMessage', {
 					msgId: 'File_Rename',
 					args: {
@@ -1776,13 +1942,6 @@ class Socket {
 
 		this.TunnelledDialogImageCacheSize =
 			lokitVersionObj.tunnelled_dialog_image_cache_size;
-
-		Object.assign(window.app.serverInfo, {
-			lokitVersionName: lokitVersionObj.ProductName,
-			lokitVersionNumber: lokitVersionObj.ProductVersion,
-			lokitVersionSuffix: lokitVersionObj.ProductExtension,
-			lokitHash: lokitVersionObj.BuildId,
-		});
 	}
 
 	// 'osinfo ' message.
@@ -1855,6 +2014,23 @@ class Socket {
 	private _onLastModTimeMsg(textMsg: string): void {
 		const time = textMsg.substring(textMsg.indexOf(' ') + 1);
 		this._map.updateModificationIndicator(time);
+	}
+
+	private _onServerLoadTimingsMsg(payload: string): void {
+		const parsed: { [k: string]: number } = {};
+		for (const tok of payload.split(/\s+/)) {
+			if (!tok) continue;
+			const eq = tok.indexOf('=');
+			if (eq < 0) continue;
+			const k = tok.substring(0, eq);
+			const v = Number(tok.substring(eq + 1));
+			if (!isFinite(v)) continue;
+			parsed[k] = v;
+		}
+		this._map._serverLoadTimings = parsed;
+		if (this._map._debug && this._map._debug.dumpServerLoadTimings) {
+			this._map._debug.dumpServerLoadTimings();
+		}
 	}
 
 	// 'commandresult: ' message.
@@ -1976,7 +2152,7 @@ class Socket {
 				showMsgAndReload = true;
 			}
 		} else if (textMsg.startsWith('reloadafterrename')) {
-			this._zoomBeforeRenameReload = this._map.getZoom();
+			this.captureZoomBeforeRenameReload();
 			showMsgAndReload = true;
 		}
 

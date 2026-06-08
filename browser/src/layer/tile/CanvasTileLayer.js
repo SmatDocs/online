@@ -3,7 +3,7 @@
  * window.L.CanvasTileLayer is a layer with canvas based rendering.
  */
 
-/* global app JSDialog CanvasSectionContainer GraphicSelection CanvasOverlay CursorHeaderSection $ _ CPolyUtil CPolygon Cursor UNOKey cool OtherViewCellCursorSection TileManager SplitSection TextSelections CellSelectionMarkers URLPopUpSection CalcValidityDropDown DocumentBase CellCursorSection FormFieldButton TextCursorSection CStyleData CSelections CReferences OtherViewGraphicSelectionSection */
+/* global app JSDialog CanvasSectionContainer GraphicSelection CanvasOverlay CursorHeaderSection $ _ CPolyUtil CPolygon Cursor UNOKey cool OtherViewCellCursorSection TileManager SplitSection TextSelections CellSelectionMarkers URLPopUpSection CalcValidityDropDown DocumentBase CellCursorSection FormFieldButton TextCursorSection CStyleData CSelections CReferences OtherViewGraphicSelectionSection CompareChangesLabelSection */
 
 function clamp(num, min, max)
 {
@@ -481,7 +481,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		app.sectionContainer.setDocumentAnchorSection(app.CSections.Tiles.name);
 
 		if (this._docType === 'text')
-			app.sectionContainer.addSection(new app.definitions.compareChangesLabelSection());
+			app.sectionContainer.addSection(new CompareChangesLabelSection());
 
 		app.sectionContainer.getSectionWithName('tiles').onResize();
 
@@ -885,9 +885,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		else if (textMsg.startsWith('mousepointer:')) {
 			this._onMousePointerMsg(textMsg);
 		}
-		else if (textMsg.startsWith('renderfont:')) {
-			this._onRenderFontMsg(textMsg, img);
-		}
 		else if (textMsg.startsWith('searchnotfound:')) {
 			this._onSearchNotFoundMsg(textMsg);
 		}
@@ -959,8 +956,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			}
 	}
 		else if (textMsg.startsWith('clipboardchanged')) {
-			var jMessage = textMsg.substr(17);
-			jMessage = JSON.parse(jMessage);
+			var jMessage = JSON.parse(textMsg.substr(17));
 
 			if (jMessage.mimeType === 'text/plain') {
 				this._map._clip.setTextSelectionHTML(jMessage.content);
@@ -971,6 +967,10 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 				else // Or use previous method.
 					this._map._clip._execCopyCutPaste('copy');
 			}
+		}
+		else if (textMsg.startsWith('clipboardmimetypes:')) {
+			if (window.ThisIsTheQtApp)
+				window.postMobileMessage('CLIPBOARDMIMETYPES' + textMsg.substr(19));
 		}
 		else if (textMsg.startsWith('textselectionend:')) {
 			this._onTextSelectionEndMsg(textMsg);
@@ -1005,6 +1005,30 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 				this._map.fire('aichatresult', json);
 			} catch (e) {
 				window.app.console.error('Failed to parse aichatresult: ' + e);
+			}
+		}
+		else if (textMsg.startsWith('aichatprogress:')) {
+			try {
+				var json = JSON.parse(textMsg.substring('aichatprogress:'.length));
+				this._map.fire('aichatprogress', json);
+			} catch (e) {
+				window.app.console.error('Failed to parse aichatprogress: ' + e);
+			}
+		}
+		else if (textMsg.startsWith('aichatapproval:')) {
+			try {
+				var json = JSON.parse(textMsg.substring('aichatapproval:'.length));
+				this._map.fire('aichatapproval', json);
+			} catch (e) {
+				window.app.console.error('Failed to parse aichatapproval: ' + e);
+			}
+		}
+		else if (textMsg.startsWith('aichatchoices:')) {
+			try {
+				var json = JSON.parse(textMsg.substring('aichatchoices:'.length));
+				this._map.fire('aichatchoices', json);
+			} catch (e) {
+				window.app.console.error('Failed to parse aichatchoices: ' + e);
 			}
 		}
 		else if (textMsg.startsWith('hrulerupdate:')) {
@@ -1123,6 +1147,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		else if (textMsg.startsWith('comment:')) {
 			var obj = JSON.parse(textMsg.substring('comment:'.length + 1));
 			app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).onACKComment(obj);
+			this._map.fire('comment', obj);
 		}
 		else if (textMsg.startsWith('redlinetablemodified:')) {
 			obj = JSON.parse(textMsg.substring('redlinetablemodified:'.length + 1));
@@ -1156,8 +1181,11 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			this._map.lockAccessibilityOn();
 		}
 		else if (textMsg.startsWith('a11y')) {
-			if (!window.prefs.getBoolean('accessibilityState'))
-				throw 'A11y events come from the core while it is disabled in the client session.';
+			if (!window.prefs.getBoolean('accessibilityState')) {
+				window.app.console.warn(
+					'dropping a11y event received with accessibility disabled: ' + textMsg);
+				return;
+			}
 
 			if (textMsg.startsWith('a11yfocuschanged:')) {
 				obj = JSON.parse(textMsg.substring('a11yfocuschanged:'.length + 1));
@@ -1262,6 +1290,10 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		} else if (textMsg.startsWith('presentationinfo:')) {
 			var content = JSON.parse(textMsg.substring('presentationinfo:'.length + 1));
 			this._map.fire('presentationinfo', content);
+		} else if (textMsg.startsWith('slidesections:')) {
+			var sections = JSON.parse(textMsg.substring('slidesections:'.length + 1));
+			app.impress.sections = sections;
+			this._map.fire('updatesections', {sections: sections});
 		} else if (textMsg.startsWith('slideshowfollow')) {
 			const eventInfo = textMsg.substr('slideshowfollow '.length);
 			const parameterStartIndex = eventInfo.indexOf('{');
@@ -1312,6 +1344,8 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			const preview = this._map._docPreviews ? this._map._docPreviews[command.part] : null;
 			if (preview) { preview.invalid = true; }
 
+			this.clearCachedVectorThumbnail(command.part);
+
 			const topLeftTwips = new cool.Point(command.x, command.y);
 			const offset = new cool.Point(command.width, command.height);
 			const bottomRightTwips = topLeftTwips.add(offset);
@@ -1319,6 +1353,13 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			// 1s after the last invalidation, update the preview
 			clearTimeout(this._previewInvalidator);
 			this._previewInvalidator = setTimeout(window.L.bind(this._invalidatePreviews, this), this.options.previewInvalidationTimeout);
+		}
+	},
+
+	// Drop the cached vector tile for the input part.
+	clearCachedVectorThumbnail: function(part) {
+		if (this._vectorThumbnails) {
+			this._vectorThumbnails.clearCachedPart(part);
 		}
 	},
 
@@ -1460,54 +1501,27 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		this._lastFormula = newFormula;
 		this._map.fire('cellformula', {formula: newFormula});
 
-		if (this.isCalc()) {
-			this._checkForFormulaError(newFormula);
+		// Clear pending error; statechanged CellFormulaError will set it
+		// if the new cell has one.
+		this._pendingCellError = null;
+	},
+
+	_onCellFormulaError: function (state) {
+		if (state && typeof state === 'object' && state.error) {
+			this._pendingCellError = state;
+		} else {
+			this._pendingCellError = null;
+			app.definitions.formulaErrorHelpSection.hide();
 		}
+		this._showPendingCellError();
 	},
 
-	_checkForFormulaError: function (formula) {
-		app.definitions.formulaErrorHelpSection.hide();
-
-		if (!app.map.isAIConfigured || !formula || !formula.startsWith('='))
+	_showPendingCellError: function () {
+		if (!this._pendingCellError || !app.calc.cellCursorVisible)
 			return;
-
-		if (this._formulaErrorCheckTimer)
-			clearTimeout(this._formulaErrorCheckTimer);
-
-		this._formulaErrorCheckTimer = setTimeout(
-			this._doFormulaErrorCheck.bind(this),
-			300,
-		);
-	},
-
-	_doFormulaErrorCheck: function () {
-		this._formulaErrorCheckTimer = null;
-
-		var handleResponse = function (e) {
-			if (e.commandName === '.uno:FormulaDepChain') {
-				clearTimeout(timeout);
-				app.map.off('commandvalues', handleResponse);
-				if (
-					e.commandValues &&
-					e.commandValues.hasError &&
-					app.calc.cellCursorVisible
-				) {
-					var rect = app.calc.cellCursorRectangle;
-					var pos = new cool.SimplePoint(
-						rect.x2,
-						rect.y1,
-					);
-					app.definitions.formulaErrorHelpSection.show(pos);
-				}
-			}
-		};
-
-		var timeout = setTimeout(function () {
-			app.map.off('commandvalues', handleResponse);
-		}, 3000);
-
-		app.map.on('commandvalues', handleResponse);
-		app.socket.sendMessage('commandvalues command=.uno:FormulaDepChain');
+		var rect = app.calc.cellCursorRectangle;
+		var pos = new cool.SimplePoint(rect.x1, rect.y2);
+		app.definitions.formulaErrorHelpSection.show(pos, this._pendingCellError);
 	},
 
 	_onCalcFunctionUsageMsg: function (textMsg) {
@@ -1768,8 +1782,9 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		// Remove input help if there is any:
 		app.definitions.validityInputHelpSection.removeValidityInputHelp();
 
-		// Hide formula error help button when cell cursor changes.
+		// Reposition formula error button with the updated cursor rect.
 		app.definitions.formulaErrorHelpSection.hide();
+		this._showPendingCellError();
 	},
 
 	_onDocumentRepair: function (textMsg) {
@@ -2041,7 +2056,9 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		if (section) {
 			const showCursor = obj.visible === 'true';
 			section.sectionProperties.showCursor = showCursor;
-			section.setShowSection(showCursor);
+			section.setShowSection(section.checkMyVisibility());
+			if (!section.showSection)
+				CursorHeaderSection.deletePopUpNow(viewId);
 		}
 	},
 
@@ -2094,15 +2111,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		// Sending postMessage about View_Added / View_Removed is
 		// deprecated, going forward we prefer sending the entire information.
 		this._map.fire('updateviewslist');
-	},
-
-	_onRenderFontMsg: function (textMsg, img) {
-		var command = app.socket.parseServerCmd(textMsg);
-		this._map.fire('renderfont', {
-			font: command.font,
-			char: command.char,
-			img: img
-		});
 	},
 
 	_onSearchNotFoundMsg: function (textMsg) {
@@ -2217,6 +2225,14 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		}
 		else if (textMsg.startsWith('.uno:Context=') && this.isImpress()) {
 			this._selectionContextChanged(textMsg.replace('.uno:Context=', ''));
+		}
+		else if (textMsg.startsWith('headerfooterboundary=')) {
+			textMsg = textMsg.substring('headerfooterboundary='.length);
+			if (!app.sectionContainer.doesSectionExist(app.CSections.HeaderFooterBoundary.name)) {
+				app.sectionContainer.addSection(new cool.HeaderFooterBoundarySection());
+			}
+			var hfBoundarySection = app.sectionContainer.getSectionWithName(app.CSections.HeaderFooterBoundary.name);
+			hfBoundarySection.update(JSON.parse(textMsg));
 		}
 		else {
 			var index = textMsg.indexOf('=');
@@ -2558,6 +2574,8 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			if (!this._map.wholeColumnSelected && !this._map.wholeRowSelected) {
 				const address = document.querySelector('#addressInput input').value;
 				if (!this._isWholeColumnSelected(address) && !this._isWholeRowSelected(address)) {
+					// Reset previous scroll for cell selection message. Because cell selection already includes latest position (shouldn't accumulate).
+					app.activeDocument.activeLayout.scrollProperties.moveBy = null;
 					app.activeDocument.activeLayout.scroll(scrollX, scrollY);
 				}
 			}
@@ -3011,7 +3029,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			return;
 		}
 
-		if (!app.file.textCursor.visible) {
+		if (!app.file.textCursor.visible && !GraphicSelection.hasActiveSelection()) {
 			this._updateCursorAndOverlay();
 			TextCursorSection.updateVisibilities(true);
 			return;
@@ -3078,7 +3096,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 	// enable or disable blinking cursor and the cursor overlay depending on
 	// the state of the document (if the flags are set)
 	_updateCursorAndOverlay: function (/*update*/) {
-		if (app.file.textCursor.visible   // only when LOK has told us it is ok
+		if (app.file.textCursor.visible   // only when COKit has told us it is ok
 			&& this._map.editorHasFocus()   // not when document is not focused
 			&& !this._map.isSearching()  	// not when searching within the doc
 			&& !this._isZooming             // not when zooming
@@ -3116,6 +3134,9 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 				&& !JSDialog.IsAnyInputFocused() && (this._map._docLayer._preview && !this._map._docLayer._preview.partsFocused))
 				this._map.focus(false);
 		}
+
+		if (app.map._textInput && app.activeDocument)
+			app.map._textInput.update();
 
 		// when first time we updated the cursor - document is loaded
 		// let's move cursor to the target
@@ -3280,68 +3301,142 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		}
 	},
 
+	/* in impress, we always recalculate zoom on resize to keep the slide in-view.
+	 * so the second condition is unnecessary, but we keep it for consistency. */
 	recalculateZoomOnResize: function() {
-		if (this.isWriter())
+		if (this.isWriter() || this.isImpress())
 			this._invalidateZoomFirstFit = true;
 	},
 
-	// This is really just called on zoomend
+	_getWriterDefaultZoom: function() {
+		const ZOOM_LEVEL_20 = 1;
+		const ZOOM_LEVEL_400 = 18;
+		const ZOOM_LEVEL_100 = 10;
+
+		let defaultZoom = parseInt(window.prefs.get('defaultZoom'));
+		defaultZoom = isNaN(defaultZoom) ? ZOOM_LEVEL_100 : defaultZoom + 1;
+		if (ZOOM_LEVEL_20 <= defaultZoom && defaultZoom <= ZOOM_LEVEL_400) {
+			return defaultZoom;
+		} else {
+			return ZOOM_LEVEL_100;
+		}
+	},
+
+	_getMaxZoom: function() {
+		if (this.isImpress())
+			return 13; /* 170% */
+		if (this.isWriter())
+			return 13; /* 170% */
+
+		window.app.console.error('_getMaxZoom should only be called for Impress or Writer.');
+		return 10; /* failsafe 100% */
+	},
+
+	_recalcZoom: function(newSize, bringCommentsIntoView, maxZoom) {
+		let _zoom;
+
+		const commentWidth = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).sectionProperties.commentWidth;
+		let documentWidth = app.activeDocument.fileSize.pX;
+		let documentHeight = app.activeDocument.fileSize.pY;
+		if (this.isWriter() && bringCommentsIntoView) newSize.x -= commentWidth;
+
+		var ratio = newSize.x / documentWidth;
+		_zoom = this._map.getScaleZoom(ratio);
+
+		/* assume that this is the range of diagonal sizes we are going to get
+		 * for the window and find where the current window size lies in these,
+		 * clamping it between [0,1]. then find appropriate margin between 4-9%
+		 * based on the window size factor. */
+		if (this.isImpress()) {
+			const MAX_DIAGONAL = 2200;
+			const MIN_DIAGONAL = 1000;
+			const diagonal = Math.sqrt(window.innerWidth * window.innerWidth + window.innerHeight + window.innerHeight);
+			const factor = clamp((diagonal - MIN_DIAGONAL) / (MAX_DIAGONAL - MIN_DIAGONAL), 0, 1);
+
+			const percentMargin = 0.04 + factor * (0.09 - 0.04);
+			const availW = newSize.x * (1 - percentMargin);
+			const availH = newSize.y * (1 - percentMargin);
+
+			const xRatio = availW / documentWidth;
+			const yRatio = availH / documentHeight;
+			ratio = Math.min(xRatio, yRatio);
+			_zoom = this._map.getScaleZoom(ratio);
+		}
+
+		if (maxZoom) _zoom = Math.min(maxZoom, Math.max(0.1, _zoom));
+		return _zoom;
+	},
+
+	/**
+	 * This is really just called on zoomend
+	 *
+	 * @param recalcFirstFit
+	 * 		Passed by the UI dispatches like 'Zoom to Fit Page Width' button
+	 *		in order to reset the zoom. It is used to recalculate/reset the
+	 *		document zoom level to the maximum possible value based on the
+	 *		window size (available canvas area).
+	 *
+	 * 		The `smartZoom` option should not block fit-width-zoom if this
+	 * 		parameter is set to `true`, in case smartZoom is disabled (== false).
+	 */
 	_fitWidthZoom: function (e, maxZoom, recalcFirstFit=false) {
 		if (this.isCalc() || this.isDraw())
 			return;
-
-		if (this._map.uiManager.getStartCompareChanges()) {
-			// comparechanges view, don't zoom in, to have space for two pages side by
-			// side.
+		if (app.activeDocument.fileSize.x === 0)
 			return;
-		}
+		if (this._map.uiManager.getStartCompareChanges()) // comparechanges view, don't zoom in, to have space for two pages side by side.
+			return;
 
-		if (!maxZoom) {
-			if (this.isImpress()) maxZoom = 10;
-			else if (this.isWriter()) maxZoom = 13;
-		}
-
-		if (this._invalidateZoomFirstFit) {
-			recalcFirstFit = true;
-			this._invalidateZoomFirstFit = false;
-		}
-
-		if (app.activeDocument.fileSize.x === 0) { return; }
 		var oldSize = e && e.oldSize ? e.oldSize : this._map.getSize();
 		var newSize = e && e.newSize ? e.newSize : this._map.getSize();
-
 		newSize.x *= app.dpiScale;
 		newSize.y *= app.dpiScale;
 		oldSize.x *= app.dpiScale;
 		oldSize.y *= app.dpiScale;
 
 		let bringCommentsIntoView = false;
-		if (this.isWriter() && app.activeDocument.partHasComments && (recalcFirstFit || !this._includedCommentsInFirstFit)) {
-			bringCommentsIntoView = true;
-			this._includedCommentsInFirstFit = true;
-			this._firstFitDone = false;
+		let changeZoom = false;
+
+		if (this.isWriter()) {
+			const smartZoomEnabled = window.prefs.get('smartZoom') != 'false';
+			if (smartZoomEnabled) {
+				if (this._invalidateZoomFirstFit) {
+					recalcFirstFit = true;
+					this._invalidateZoomFirstFit = false;
+				}
+			}
+
+			// this isn't being triggered now when the sidebar shows up
+			const considerCommentWidthInOffset = () => {
+				if (app.activeDocument.partHasComments) {
+					if ((recalcFirstFit || !this._includedCommentsInFirstFit)) {
+						bringCommentsIntoView = true;
+						this._includedCommentsInFirstFit = true;
+						this._firstFitDone = false;
+					}
+				}
+			}
+
+			changeZoom  = smartZoomEnabled || recalcFirstFit;
+			if (changeZoom)
+				considerCommentWidthInOffset();
+		} else if (this.isImpress()) {
+			recalcFirstFit = true;
 		}
 
-		// `recalcFirstFit` is used to recalculate/reset the zoom levels to the
-		// maximum possible zoom level based on the window (canvas) size.
 		if (recalcFirstFit)
 			this._firstFitDone = false;
-
-		// if we are here then that means we have the document size
-		// therefore we should continue and do the firstFit zoom resize,
-		// or else it keeps waiting for a resize event.
 		if (this._firstFitDone && newSize.x - oldSize.x === 0)
 			return;
 
-		const commentWidth = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).sectionProperties.commentWidth;
-		let documentWidth = app.activeDocument.fileSize.pX;
-		if (bringCommentsIntoView) documentWidth += commentWidth;
+		maxZoom = maxZoom || this._getMaxZoom();
 
-		var ratio = newSize.x / documentWidth;
-		var zoom = this._map.getScaleZoom(ratio);
-
-		if (maxZoom)
-			zoom = Math.min(maxZoom, Math.max(0.1, zoom));
+		var zoom;
+		if (this.isImpress() || changeZoom /* writer */) {
+			zoom = this._recalcZoom(newSize, bringCommentsIntoView, maxZoom);
+		} else {
+			zoom = this._getWriterDefaultZoom();
+		}
 
 		// Not clear why we wanted to zoom in the past.
 		// This resets the view & scroll area and does a 'panTo'
@@ -3804,6 +3899,15 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			app.sectionContainer.requestReDraw();
 			this._map.fire('sizeincreased');
 		}
+
+		//Recompute the file-based layout here, after the width has settled, so the
+		//stacked pages stay centered.
+		if (
+			app.file.fileBasedView &&
+			app.activeDocument.activeLayout.type === 'ViewLayoutFileBased'
+		) {
+			app.activeDocument.activeLayout.reset();
+		}
 	},
 
 	hasSplitPanesSupport: function () {
@@ -3883,7 +3987,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			map.on('resize', this._fitWidthZoom, this);
 		}
 		this._map.on('resize', this._syncTileContainerSize, this);
-		// Retrieve the initial cell cursor position (as LOK only sends us an
+		// Retrieve the initial cell cursor position (as COKit only sends us an
 		// updated cell cursor when the selected cell is changed and not the initial
 		// cell).
 		map.on('statusindicator',
@@ -3899,6 +4003,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			if (e.detail.perm !== 'edit') {
 				this._clearSelections();
 			}
+			TileManager.update();
 		}.bind(this));
 
 		map.setPermission(app.file.permission);
@@ -4135,16 +4240,38 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			found = false;
 		}
 
+		const layout = app.activeDocument.activeLayout;
+		const useLayoutRects = layout.viewRectangles && layout.viewRectangles.length === this._parts;
 		var partHeightPixels = Math.round((this._partHeightTwips + this._spaceBetweenParts) * app.twipsToPixels);
 		var partWidthPixels = Math.round(this._partWidthTwips * app.twipsToPixels);
 
 		var rectangle;
 		var maxArea = -1;
-		const viewedRectangle = app.activeDocument.activeLayout.viewedRectangle.pToArray();
+		// Use the actual canvas viewport instead of layout.viewedRectangle:
+		// ViewLayoutFileBased inflates viewedRectangle to the full bounds of every
+		// intersecting page, which would make all visible parts report the same
+		// area here and freeze the selection on _selectedPart.
+		let visibleRect;
+		if (useLayoutRects) {
+			const documentAnchor = app.sectionContainer.getSectionWithName(app.CSections.Tiles.name);
+			visibleRect = [
+				layout.scrollProperties.viewX,
+				layout.scrollProperties.viewY,
+				documentAnchor.size[0],
+				documentAnchor.size[1],
+			];
+		} else {
+			visibleRect = layout.viewedRectangle.pToArray();
+		}
 		const candidates = [];
 		for (i = 0; i < parts.length; i++) {
-			rectangle = [0, partHeightPixels * parts[i].part, partWidthPixels, Math.round(this._partHeightTwips * app.twipsToPixels)];
-			rectangle = app.LOUtil._getIntersectionRectangle(rectangle, viewedRectangle);
+			if (useLayoutRects) {
+				const vr = layout.viewRectangles[parts[i].part];
+				rectangle = [vr.pX1, vr.pY1, vr.pWidth, vr.pHeight];
+			} else {
+				rectangle = [0, partHeightPixels * parts[i].part, partWidthPixels, Math.round(this._partHeightTwips * app.twipsToPixels)];
+			}
+			rectangle = app.LOUtil._getIntersectionRectangle(rectangle, visibleRect);
 			if (rectangle) {
 				const currentArea = rectangle[2] * rectangle[3];
 				if (currentArea > maxArea) {
@@ -4189,6 +4316,11 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			if (this._selectedPart !== partToSelect) {
 				this._selectedPart = partToSelect;
 				app.socket.sendMessage('setclientpart part=' + this._selectedPart);
+				this._map.fire('setpart', {
+					selectedPart: this._selectedPart,
+					parts: this._parts,
+					docType: this._docType
+				});
 			}
 			this._preview._scrollToPart();
 			this.highlightCurrentPart(partToSelect);

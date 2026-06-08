@@ -27,7 +27,7 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		return (twips * 127 + 36) / 72;
 	},
 
-	newAnnotation: function (comment) {
+	newAnnotation: function (commentData) {
 		var commentList = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).sectionProperties.commentList;
 		var comment = null;
 
@@ -52,7 +52,8 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 				id: 'new',
 				tab: this._selectedPart,
 				dateTime: new Date().toISOString(),
-				author: this._map.getViewName(this._viewId)
+				author: this._map.getViewName(this._viewId),
+				threaded: commentData ? commentData.threaded : undefined,
 			};
 
 			if (app.sectionContainer.doesSectionExist('new comment')) // If adding a new comment has failed, we need to remove the leftover.
@@ -181,7 +182,9 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 				TileManager.tileSize);
 		}
 		this._restrictDocumentSize();
+		this.dontSendSplitPosToCore = true;
 		this.setSplitPosFromCell();
+		this.dontSendSplitPosToCore = false;
 		this._map.fire('zoomchanged');
 		this.refreshViewData();
 		this._replayPrintTwipsMsgs(false);
@@ -424,12 +427,13 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		if (statusJSON.width && statusJSON.height && this._documentInfo !== textMsg) {
 			const previousStatusJSON = this._lastStatusJSON ? Object.assign({}, this._lastStatusJSON): null;
 			this._lastStatusJSON = statusJSON;
-			this._documentInfo = textMsg;
-
-			var firstSelectedPart = (typeof this._selectedPart !== 'number');
 
 			if (statusJSON.readonly && !this._documentInfo)
 				this._map.setPermission('readonly');
+
+			this._documentInfo = textMsg;
+
+			var firstSelectedPart = (typeof this._selectedPart !== 'number');
 
 			app.activeDocument.fileSize = new cool.SimplePoint(statusJSON.width, statusJSON.height);
 			app.activeDocument.activeLayout.viewSize = app.activeDocument.fileSize.clone();
@@ -927,6 +931,8 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 				var grid = document.getElementById('document-canvas');
 				grid.classList.add('spreadsheet-cursor');
 				grid.style.cursor = '';
+				// More of a workaround, clear displayed references outside insert mode
+				this._map._docLayer._clearReferences();
 			}
 		}
 		else if (e.commandName === '.uno:ToggleSheetGrid') {
@@ -952,6 +958,9 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		}
 		else if (e.commandName === 'TableAutoFillInfo') {
 			this._onTableAutoFillStateChanged(e.state.rectangle);
+		}
+		else if (e.commandName === 'CellFormulaError') {
+			this._onCellFormulaError(e.state);
 		}
 	},
 
@@ -1069,6 +1078,9 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 			this._handleSheetGeometryDataMsg(values, differentSheet);
 			this._syncTileContainerSize();
 		} else if (values.comments) {
+			values.comments.forEach(function(comment) {
+				comment.id = String(comment.id);
+			});
 			app.sectionContainer.getSectionWithName(app.CSections.CommentList.name).importComments(values.comments);
 		} else if (values.commentsPos) {
 			var section = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
@@ -1078,7 +1090,7 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 			});
 			for (var index in values.commentsPos) {
 				comment = values.commentsPos[index];
-				var commentObject = section.getComment(comment.id);
+				var commentObject = section.getComment(String(comment.id));
 				if (commentObject) {
 					if (commentObject.sectionProperties.data.tab !== comment.tab) {
 						// tabs can be moved around and we need to update the tab because the id is still valid.

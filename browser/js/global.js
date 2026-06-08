@@ -11,8 +11,18 @@ window.app = {
 	console: {}
 };
 
-// Ensure JSDialog exists before jsdialog utilities attach methods.
-window.JSDialog = window.JSDialog || {};
+// Snap any html or body scroll back to 0 immediately, because Chromium can silently scroll them to
+// bring the caret in the hidden #clipboard-area contenteditable into view (an invisible scroll,
+// since body has overflow:hidden, that still shifts the visible UI up by the chrome-height delta
+// when focus arrives during a chrome rebuild like the readonly-to-edit transition), and
+// {preventScroll: true} on .focus() is not enough because Chromium's selection-into-view path runs
+// independently of focus():
+window.addEventListener('scroll', function() {
+	if (document.documentElement.scrollTop !== 0)
+		document.documentElement.scrollTop = 0;
+	if (document.body && document.body.scrollTop !== 0)
+		document.body.scrollTop = 0;
+}, true);
 
 // For typings (including the global object), please see browser/src/global.d.ts
 
@@ -195,9 +205,6 @@ class BrowserProperties {
 			isCODesktop: function() {
 				return global.ThisIsTheMacOSApp || global.ThisIsTheQtApp || global.ThisIsTheWindowsApp;
 			},
-			isNewDocument: function() {
-				return window.coolParams.get('isnewdocument');
-			},
 			isDesktop: function() {
 				if (global.ThisIsTheWindowsApp || global.ThisIsTheQtApp	|| global.ThisIsTheMacOSApp)
 					return true;
@@ -251,7 +258,7 @@ class InitializerBase {
 		window.hexifyUrl = false;
 		window.versionPath = "";
 		window.accessToken = element.dataset.accessToken;
-		window.accessTokenTTL = element.dataset.accessTokenTtl;
+		window.accessTokenTTL = element.dataset.accessTokenTtl || '0';
 		window.noAuthHeader = element.dataset.noAuthHeader;
 		window.accessHeader = element.dataset.accessHeader;
 		window.postMessageOriginExt = "";
@@ -271,7 +278,13 @@ class InitializerBase {
 		window.useStatusbarSaveIndicator = false;
 		window.checkFileInfoOverride = {};
 		window.deeplEnabled = false;
-		window.zoteroEnabled = false;
+		// Match COOL's zotero.enable default (true). On the desktop the plugin
+		// is still gated on a user-provided API key (and !isSmallScreenDevice)
+		// so this only surfaces the feature where it makes sense.
+		window.zoteroEnabled = true;
+		// Match COOL's document_signing.enable default (true). Without this the
+		// Sign UI (Backstage entry, notebookbar File-tab button) stays hidden.
+		window.documentSigningEnabled = true;
 		window.savedUIState = true;
 		window.extraExportFormats = [];
 		window.wasmEnabled = false;
@@ -356,13 +369,7 @@ class InitializerBase {
 		const theme_name = document.getElementById('init-branding-name').value;
 		let theme_prefix = '';
 
-		// Prefer a ?theme=... query param from the host integration (WOPI URL)
-		const theme_from_qs = window.coolParams && typeof window.coolParams.get === 'function' ? window.coolParams.get('theme') : '';
-		if (theme_from_qs) {
-			window.useIntegrationTheme = true;
-			theme_prefix = theme_from_qs + '/';
-		}
-		else if(window.useIntegrationTheme && theme_name !== '')
+		if(window.useIntegrationTheme && theme_name !== '')
 			theme_prefix = theme_name + '/';
 
 		if (window.mode.isSmallScreenDevice()) {
@@ -386,7 +393,17 @@ class InitializerBase {
 
 	initializeViewMode() {
 		const darkTheme = window.coolParams.get('darkTheme');
-		if (darkTheme) { window.uiDefaults = { 'darkTheme': 'true' }; }
+		if (window.mode.isCODesktop()) {
+			// The desktop app passes the saved (or system) dark-mode choice here.
+			// prefs isn't constructed yet at this point in init, so write
+			// localStorage directly - prefs reads it from there once it is set up.
+			if (darkTheme === 'true' || darkTheme === 'false') {
+				try { window.localStorage.setItem('darkTheme', darkTheme); }
+				catch (e) { /* localStorage may be unavailable */ }
+			}
+		} else if (darkTheme) {
+			window.uiDefaults = { 'darkTheme': 'true' };
+		}
 	}
 
 	afterInitialization() {
@@ -488,12 +505,15 @@ class MobileAppInitializer extends InitializerBase {
 
 		window.MobileAppName = element.dataset.mobileAppName;
 		window.brandProductName = element.dataset.mobileAppName;
+		window.vendor = element.dataset.vendor;
+		window.copyrightYear = element.dataset.copyrightYear;
 
 		window.coolLogging = "true";
 		window.outOfFocusTimeoutSecs = 1000000;
 		window.idleTimeoutSecs = 1000000;
 
 		window.canvasSlideshowEnabled = true;
+		window.enableAccessibility = true;
 	}
 }
 
@@ -814,7 +834,7 @@ function showWelcomeSVG() {
 
 	global.prefs = {
 		_localStorageCache: {}, // TODO: change this to new Map() when JS version allows
-		_userBrowserSetting: new Map(),
+		_userBrowserSetting: {},
 		_settingUpdateJSON: {},
 		_pendingSettingUpdate: undefined,
 		useBrowserSetting: false,
@@ -853,8 +873,21 @@ function showWelcomeSVG() {
 
 			processObject(settingJSON);
 
+			if (global.mode.isCODesktop()) {
+				// Dark mode is native-owned (preferences.json) on the desktop, so
+				// don't let browsersetting.json shadow it - browser settings take
+				// priority over localStorage in prefs.get().
+				delete global.prefs._userBrowserSetting['darkTheme'];
+			}
+
 			global.prefs._localStorageCache = {};
-			global.prefs.useBrowserSetting = true;
+			// On the desktop apps the Interface Settings dialog is gone and the
+			// browsersetting action=update protocol message is #if !MOBILEAPP in
+			// WSD, so leaving useBrowserSetting=true would let stale synced
+			// values shadow per-toggle changes the View menu writes to
+			// localStorage. Keep localStorage authoritative here.
+			if (!global.ThisIsAMobileApp)
+				global.prefs.useBrowserSetting = true;
 
 			// make sure set accessibilityState for cypress
 			global.getAccessibilityState();
@@ -905,7 +938,7 @@ function showWelcomeSVG() {
 		},
 
 		get: function(key, defaultValue = undefined) {
-			if (key in global.prefs._localStorageCache) {
+			if (global.prefs._localStorageCache[key] !== undefined) {
 				return global.prefs._localStorageCache[key];
 			}
 
@@ -1000,12 +1033,12 @@ function showWelcomeSVG() {
 
 		remove: function(key) {
 			if (global.prefs.useBrowserSetting) {
-				global.prefs._userBrowserSetting.delete(key);
+				delete global.prefs._userBrowserSetting[key];
 			}
 			if (global.prefs.canPersist) {
 				global.localStorage.removeItem(key);
 			}
-			global.prefs._localStorageCache[key] = undefined;
+			delete global.prefs._localStorageCache[key];
 		},
 
 		getBoolean: function(key, defaultValue = false) {
@@ -1668,7 +1701,7 @@ function showWelcomeSVG() {
 			delete this.send;
 			delete this._setPollInterval;
 			delete this.close;
-			// HACK: We need this to complete the override because ProxySocket messed up the protoype chain... evenually I want to convert it to a Real Class which will fix it
+			// HACK: We need this to complete the override because ProxySocket messed up the prototype chain... eventually I want to convert it to a Real Class which will fix it
 		}
 
 		send(data) {
@@ -1926,7 +1959,7 @@ function showWelcomeSVG() {
 		global.webserver = global.webserver.replace(/\/*$/, ''); // Remove trailing slash.
 	}
 
-	var docParams, wopiParams;
+	var docParams = '', wopiParams;
 	var filePath = global.coolParams.get('file_path');
 	global.wopiSrc = global.coolParams.get('WOPISrc');
 	if (global.wopiSrc != '') {
@@ -1982,15 +2015,22 @@ function showWelcomeSVG() {
 	// Form a valid new Cool WebSocket URL from its components.
 	// ws://localhost:9980/cool/ws?WOPISrc=<encoded-document-URI>[&<docParams>]
 	global.makeWopiCoolWsUrl = function (root, docParams) {
-		var wopiSrc = '';
+		var query = '';
 		if (global.wopiSrc != '') {
-			wopiSrc = '?WOPISrc=' + encodeURIComponent(global.wopiSrc);
+			query = '?WOPISrc=' + encodeURIComponent(global.wopiSrc);
 
 			if (global.routeToken != '')
-				wopiSrc += '&RouteToken=' + global.routeToken;
+				query += '&RouteToken=' + global.routeToken;
 		}
 
-		return root + '/ws' + wopiSrc + '&' + docParams;
+		if (docParams)
+			query += (query ? '&' : '?') + docParams;
+
+		// Empty compat slot, kept last so the slow-proxy ProxySocket can suffix
+		// /<sessionId>/<command>/<serial> onto it (see ProxySocket.getEndPoint).
+		query += (query ? '&' : '?') + 'compat=';
+
+		return root + '/ws' + query;
 	};
 
 	// Form a valid WS URL to the host with the given path and
@@ -2050,7 +2090,7 @@ function showWelcomeSVG() {
 		global.socket = new global.FakeWebSocket();
 		global.TheFakeWebSocket = global.socket;
 	} else {
-		if (global.enableExperimentalFeatures) {
+		if (global.enableExperimentalFeatures && global.wopiSrc) {
 			var websocketURI = global.makeWopiCoolWsUrl(global.makeWsUrl('/cool'), docParams);
 		} else {
 			// The URL may already contain a query (e.g., 'http://server.tld/foo/wopi/files/bar?desktop=baz') - then just append more params

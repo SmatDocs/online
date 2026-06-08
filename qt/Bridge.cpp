@@ -13,7 +13,7 @@
 
 #include "bridge.hpp"
 
-#include <LibreOfficeKit/LibreOfficeKit.hxx>
+#include <COKit/COKit.hxx>
 
 #include <qt/DBusService.hpp>
 #include <qt/DocumentOperations.hpp>
@@ -31,6 +31,8 @@
 #include <common/StringVector.hpp>
 #include <Poco/Path.h>
 #include <Poco/URI.h>
+
+#include <cstdlib>
 
 #include <QApplication>
 #include <QByteArray>
@@ -89,7 +91,7 @@ void Bridge::createAndStartMessagePumpThread()
     _app2js = std::thread(
         [this]
         {
-            Util::setThreadName("app2js");
+            ProcUtil::setThreadName("app2js");
             bool unexpectedClose = false;
             while (true)
             {
@@ -188,7 +190,7 @@ void Bridge::error(const QString& msg) { LOG_TRC_NOFILE("From JS: error: " << ms
 void Bridge::promptSaveLocation(std::function<void(const std::string&, const std::string&)> callback)
 {
     // Prompt user to pick a save location and format
-    lok::Document* loKitDoc = DocumentData::get(_document._appDocId).loKitDocument;
+    kit::Document* loKitDoc = DocumentData::get(_document._appDocId).loKitDocument;
     if (!loKitDoc)
     {
         LOG_ERR("promptSaveLocation: no loKitDocument");
@@ -405,7 +407,15 @@ QVariant Bridge::cool(const QString& messageStr)
     }
     else if (tokens.equals(0, "LICENSE"))
     {
-        const std::string licensePath = LO_PATH "/LICENSE.html";
+        std::string licensePath = LO_PATH "/LICENSE.html";
+        // Inside a snap, LO_PATH is a bind-mount that exists only in the
+        // snap's mount namespace. xdg-desktop-portal hands the URL to the
+        // host browser, which can't resolve that path — translate to the
+        // host-visible $SNAP-rooted location.
+        if (const char* snapRoot = std::getenv("SNAP"))
+        {
+            licensePath = std::string(snapRoot) + licensePath;
+        }
         struct stat st;
         if (FileUtil::getStatOfFile(licensePath, st) == 0)
         {
@@ -428,9 +438,21 @@ QVariant Bridge::cool(const QString& messageStr)
         if (commandName != ".uno:ModifiedStatus")
             return {};
 
-        _modified = (object->get("state").toString() == "true");
+        const bool modified = (object->get("state").toString() == "true");
+        LOG_TRC_NOFILE("Document modified status changed: " << (modified ? "modified" : "unmodified"));
+    }
+    else if (tokens.equals(0, "CLIPBOARDMIMETYPES"))
+    {
+        Poco::JSON::Object::Ptr object;
+        if (!JsonUtil::parseJSON(tokens.substrFromToken(1), object)
+            || !object->has("mimeTypes"))
+            return {};
 
-        LOG_TRC_NOFILE("Document modified status changed: " << (_modified ? "modified" : "unmodified"));
+        QStringList types;
+        for (const auto& type : *object->getArray("mimeTypes"))
+            types.append(QString::fromStdString(type.convert<std::string>()));
+        setLazyClipboard(_document._appDocId, std::move(types));
+        return {};
     }
     else if (tokens.equals(0, "COMMANDRESULT"))
     {
@@ -455,11 +477,9 @@ QVariant Bridge::cool(const QString& messageStr)
         if (commandName == ".uno:Copy" || commandName == ".uno:Cut"
             || commandName == ".uno:CopySlide")
         {
-            getClipboard(_document._appDocId, [this]() {
-                evalJS("if (window.app && window.app.map && window.app.map.uiManager) "
-                              "window.app.map.uiManager.closeSnackbar();");
-                _copyInProgress = false;
-            });
+            evalJS("if (window.app && window.app.map && window.app.map.uiManager) "
+                          "window.app.map.uiManager.closeSnackbar();");
+            _copyInProgress = false;
         }
 
         // only handle successful .uno:Save commands
@@ -496,14 +516,23 @@ QVariant Bridge::cool(const QString& messageStr)
         });
         return {};
     }
-    else if (tokens.equals(0, "PROCESSINTEGRATORADMINFILE"))
+    else if (tokens.equals(0, "SETDARKMODE"))
     {
-        Desktop::processIntegratorAdminFile(tokens.substrFromToken(1));
+        Desktop::setDarkMode(tokens.equals(1, "true"));
         return {};
+    }
+    else if (tokens.equals(0, "FETCHAIMODELS"))
+    {
+        return QString::fromStdString(Desktop::fetchAIModels(tokens.substrFromToken(1)));
     }
     else if (tokens.equals(0, "BYE"))
     {
         LOG_TRC_NOFILE("Document window terminating on JavaScript side → closing fake socket");
+
+        // Materialise lazy clipboard before destroying the document so that
+        // an external paste after the document closes still works.
+        materializeClipboard(_document._appDocId);
+
         fakeSocketClose(_closeNotificationPipeForForwardingThread[0]);
 
         QTimer::singleShot(0, [this]() {
@@ -718,7 +747,7 @@ QVariant Bridge::cool(const QString& messageStr)
         QObject::connect(dialog, &QFileDialog::fileSelected,
                         [appDocId, format](const QString& destPath) {
             // Export directly to the chosen path
-            lok::Document* loKitDoc = DocumentData::get(appDocId).loKitDocument;
+            kit::Document* loKitDoc = DocumentData::get(appDocId).loKitDocument;
             if (!loKitDoc)
             {
                 LOG_ERR("downloadas: no loKitDocument");
@@ -747,6 +776,9 @@ QVariant Bridge::cool(const QString& messageStr)
     }
     else if (tokens.equals(0, "exportfile"))
     {
+        // Used by both .uno:SaveGraphic (Save Image) and .uno:ExportToPDF
+        // (PDF with options) — take the suggested filename from the source URL
+        // so the dialog title and default name match what was actually written.
         std::string fileUrl;
         if (!COOLProtocol::getTokenString(tokens, "url", fileUrl))
         {
@@ -762,13 +794,17 @@ QVariant Bridge::cool(const QString& messageStr)
             return {};
         }
 
-        const QString ext = QFileInfo(srcPath).suffix();
-        const QString suggestedName =
-            QStringLiteral("image.") + (ext.isEmpty() ? QStringLiteral("png") : ext);
+        const QFileInfo srcInfo(srcPath);
+        QString suggestedName = srcInfo.fileName();
+        if (suggestedName.isEmpty())
+        {
+            const QString ext = srcInfo.suffix();
+            suggestedName = QStringLiteral("export.") + (ext.isEmpty() ? QStringLiteral("bin") : ext);
+        }
 
         QFileDialog* dialog = new QFileDialog(
             _webView,
-            QObject::tr("Save Image"),
+            QObject::tr("Save File"),
             QDir::home().filePath(suggestedName),
             QObject::tr("All Files (*)"));
 
@@ -784,7 +820,8 @@ QVariant Bridge::cool(const QString& messageStr)
                 LOG_ERR("exportfile: failed to copy to '" << destPath.toStdString() << "'");
                 return;
             }
-            LOG_INF("exportfile: saved image to " << destPath.toStdString());
+            LOG_INF("exportfile: saved to " << destPath.toStdString());
+            QFile::remove(srcPath);
         });
 
         dialog->open();

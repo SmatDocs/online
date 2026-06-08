@@ -6,13 +6,9 @@
 name: "CodeQL scanning - action"
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    # The branches below must be a subset of the branches above
-    branches: [main]
   schedule:
     - cron: '0 22 * * 3'
+  workflow_dispatch:
 
 jobs:
   analyze:
@@ -67,10 +63,10 @@ jobs:
     - if: matrix.language == 'cpp'
       name: Configure
       run: |
-        cd .. && wget --no-verbose https://github.com/CollaboraOnline/online/releases/download/for-code-assets/core-co-25.04-assets.tar.gz
-        tar xf core-co-25.04-assets.tar.gz && rm core-co-25.04-assets.tar.gz && export LOCOREPATH=$(pwd)
-        cd online && ./autogen.sh
-        ./configure --enable-silent-rules --with-lokit-path=${LOCOREPATH}/include --with-lo-path=${LOCOREPATH}/instdir --enable-debug
+        wget --no-verbose https://github.com/CollaboraOnline/online/releases/download/for-code-assets/engine-main-assets.tar.gz
+        tar xf engine-main-assets.tar.gz -C engine && rm engine-main-assets.tar.gz
+        ./autogen.sh
+        ./configure --enable-silent-rules --with-lokit-path=${GITHUB_WORKSPACE}/engine/include --with-lo-path=${GITHUB_WORKSPACE}/engine/instdir --enable-debug
         cd browser && npm update
 
     - if: matrix.language == 'cpp'

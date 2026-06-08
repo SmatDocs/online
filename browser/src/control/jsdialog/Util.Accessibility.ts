@@ -108,6 +108,23 @@ JSDialog.SetupA11yLabelForLabelableElement = function (
 					labelHasHtmlFor &&
 					(element as HTMLLabelElement).htmlFor === content.id;
 
+				// If this is a button, check whether another button
+				// already uses the same aria-labelledby. Sharing a
+				// label between buttons violates ARIA (each button
+				// must have a distinct accessible name). Fall back to
+				// aria-label in that case.
+				if (content.tagName === 'BUTTON' && !htmlForPointsToThisElement) {
+					const dialog = content.closest('.ui-dialog[role="dialog"]');
+					const scope = dialog || document;
+					const existingBtn = scope.querySelector(
+						`button[aria-labelledby="${element.id}"]`,
+					);
+					if (existingBtn && existingBtn !== content) {
+						JSDialog.AddAriaLabel(content, data, builder);
+						return;
+					}
+				}
+
 				if (!htmlForPointsToThisElement) {
 					content.setAttribute('aria-labelledby', element.id);
 				}
@@ -173,7 +190,7 @@ JSDialog.AddAltAttrOnFocusableImg = function (
 	}
 };
 
-JSDialog.GetFormControlTypesInLO = function () {
+JSDialog.GetFormControlTypesInEngine = function () {
 	return new Set([
 		'spinfield',
 		'edit',
@@ -187,7 +204,7 @@ JSDialog.GetFormControlTypesInLO = function () {
 	]);
 };
 
-JSDialog.GetFormControlTypesInCO = function () {
+JSDialog.GetFormControlTypesInBrowser = function () {
 	return new Set([
 		'INPUT',
 		'SELECT',

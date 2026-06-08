@@ -29,6 +29,41 @@ var NotebookbarAccessibilityDefinitions = function() {
 					var arrow = document.querySelector('#' + id + ' .arrowbackground');
 					var element = document.getElementById(id + '-button');
 
+					// If standard lookups failed and item has a UNO command, try
+					// finding by modelid. This handles WeldedToolbar items where
+					// core assigns command-based ids (e.g. NumberFormatCurrency)
+					// instead of the JS definition ids (e.g. home-number-format-currency).
+					if (!overflow && !arrow && !element && rawList[i].command) {
+						var commandId = rawList[i].command.replace('.uno:', '');
+						var selector = '[modelid="' + id + '"], [modelid="' + commandId + '"]';
+						var widgets = document.querySelectorAll(selector);
+						if (widgets.length > 0) {
+							for (var k = 0; k < widgets.length; k++) {
+								var widget = widgets[k];
+								if (!widget.id) {
+									console.debug('Skipping accesskey for', commandId,
+										      '- widget has no id');
+									continue;
+								}
+								var widgetArrow = widget.querySelector('.arrowbackground');
+								var targetId;
+								if (widgetArrow) {
+									targetId = widget.id;
+								} else if (document.getElementById(widget.id + '-button')) {
+									targetId = widget.id + '-button';
+								} else {
+									targetId = widget.id;
+								}
+								list.push({
+									id: targetId,
+									focusBack: rawList[i].accessibility.focusBack,
+									combination: combination
+								});
+							}
+							continue;
+						}
+					}
+
 					if (overflow) {
 						// overflow button
 						if (typeof overflow.isCollapsed === 'function' && overflow.isCollapsed()) {
@@ -107,7 +142,6 @@ var NotebookbarAccessibilityDefinitions = function() {
 				defs[tabs[i].id].combination = language && tabs[i].accessibility[language] ? tabs[i].accessibility[language]: tabs[i].accessibility.combination;
 				defs[tabs[i].id].contentList = [];
 				this.getContentListRecursive(defs[tabs[i].id].rawContentList, defs[tabs[i].id].contentList, language);
-				this.targetedButtonsForTab(tabs[i].id, defs[tabs[i].id].contentList);
 				delete defs[tabs[i].id].rawContentList;
 			}
 		}
@@ -174,21 +208,6 @@ var NotebookbarAccessibilityDefinitions = function() {
 				combination : language && toolOption.accessibility[language] ? toolOption.accessibility[language]: toolOption.accessibility.combination,
 				contentList: []
 			};
-		}
-	}
-
-	this.targetedButtonsForTab = function(tabId, list) {
-		// add targeted accesskey information of specific uno buttons from a tab
-		var buttonList = [];
-
-		// Home tab
-		if (tabId == 'Home-tab-label')
-			buttonList = ['stylesview-expand-button'];
-
-		for (var i = 0; i < buttonList.length; i++) {
-			var button = document.getElementById(buttonList[i]);
-			if (button && button.accessKey !== undefined && button.accessKey.trim())
-				list.push({ id: button.id, focusBack: true, combination: button.accessKey });
 		}
 	}
 

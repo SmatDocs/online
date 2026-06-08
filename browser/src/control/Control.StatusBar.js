@@ -105,6 +105,10 @@ class StatusBar extends JSDialog.Toolbar {
 
 			this.map.sendUnoCommand('.uno:StatusBarFunc', command);
 			return;
+		} else if (data === 'menuoverflow' || object.id === 'menuoverflow') {
+			const targetBtn = document.getElementById('menuoverflow-button') || document.getElementById('menuoverflow');
+			this._openConfigMenu(targetBtn);
+			return;
 		}
 
 		this.builder._defaultCallbackHandler(objectType, eventType, object, data, builder);
@@ -162,7 +166,7 @@ class StatusBar extends JSDialog.Toolbar {
 		this.updateHtmlItem('ShowComments', state ? statemsg : ' ');
 	}
 
-	_generateHtmlItem(id, dataPriority) {
+	_generateHtmlItem(id, dataPriority, configPeers) {
 		var isReadOnlyMode = app.map ? app.map.isReadOnlyMode() : true;
 		var canUserWrite = !app.isReadOnly();
 
@@ -177,9 +181,16 @@ class StatusBar extends JSDialog.Toolbar {
 			visible: false
 		}
 
-		if (dataPriority) {
+		if (dataPriority)
 			item.dataPriority = dataPriority;
+
+		const configLabel = JSDialog.getStatusbarItemConfigLabel(id);
+		if (configLabel) {
+			item.configLabel = configLabel;
+			item.configId = id;
 		}
+		if (configPeers)
+			item.configPeers = configPeers;
 
 		return item;
 	}
@@ -240,27 +251,33 @@ class StatusBar extends JSDialog.Toolbar {
 			this._generateHtmlItem('statusselectionmode', 6),				// text
 			this._generateHtmlItem('slidestatus'),						// presentation
 			this._generateHtmlItem('pagestatus'),						// drawing
-			{type: 'menubutton', id: 'languagestatus:LanguageStatusMenu', dataPriority: 3},	// spreadsheet, text, presentation
+			{type: 'menubutton', id: 'languagestatus:LanguageStatusMenu', dataPriority: 3,
+				configLabel: _('Language'), configId: 'languagestatus', configTargetId: 'languagestatus', configPeers: ['languagestatusbreak']},
 			{type: 'separator', id: 'languagestatusbreak', orientation: 'vertical', visible: false, dataPriority: 3}, // spreadsheet
-			this._generateHtmlItem('statetablecell', 4),					// spreadsheet
+			this._generateHtmlItem('statetablecell', 4, ['StateTableCellMenu', 'statetablebreak']),
 			this._generateStateTableCellMenuItem(2, false),			// spreadsheet
 			{type: 'separator', id: 'statetablebreak', orientation: 'vertical', visible: false, dataPriority: 7}, // spreadsheet
 			this._generateHtmlItem('permissionmode'),					// spreadsheet, text, presentation
 			{type: 'toolitem', id: 'signstatus', command: '.uno:Signature', w2icon: '', text: _UNO('.uno:Signature'), visible: false},
 			{type: 'spacer',  id: 'permissionspacer'},
 			this._generateHtmlItem('documentstatus', 2),					// spreadsheet, text, presentation, drawing
-			{type: 'customtoolitem',  id: 'multi-page-view', command: 'multipageview', text: _('Multi Page View'), dataPriority: 10,  visible: false}, // text
-			{type: 'customtoolitem',  id: 'prevpage', command: 'prev', text: _UNO('.uno:PageUp', 'text'), pressAndHold: true, dataPriority: 9},
+			{type: 'customtoolitem',  id: 'multi-page-view', command: 'multipageview', text: _('Multi Page View'), dataPriority: 10, visible: false,
+				configLabel: _('Multi Page View')},		
+			{type: 'customtoolitem',  id: 'prevpage', command: 'prev', text: _UNO('.uno:PageUp', 'text'), pressAndHold: true, dataPriority: 9,
+				configLabel: JSDialog.getStatusbarItemConfigLabel('prevpage'), configPeers: ['nextpage', 'prevnextbreak']},
 			{type: 'customtoolitem',  id: 'nextpage', command: 'next', text: _UNO('.uno:PageDown', 'text'), pressAndHold: true, dataPriority: 9},
 			{type: 'separator', id: 'prevnextbreak', orientation: 'vertical', dataPriority: 9},
-			{type: 'toolitem',  id: 'overview', command: '.uno:InsertCanvasSlide', text: _('Overview'), dataPriority: 9, visible: !app.isReadOnly()},
+			{type: 'toolitem',  id: 'overview', command: '.uno:InsertCanvasSlide', text: _('Overview'), dataPriority: 9, visible: !app.isReadOnly(),
+				configLabel: _('Overview'), configPeers: ['overviewbreak']},
 			{type: 'separator', id: 'overviewbreak', orientation: 'vertical', dataPriority: 9, visible: !app.isReadOnly()},
 		].concat(window.mode.isTablet() ? [] : [
-			{type: 'customtoolitem',  id: 'fitwidthzoom', command: 'fitwidthzoom', text: _('Zoom to Fit Page Width'), icon: 'pagewidth.svg', dataPriority: 8, visible: false},
+			{type: 'customtoolitem',  id: 'fitwidthzoom-impress', command: 'fitwidthzoom', text: _('Zoom to Fit Slide'), icon: 'pagewidth.svg', dataPriority: 8, visible: false},
+			{type: 'customtoolitem',  id: 'fitwidthzoom-writer', command: 'fitwidthzoom', text: _('Zoom to Fit Page Width'), icon: 'pagewidth.svg', dataPriority: 8, visible: false},
 			{type: 'customtoolitem',  id: 'zoomreset', command: 'zoomreset', text: _('Reset zoom'), icon: 'zoomreset.svg', dataPriority: 8},
 			{type: 'customtoolitem',  id: 'zoomout', command: 'zoomout', text: _UNO('.uno:ZoomMinus'), icon: 'minus.svg'},
 			{type: 'menubutton', id: 'zoom', text: '100', selected: 'zoom100', menu: this._generateZoomItems(), image: false},
-			{type: 'customtoolitem',  id: 'zoomin', command: 'zoomin', text: _UNO('.uno:ZoomPlus'), icon: 'plus.svg'}
+			{type: 'customtoolitem',  id: 'zoomin', command: 'zoomin', text: _UNO('.uno:ZoomPlus'), icon: 'plus.svg'},
+			{type: 'toolitem', id: 'menuoverflow', command: 'menuoverflow', text: _('Status Bar Menu'), icon: 'statusbarmenu.svg'}
 		]);
 	}
 
@@ -269,12 +286,130 @@ class StatusBar extends JSDialog.Toolbar {
 			return;
 
 		this.parentContainer.replaceChildren();
-		this.builder.build(this.parentContainer, this.getToolItems());
+
+		const items = this.getToolItems();
+		this.model.fullUpdate({
+			id: this.toolbarElementId,
+			dialogid: this.toolbarElementId,
+			jsontype: 'toolbar',
+			type: 'toolbox',
+			children: items,
+		});
+
+		this.builder.build(this.parentContainer, this.model.getSnapshot().children);
 		this.onLanguagesUpdated();
-		JSDialog.MakeStatusPriority(this.parentContainer.querySelector('div'), this.getToolItems());
+		JSDialog.MakeStatusPriority(this.parentContainer.querySelector('div'), items);
 		JSDialog.RefreshScrollables();
+
+		window.L.DomEvent.on(this.parentContainer, 'contextmenu', this.onContextMenu, this);
 	}
 
+	_getAnchorAtCursor(e) {
+		if (!this._menuPosEl) {
+			this._menuPosEl = document.createElement('div');
+			this._menuPosEl.style.position = 'fixed';
+			this._menuPosEl.style.width = '0';
+			this._menuPosEl.style.height = '0';
+			this._menuPosEl.style.zIndex = '-1';
+			document.body.appendChild(this._menuPosEl);
+		}
+		this._menuPosEl.style.left = e.clientX + 'px';
+		this._menuPosEl.style.top = e.clientY + 'px';
+		return this._menuPosEl;
+	}
+
+	onContextMenu(e) {
+		window.L.DomEvent.preventDefault(e);
+		this._openConfigMenu(this._getAnchorAtCursor(e));
+	}
+
+	_openConfigMenu(anchor) {
+		const items = this.getToolItems();
+		const menuEntries = [];
+		const visible = {};
+
+		for (let i = 0; i < items.length; i++) {
+			const item = items[i];
+			if (!item.configLabel)
+				continue;
+
+			const configId = item.configId || item.id;
+			if (visible[configId])
+				continue;
+			visible[configId] = true;
+
+			const targetId = item.configTargetId || item.id;
+			const el = document.getElementById(targetId)
+				|| this.parentContainer.querySelector('[modelid="' + item.id + '"]');
+
+			const isUserHidden = this.isItemUserHidden(item.id);
+
+			// Skip items that are hidden and not relevant for this doc type,
+			// but keep user-hidden items visible in the menu so they can be re-enabled.
+			if (!el)
+				continue;
+			if (el.classList.contains('hidden') && !isUserHidden)
+				continue;
+
+			menuEntries.push({
+				id: configId,
+				itemId: item.id,
+				targetId: targetId,
+				peers: item.configPeers || [],
+				type: 'comboboxentry',
+				text: item.configLabel,
+				checked: !isUserHidden,
+				checktype: 'checkmark'
+			});
+		}
+
+		const callback = (objectType, eventType, object, data) => {
+			if (eventType !== 'selected')
+				return;
+			const pos = parseInt(data);
+			const entry = menuEntries[pos];
+			if (!entry)
+				return;
+
+			const newHidden = !this.isItemUserHidden(entry.itemId);
+			this._applyUserHidden(entry.itemId, entry.targetId, entry.peers, newHidden);
+			this.map.uiManager.setDocTypePref('StatusbarUserHidden.' + entry.id, newHidden);
+		};
+
+		JSDialog.OpenDropdown('statusbar-context-menu', anchor, menuEntries, callback, 'top', false);
+	}
+
+	_applyUserHidden(itemId, targetId, peers, hide) {
+		this.userHideItem(itemId, hide);
+		if (targetId && targetId !== itemId)
+			this.userHideItem(targetId, hide);
+		if (peers) {
+			for (const peer of peers)
+				this.userHideItem(peer, hide);
+		}
+	}
+
+	_restoreUserHiddenState() {
+		const items = this.getToolItems();
+		const visible = {};
+		for (let i = 0; i < items.length; i++) {
+			const item = items[i];
+			if (!item.configLabel)
+				continue;
+
+			const configId = item.configId || item.id;
+			if (visible[configId])
+				continue;
+			visible[configId] = true;
+
+			const hide = this.map.uiManager.getBooleanDocTypePref(
+				'StatusbarUserHidden.' + configId, false);
+			if (!hide)
+				continue;
+
+			this._applyUserHidden(item.id, item.configTargetId, item.configPeers, true);
+		}
+	}
 
 	initialize() {
 		const showStatusbar = this.map.uiManager.getBooleanDocTypePref('ShowStatusbar', true);
@@ -329,7 +464,8 @@ class StatusBar extends JSDialog.Toolbar {
 				this.showItem('permissionmode-container', true);
 				this.showItem('showcomments-container', true);
 				this.showItem('documentstatus-container', true);
-				this.showItem('fitwidthzoom', true);
+				this.showItem('fitwidthzoom-writer', true);
+				this.showItem('fitwidthzoom-impress', false);
 				this.showItem('zoomreset', false);
 
 				this.showItem('multi-page-view', true);
@@ -343,6 +479,9 @@ class StatusBar extends JSDialog.Toolbar {
 				this.showItem('languagestatusbreak', !app.map.isReadOnlyMode());
 				this.showItem('permissionmode-container', true);
 				this.showItem('documentstatus-container', true);
+				this.showItem('fitwidthzoom-writer', false);
+				this.showItem('fitwidthzoom-impress', true);
+				this.showItem('zoomreset', false);
 			}
 			break;
 		case 'drawing':
@@ -361,6 +500,7 @@ class StatusBar extends JSDialog.Toolbar {
 			this.updateLanguageItem(this.extractLanguageFromStatus(language));
 
 		this._updateToolbarsVisibility();
+		this._restoreUserHiddenState();
 		JSDialog.RefreshScrollables();
 	}
 

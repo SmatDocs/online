@@ -40,7 +40,7 @@ void RecentFiles::load(const std::string& fileName, int maxFiles)
     if (stream.is_open())
     {
         int n = 0;
-        while (!stream.eof() && !stream.bad() && n++ < maxFiles)
+        while (!stream.eof() && !stream.bad() && n++ < _maxFiles * 2)
         {
             Entry entry;
             std::getline(stream, entry.uri);
@@ -86,22 +86,49 @@ void RecentFiles::add(const std::string& uri)
 
 std::string RecentFiles::serialise()
 {
+    return serialiseFiltered({ });
+}
+
+std::string RecentFiles::serialiseFiltered(std::set<std::string> dropTheseURIs)
+{
     std::string result;
 
     result = "[ ";
+    int n = 0;
     for (int i = 0; i < _mostRecentlyUsed.size(); i++)
     {
+        if (dropTheseURIs.contains(_mostRecentlyUsed[i].uri))
+            continue;
+
         Poco::URI uri(_mostRecentlyUsed[i].uri);
+
         std::vector<std::string> segments;
         uri.getPathSegments(segments);
 
+        // Verify that the file still exists
+        std::string path = uri.getPath();
+#ifdef _WIN32
+        // Handle the URIs for drive letter paths and for UNC paths
+        if (path.length() > 4 && path[0] == '/' && path[2] == ':' && path[3] == '/')
+            path = path.substr(1);
+        else if (uri.getHost() != "")
+            path = "//" + uri.getHost() + path;
+#endif
+        std::ifstream stream;
+        FileUtil::openFileToIFStream(path, stream);
+        if (!stream.is_open())
+            continue;
+
+        if (n > 0)
+            result += ", ";
         result += "{ "
             "\"uri\": \"" + _mostRecentlyUsed[i].uri + "\", "
             "\"name\": \"" + JsonUtil::escapeJSONValue(segments.empty() ? uri.getPathEtc() : segments.back()) + "\", "
             "\"timestamp\": \"" + std::format("{:%FT%TZ}", _mostRecentlyUsed[i].timestamp) + "\""
             " }";
-        if (i < _mostRecentlyUsed.size() - 1)
-            result += ", ";
+        n++;
+        if (n == _maxFiles)
+            break;
     }
     result += " ]";
 

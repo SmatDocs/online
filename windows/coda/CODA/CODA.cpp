@@ -46,9 +46,14 @@
 #include <common/Uri.hpp>
 #include <net/FakeSocket.hpp>
 #include <wsd/COOLWSD.hpp>
+#include <wsd/DocumentBroker.hpp>
+#include <wsd/RequestDetails.hpp>
 
 #include "Resource.h"
 #include "windows.hpp"
+
+extern std::map<std::string, std::shared_ptr<DocumentBroker>> DocBrokers;
+extern std::mutex DocBrokersMutex;
 
 // Note that all pathnames in this code that are plain narrow strings (std::string) are in UTF-8 and
 // can thus *not* be used for actual file system operations. They must always be converted to UTF-16
@@ -162,6 +167,16 @@ static FilenameAndUri fileSaveDialog(const std::string& name,
                                      const std::vector<COMDLG_FILTERSPEC>& extensions);
 
 static void openCOOLWindow(const FilenameAndUri& filenameAndUri, DocumentMode mode);
+
+static std::set<std::string> currentlyOpenDocumens()
+{
+    std::set<std::string> result;
+
+    for (const auto& i : windowData)
+        result.insert(i.second.filenameAndUri.uri);
+
+    return result;
+}
 
 // Vector of documents to open passed on the command line, or multiple documents to open selected in
 // a file open dialog. We open the next one only as soon as the previous one has finished loading.
@@ -336,7 +351,7 @@ static void send2JS(const HWND hWnd, const char* buffer, int length)
     PostMessageW(hWnd, CODA_WM_EXECUTESCRIPT, (WPARAM)wparam, 0);
 }
 
-// LOK file save dialog callback.
+// COKit file save dialog callback.
 void output_file_dialog_from_core(const char* suggestedURI, char* result, size_t resultLen)
 {
     // Some sanity checks first.
@@ -390,7 +405,7 @@ static void createAndStartMessagePumpThread(WindowData& data)
     data.app2js = std::thread(
         [&data]
         {
-            Util::setThreadName("app2js " + std::to_string(data.appDocId));
+            ProcUtil::setThreadName("app2js " + std::to_string(data.appDocId));
             while (true)
             {
                 struct pollfd pollfd[2];
@@ -450,7 +465,7 @@ static void do_hullo_handling_things(WindowData& data)
 
     // First we must send the URL. This corresponds to the GET request with Upgrade to WebSocket.
     // This *must* be the first message written to the "client" thread. We don't need to do this
-    // write in a separate thread, and we can't, because if we do that, we will occasionaly run into
+    // write in a separate thread, and we can't, because if we do that, we will occasionally run into
     // a bug when the "coolclient" message sent by the JS is received and gets forwarded to the
     // "client" thread before we have written the URL to it.
 
@@ -564,7 +579,23 @@ static void do_getrecentdocs(const WindowData& data, int id)
     PostMessageW(data.hWnd, CODA_WM_EXECUTESCRIPT,
                  (WPARAM)_strdup(("window.replyFromNativeToCall(" +
                                   std::to_string(id) +
-                                  ", '" + recentFiles.serialise() + "')").c_str()), 0);
+                                  ", '" + recentFiles.serialiseFiltered(currentlyOpenDocumens()) + "')").c_str()), 0);
+}
+
+// It happens that some other process opens the clipboard for a short time, and if we happen to try
+// during that time it will fail. Workaround for that: a function that tries a couple of times.
+
+static BOOL try_open_clipboard()
+{
+    const int NTRIES = 10;
+    for (int i = 0; i < NTRIES; i++)
+    {
+        if (OpenClipboard(NULL))
+            return TRUE;
+        Sleep(5);
+    }
+    LOG_ERR("OpenClipboard() failed repeatedly, last error: " << GetLastError());
+    return FALSE;
 }
 
 static void do_cut_or_copy(ClipboardOp op, WindowData& data)
@@ -580,7 +611,7 @@ static void do_cut_or_copy(ClipboardOp op, WindowData& data)
     // Get core's internal clipboard
     DocumentData::get(data.appDocId).loKitDocument->getClipboard(nullptr, &count, &mimeTypes, &sizes,
                                                             &streams);
-    if (!OpenClipboard(NULL))
+    if (!try_open_clipboard())
         return;
 
     if (!EmptyClipboard())
@@ -702,7 +733,7 @@ static void do_paste_or_read(ClipboardOp op, WindowData& data)
 {
     if (data.lastAnyonesClipboardModification > data.lastOwnClipboardModification)
     {
-        if (!OpenClipboard(NULL))
+        if (!try_open_clipboard())
             return;
 
         std::vector<const char*> mimeTypes;
@@ -994,26 +1025,26 @@ static std::vector<COMDLG_FILTERSPEC>getSaveAsFormats(int docType)
 {
     std::vector<COMDLG_FILTERSPEC> result;
 
-    if (docType == LOK_DOCTYPE_TEXT)
+    if (docType == KIT_DOCTYPE_TEXT)
     {
         result.push_back({L"ODT", L"*.odt"});
         result.push_back({L"RTF", L"*.rtf"});
         result.push_back({L"DOCX", L"*.docx"});
         result.push_back({L"DOC", L"*.doc"});
     }
-    else if (docType == LOK_DOCTYPE_SPREADSHEET)
+    else if (docType == KIT_DOCTYPE_SPREADSHEET)
     {
         result.push_back({L"ODS", L"*.ods"});
         result.push_back({L"XLSX", L"*.xlsx"});
         result.push_back({L"XLS", L"*.xls"});
     }
-    else if (docType == LOK_DOCTYPE_PRESENTATION)
+    else if (docType == KIT_DOCTYPE_PRESENTATION)
     {
         result.push_back({L"ODP", L"*.odp"});
         result.push_back({L"PPTX", L"*.pptx"});
         result.push_back({L"PPT", L"*.ppt"});
     }
-    else if (docType == LOK_DOCTYPE_DRAWING)
+    else if (docType == KIT_DOCTYPE_DRAWING)
     {
         result.push_back({L"ODG", L"*.odg"});
     }
@@ -1143,6 +1174,52 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 {
     switch (message)
     {
+        case WM_CREATE:
+            {
+                // Contrary to documentation, when you use CW_USEDEFAULT for the x and y parameters
+                // in the CreateWindowW() call, Windows will occasionally place the window so that
+                // it is partially obscured by the taskbar. Workaround for that.
+
+                MONITORINFO monitorInfo;
+                monitorInfo.cbSize = sizeof(monitorInfo);
+                GetMonitorInfoW(MonitorFromWindow(hWnd, MONITOR_DEFAULTTOPRIMARY), &monitorInfo);
+
+                CREATESTRUCT *cs = (CREATESTRUCT *)lParam;
+
+                int x = cs->x, y = cs->y;
+
+                if (cs->cx < (monitorInfo.rcWork.right - monitorInfo.rcWork.left))
+                {
+                    if (cs->x < monitorInfo.rcWork.left)
+                    {
+                        // Left edge obscured by taskbar at the left. Move window right by the width
+                        // of the taskbar.
+                        x = cs->x + (monitorInfo.rcWork.left - monitorInfo.rcMonitor.left);
+                    } else if (cs->x + cs->cx > monitorInfo.rcWork.right)
+                    {
+                        // Left edge obscured by taskbar at the right. Move window left.
+                        x = cs->x - (monitorInfo.rcMonitor.right - monitorInfo.rcWork.right);
+                    }
+                }
+                if (cs->cy < (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top))
+                {
+                    if (cs->y < monitorInfo.rcWork.top)
+                    {
+                        // Top edge obscured by taskbar at the top. Move window down by the height
+                        // of the taskbar.
+                        y = cs->y + (monitorInfo.rcWork.top - monitorInfo.rcMonitor.top);
+                    } else if (cs->y + cs->cy > monitorInfo.rcWork.bottom)
+                    {
+                        // Bottom edge obscured by taskbar at the bottom. Move window up.
+                        y = cs->y - (monitorInfo.rcMonitor.bottom - monitorInfo.rcWork.bottom);
+                    }
+                }
+
+                if (x != cs->x || y != cs->y)
+                    SetWindowPos(hWnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+                return 0;
+            }
+
         case WM_SIZING:
             {
                 int minimumWidth = 1000, minimumHeight = 800;
@@ -1395,6 +1472,376 @@ static bool isLightTheme()
     return value == 1;
 }
 
+static HRESULT GetStreamForIFStream(std::ifstream& file, IStream** outStream)
+{
+    std::vector<char> data((std::istreambuf_iterator<char>(file)),
+                           std::istreambuf_iterator<char>());
+
+    wil::com_ptr<IStream> stream;
+    stream.attach(SHCreateMemStream(
+        reinterpret_cast<const BYTE*>(data.data()),
+        static_cast<UINT>(data.size())));
+    if (!stream)
+        return E_OUTOFMEMORY;
+    *outStream = stream.detach();
+    return S_OK;
+}
+
+static HRESULT webResourceRequestedHandler(ICoreWebView2Environment* env,
+                                           ICoreWebView2* sender,
+                                           ICoreWebView2WebResourceRequestedEventArgs* args)
+{
+    wil::com_ptr<ICoreWebView2WebResourceRequest> request;
+    HRESULT hr;
+
+    hr = args->get_Request(&request);
+    if (!SUCCEEDED(hr))
+    {
+        LOG_ERR_S("get_Request() failed");
+        return hr;
+    }
+
+    wil::unique_cotaskmem_string uri;
+    hr = request->get_Uri(&uri);
+    if (!SUCCEEDED(hr))
+    {
+        LOG_ERR_S("get_Uri() failed");
+        return hr;
+    }
+
+    std::string uri2 = Uri::decode(Util::wide_string_to_string(uri.get()));
+    Poco::URI requestUri(uri2);
+    Poco::URI::QueryParameters params = requestUri.getQueryParameters();
+    std::string wopiSrc, tag;
+
+    const bool isMedia = requestUri.getPath() == "/media";
+    const bool isVtt = requestUri.getPath() == "/mediavtt";
+
+    if (!isMedia && !isVtt)
+    {
+        LOG_WRN_S("Unhandled path [" << requestUri.getPath() << ']');
+        return E_FAIL;
+    }
+
+    for (const auto& it : params)
+    {
+        if (it.first == "WOPISrc")
+            wopiSrc = it.second;
+        else if (it.first == "Tag")
+            tag = it.second;
+    }
+
+    if (tag.empty() || wopiSrc.empty())
+    {
+        LOG_ERR_S("Missing WOPISrc or Tag in ["
+                  << uri2 << ']');
+        return E_FAIL;
+    }
+
+    // For some reason for local documents the WOPISrc comes
+    // here with a drive letter in the host position of the URI.
+    // I.e. "file://C:/Users/foo/bar.ext" =>
+    // "file:///C:/Users/foo/bar.ext"
+    if (wopiSrc.size() > 10)
+    {
+        if (isalpha((unsigned char)wopiSrc[7]) &&
+            wopiSrc[8] == ':')
+            wopiSrc = "file:///" +
+                std::string(1, wopiSrc[7]) +
+                ":" +
+                wopiSrc.substr(9);
+    }
+
+    std::shared_ptr<DocumentBroker> docBroker;
+    const std::string docKey = RequestDetails::getDocKey(wopiSrc);
+    {
+        std::lock_guard<std::mutex> lock(DocBrokersMutex);
+        const auto it = DocBrokers.find(docKey);
+        if (it != DocBrokers.end())
+            docBroker = it->second;
+    }
+    if (!docBroker)
+    {
+        LOG_ERR_S("No DocBroker for WOPISrc [" << wopiSrc << ']');
+        return E_FAIL;
+    }
+
+    std::string mediaPath = docBroker->getEmbeddedMediaPath(tag);
+    if (mediaPath.empty())
+    {
+        LOG_ERR_S("No media path for tag [" << tag << ']');
+        return E_FAIL;
+    }
+
+    // Yes, the same code snippet once again. FIXME: Should
+    // obviously factor this out into a utility function.
+    if (mediaPath.length() > 4 && mediaPath[0] == '/' &&
+        mediaPath[2] == ':' && mediaPath[3] == '/')
+        mediaPath = mediaPath.substr(1);
+
+    std::ifstream file;
+    FileUtil::openFileToIFStream(mediaPath, file);
+    if (!file.is_open())
+    {
+        LOG_ERR_S("Cannot open [" << mediaPath << "]");
+        return E_FAIL;
+    }
+
+    const std::wstring mimeType = (isVtt ? L"text/vtt" : L"application/octet-stream");
+    wil::com_ptr<IStream> contentStream;
+    hr = GetStreamForIFStream(file, &contentStream);
+    if (!SUCCEEDED(hr))
+        return hr;
+
+    wil::com_ptr<ICoreWebView2WebResourceResponse> response;
+    hr = env->CreateWebResourceResponse(
+        contentStream.get(),
+        200, L"OK",
+        (L"Content-Type: " + mimeType + L"\r\n" +
+         L"Access-Control-Allow-Origin: *\r\n").c_str(),
+        &response);
+    if (!SUCCEEDED(hr))
+    {
+        LOG_ERR_S("CreateWebResourceResponse() failed");
+        return hr;
+    }
+
+    hr = args->put_Response(response.get());
+    if (!SUCCEEDED(hr))
+    {
+        LOG_ERR_S("put_Response() failed");
+        return hr;
+    }
+    return S_OK;
+}
+
+// Register the ODF IFilter (odffilter.dll) with Windows Search and the
+// FullDetails / PreviewDetails property strings Explorer uses, both under
+// HKCU\Software\Classes. The two bindings the MSIX manifest cannot
+// express declaratively are:
+//
+//   - the per-extension IFilter chain Windows Search walks:
+//       .odt -> PersistentHandler ->
+//       PersistentAddinsRegistered\{IID_IFilter} -> IFilter CLSID
+//   - the per-extension FullDetails / PreviewDetails strings under
+//       SystemFileAssociations\.<ext>, which control the field list shown
+//       in Properties->Details and in the preview pane (the property
+//       handler itself is wired via desktop2:DesktopPropertyHandler in
+//       the manifest, but it only fills the fields Explorer asks for).
+//
+// HKCU\Software\Classes is silo'd for packaged processes - writes from
+// this process would land in a per-package virtual class hive that
+// Windows Search and Explorer never read. ProcMon confirmed this even
+// with unvirtualizedResources and with a self-respawned breakaway child:
+// the silo follows packaged-EXE images regardless. So instead we build a
+// .reg file and shell out to System32\reg.exe (unpackaged, escapes the
+// silo with the DesktopAppBreakaway attribute). reg.exe writes the
+// values to real HKCU where the shell looks for them.
+//
+// Idempotent on every launch.
+//
+// Limitation: HKCU writes survive package uninstall. Users who remove
+// Collabora Office may continue to see (silent) failed lookups for ODF
+// IFilter until the keys are pruned.
+static void registerOdfShellExtensions()
+{
+    // CLSIDs match engine/shell/source/win32/shlxthandler/odffilter/odffilter.hxx
+    static constexpr wchar_t kPersistentHandlerClsid[] =
+        L"{3EE9BB34-748E-4FBA-B6A5-94C200A11455}";
+    static constexpr wchar_t kIFilterClsid[] =
+        L"{DEB88601-6245-4803-81A5-13082BB738FF}";
+    // Microsoft's well-known IID_IFilter
+    static constexpr wchar_t kIidIFilter[] =
+        L"{89BCB740-6119-101A-BCB7-00DD010655AF}";
+
+    // Extensions we can actually filter - matches OOFileExtensionTable in
+    // engine/shell/source/win32/shlxthandler/util/fileextensions.cxx
+    static constexpr const wchar_t* kExtensions[] = {
+        L".odt", L".ott", L".odm", L".oth",
+        L".ods", L".ots",
+        L".odg", L".otg",
+        L".odp", L".otp",
+        L".odf", L".odb",
+        L".sxw", L".stw", L".sxg",
+        L".sxc", L".stc",
+        L".sxi", L".sti",
+        L".sxd", L".std",
+        L".sxm",
+        // Flat ODF (single XML file, no zip container).
+        L".fodt", L".fods", L".fodg", L".fodp",
+    };
+
+    static constexpr wchar_t kFullDetails[] =
+        L"prop:System.PropGroup.Description;"
+        L"System.Title;System.Author;System.Subject;"
+        L"System.Keywords;System.Comment;"
+        L"System.PropGroup.FileSystem;"
+        L"System.ItemNameDisplay;System.ItemTypeText;"
+        L"System.ItemFolderPathDisplay;System.Size;"
+        L"System.DateCreated;System.DateModified;System.FileAttributes";
+
+    static constexpr wchar_t kPreviewDetails[] =
+        L"prop:System.Title;*System.Author;*System.Subject;*System.Comment";
+
+    // Build the .reg file content.
+    std::wstring reg = L"Windows Registry Editor Version 5.00\r\n\r\n";
+    for (const wchar_t* ext : kExtensions)
+    {
+        reg += L"[HKEY_CURRENT_USER\\Software\\Classes\\";
+        reg += ext;
+        reg += L"\\PersistentHandler]\r\n@=\"";
+        reg += kPersistentHandlerClsid;
+        reg += L"\"\r\n\r\n";
+    }
+    reg += L"[HKEY_CURRENT_USER\\Software\\Classes\\CLSID\\";
+    reg += kPersistentHandlerClsid;
+    reg += L"]\r\n@=\"Collabora Office ODF IFilter Persistent Handler\"\r\n\r\n";
+    reg += L"[HKEY_CURRENT_USER\\Software\\Classes\\CLSID\\";
+    reg += kPersistentHandlerClsid;
+    reg += L"\\PersistentAddinsRegistered\\";
+    reg += kIidIFilter;
+    reg += L"]\r\n@=\"";
+    reg += kIFilterClsid;
+    reg += L"\"\r\n\r\n";
+    for (const wchar_t* ext : kExtensions)
+    {
+        reg += L"[HKEY_CURRENT_USER\\Software\\Classes\\SystemFileAssociations\\";
+        reg += ext;
+        reg += L"]\r\n\"FullDetails\"=\"";
+        reg += kFullDetails;
+        reg += L"\"\r\n\"PreviewDetails\"=\"";
+        reg += kPreviewDetails;
+        reg += L"\"\r\n\r\n";
+    }
+
+    // Write the .reg file under %LocalAppData%\<appName> with the UTF-16 LE
+    // BOM that reg.exe import expects.
+    PWSTR appDataFolder = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &appDataFolder)))
+        return;
+    std::wstring regFilePath = appDataFolder;
+    CoTaskMemFree(appDataFolder);
+    regFilePath += L"\\";
+    regFilePath += appName;
+    CreateDirectoryW(regFilePath.c_str(), nullptr);
+    regFilePath += L"\\register-shellext.reg";
+
+    HANDLE hFile = CreateFileW(regFilePath.c_str(), GENERIC_WRITE, 0, nullptr,
+                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE)
+        return;
+    const WORD bom = 0xFEFF;
+    DWORD written = 0;
+    WriteFile(hFile, &bom, sizeof(bom), &written, nullptr);
+    WriteFile(hFile, reg.data(),
+              static_cast<DWORD>(reg.size() * sizeof(wchar_t)),
+              &written, nullptr);
+    CloseHandle(hFile);
+
+    // Spawn System32\reg.exe import outside the silo via the
+    // DesktopAppBreakaway process attribute. The breakaway attribute does
+    // not let our own (packaged) EXE escape, but reg.exe is unpackaged so
+    // it goes to a plain desktop process whose writes hit real HKCU.
+    wchar_t systemDir[MAX_PATH];
+    if (GetSystemDirectoryW(systemDir, ARRAYSIZE(systemDir)) == 0)
+        return;
+    std::wstring cmdLine = L"\"";
+    cmdLine += systemDir;
+    cmdLine += L"\\reg.exe\" import \"";
+    cmdLine += regFilePath;
+    cmdLine += L"\"";
+
+    SIZE_T attrSize = 0;
+    InitializeProcThreadAttributeList(NULL, 1, 0, &attrSize);
+    if (attrSize == 0)
+        return;
+    std::vector<BYTE> attrBuffer(attrSize);
+    LPPROC_THREAD_ATTRIBUTE_LIST attrList =
+        reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attrBuffer.data());
+    if (!InitializeProcThreadAttributeList(attrList, 1, 0, &attrSize))
+        return;
+    DWORD policy = PROCESS_CREATION_DESKTOP_APP_BREAKAWAY_ENABLE_PROCESS_TREE;
+    if (!UpdateProcThreadAttribute(attrList, 0,
+                                   PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY,
+                                   &policy, sizeof(policy), NULL, NULL))
+    {
+        DeleteProcThreadAttributeList(attrList);
+        return;
+    }
+
+    // Capture reg.exe's stderr/stdout via a pipe so a failure message can
+    // be surfaced verbatim (e.g. "ERROR: Access is denied.") instead of
+    // just the numeric exit code.
+    SECURITY_ATTRIBUTES sa = { sizeof(sa), nullptr, TRUE };
+    HANDLE hReadPipe = nullptr;
+    HANDLE hWritePipe = nullptr;
+    if (!CreatePipe(&hReadPipe, &hWritePipe, &sa, 65536))
+    {
+        DeleteProcThreadAttributeList(attrList);
+        return;
+    }
+    SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOEXW si = {};
+    si.StartupInfo.cb = sizeof(si);
+    si.StartupInfo.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
+    si.StartupInfo.wShowWindow = SW_HIDE;
+    si.StartupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    si.StartupInfo.hStdOutput = hWritePipe;
+    si.StartupInfo.hStdError = hWritePipe;
+    si.lpAttributeList = attrList;
+
+    PROCESS_INFORMATION pi = {};
+    BOOL ok = CreateProcessW(NULL, cmdLine.data(), NULL, NULL, TRUE,
+                             EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
+                             NULL, NULL,
+                             reinterpret_cast<LPSTARTUPINFOW>(&si), &pi);
+    DeleteProcThreadAttributeList(attrList);
+    // Parent must close its copy of the write end so the read end sees EOF
+    // when reg.exe exits.
+    CloseHandle(hWritePipe);
+    if (!ok)
+    {
+        CloseHandle(hReadPipe);
+        return;
+    }
+
+    WaitForSingleObject(pi.hProcess, 5000);
+
+    std::string output;
+    char buf[1024];
+    DWORD nRead = 0;
+    while (ReadFile(hReadPipe, buf, sizeof(buf), &nRead, nullptr) && nRead > 0)
+        output.append(buf, nRead);
+    CloseHandle(hReadPipe);
+
+    DWORD exitCode = STILL_ACTIVE;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    if (exitCode != 0)
+    {
+        while (!output.empty() && (output.back() == '\r' || output.back() == '\n'
+                                   || output.back() == ' ' || output.back() == '\t'))
+            output.pop_back();
+        // reg.exe writes in the user's OEM (console) codepage; widen for
+        // OutputDebugStringW. Log:: is not initialized yet at this point
+        // in wWinMain. DebugView (Sysinternals) captures the output.
+        int wlen = MultiByteToWideChar(CP_OEMCP, 0,
+                                       output.c_str(), static_cast<int>(output.size()),
+                                       nullptr, 0);
+        std::wstring wide(wlen, L'\0');
+        MultiByteToWideChar(CP_OEMCP, 0,
+                            output.c_str(), static_cast<int>(output.size()),
+                            wide.data(), wlen);
+        std::wstring msg = L"registerOdfShellExtensions: reg.exe failed: ";
+        msg += wide.empty() ? L"(no diagnostic on stderr)" : wide;
+        msg += L"\n";
+        OutputDebugStringW(msg.c_str());
+    }
+    DeleteFileW(regFilePath.c_str());
+}
+
 static void openCOOLWindow(const FilenameAndUri& filenameAndUri, DocumentMode mode)
 {
     bool havePersistedSize = false;
@@ -1535,14 +1982,37 @@ static void openCOOLWindow(const FilenameAndUri& filenameAndUri, DocumentMode mo
 
     AddClipboardFormatListener(hWnd);
 
-    auto options = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
+    // Configure the "cool" custom scheme registration
+    auto schemeRegistration =
+        Microsoft::WRL::Make<CoreWebView2CustomSchemeRegistration>(L"cool");
+    if (!SUCCEEDED(schemeRegistration->put_TreatAsSecure(TRUE)))
+        fatal("schemeRegistration->put_TreatAsSecure() failed");
+    if (!SUCCEEDED(schemeRegistration->put_HasAuthorityComponent(TRUE)))
+        fatal("schemeRegistration->put_HasAuthorityComponent() failed");
+
+    // We show a page from a file: URI, so we need to use "*"
+    LPCWSTR allowedOrigins[1] = { L"*" };
+    if (!SUCCEEDED(schemeRegistration->SetAllowedOrigins(1, allowedOrigins)))
+        fatal("schemeRegistration->SetAllowedOrigins() failed");
+
+    // Add the registration to the options (requires ICoreWebView2EnvironmentOptions4)
+    ICoreWebView2CustomSchemeRegistration* registrations[1] =
+        { schemeRegistration.Get() };
 
     // Required for instantiating new Web Workers, which otherwise fail with a
     // cross-origin SecurityError because file:// gets origin 'null'.
     std::wstring additionalArgs = L"--allow-file-access-from-files";
     if (enableWebDriver)
         additionalArgs += L" --remote-debugging-port=9222";
+
+    auto options = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
     options->put_AdditionalBrowserArguments(additionalArgs.c_str());
+
+    Microsoft::WRL::ComPtr<ICoreWebView2EnvironmentOptions4> options4;
+    if (!SUCCEEDED(options.As(&options4)))
+        fatal("options.As() failed");
+    if (!SUCCEEDED(options4->SetCustomSchemeRegistrations(1, registrations)))
+        fatal("options4->SetCustomSchemeRegistrations() failed");
 
     CreateCoreWebView2EnvironmentWithOptions(
         nullptr,
@@ -1554,8 +2024,7 @@ static void openCOOLWindow(const FilenameAndUri& filenameAndUri, DocumentMode mo
                 // Create a CoreWebView2Controller and get the associated CoreWebView2 whose parent is the main window hWnd
                 env->CreateCoreWebView2Controller(
                     data.hWnd,
-                    Microsoft::WRL::Callback<
-                        ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
+                    Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
                         [&data, env](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT
                         {
                             if (!controller)
@@ -1580,6 +2049,30 @@ static void openCOOLWindow(const FilenameAndUri& filenameAndUri, DocumentMode mo
                             data.webViewController->put_Bounds(bounds);
 
                             EventRegistrationToken token;
+                            HRESULT hr;
+
+                            hr = (webView->AddWebResourceRequestedFilter(
+                                      L"cool://*",
+                                      COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL));
+                            if (!SUCCEEDED(hr))
+                            {
+                                LOG_ERR_S("AddWebResourceRequestedFilter() failed");
+                                return hr;
+                            }
+
+                            hr = webView->add_WebResourceRequested(
+                                Microsoft::WRL::Callback<ICoreWebView2WebResourceRequestedEventHandler>(
+                                    [env](ICoreWebView2* sender,
+                                          ICoreWebView2WebResourceRequestedEventArgs* args) -> HRESULT
+                                    {
+                                        return webResourceRequestedHandler(env, sender, args);
+                                    }).Get(), &token);
+
+                            if (!SUCCEEDED(hr))
+                            {
+                                LOG_ERR_S("add_WebResourceRequested() failed");
+                                return hr;
+                            }
 
                             // Communication between host and web content
                             // Set an event handler for the host to return received message back to the web content
@@ -1706,13 +2199,13 @@ static void openCOOLWindow(const FilenameAndUri& filenameAndUri, DocumentMode mo
                             coolURL += "&lang=" + uiLanguage;
                             coolURL += "&dir=" + std::string(LangUtil::isRtlLanguage(uiLanguage) ? "rtl" : "");
 
-                            if (!isLightTheme())
-                                coolURL +=
-                                    "&darkTheme=true";
+                            // Saved choice wins, otherwise follow the system theme.
+                            const bool darkMode = Desktop::getDarkMode().value_or(!isLightTheme());
+                            coolURL += darkMode ? "&darkTheme=true" : "&darkTheme=false";
 
                             if (data.mode != DocumentMode::STARTER)
                                 coolURL +=
-                                    std::string((data.mode == DocumentMode::NEW ? "&isnewdocument=true" : "")) +
+                                    std::string((data.mode != DocumentMode::NEW ? "&startreadonly=true" : "")) +
                                     std::string((data.mode == DocumentMode::WELCOME ? "&welcome=true" : ""));
 
                             webView->Navigate(Util::string_to_wide_string(coolURL).c_str());
@@ -1776,7 +2269,7 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
         else if (s.starts_with(L"TEXTCLIPBOARD "))
         {
             std::wstring text = s.substr(14);
-            if (OpenClipboard(NULL))
+            if (try_open_clipboard())
             {
                 EmptyClipboard();
                 HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, (text.size() + 1) * sizeof(wchar_t));
@@ -1824,9 +2317,9 @@ static void processMessage(WindowData& data, wil::unique_cotaskmem_string& messa
         {
             Desktop::uploadSettings(Util::wide_string_to_string(s.substr(strlen("UPLOADSETTINGS "))));
         }
-        else if (s.starts_with(L"PROCESSINTEGRATORADMINFILE "))
+        else if (s.starts_with(L"SETDARKMODE "))
         {
-            Desktop::processIntegratorAdminFile(Util::wide_string_to_string(s.substr(strlen("PROCESSINTEGRATORADMINFILE "))));
+            Desktop::setDarkMode(s.substr(strlen("SETDARKMODE ")) == L"true");
         }
         else if (s.starts_with(L"downloadas "))
         {
@@ -2218,6 +2711,12 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int showWindowMode)
     localAppData = Util::wide_string_to_string(std::wstring(appDataFolder) + L"\\" + appName);
     CoTaskMemFree(appDataFolder);
 
+    // Wire up the ODF IFilter into Windows Search and the FullDetails /
+    // PreviewDetails strings the Properties dialog needs, both under
+    // HKCU\Software\Classes. See registerOdfShellExtensions() for the
+    // silo-escape mechanism. Idempotent on every launch.
+    registerOdfShellExtensions();
+
     // A "LANG" environment variable is not a thing on Windows, but check
     // for a such anyway, for easier testing.
     auto langEnv = std::getenv("LANG");
@@ -2237,7 +2736,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int showWindowMode)
     if (!loglevel)
         loglevel = COOLWSD_LOGLEVEL;
     Log::initialize("CODA", loglevel);
-    Util::setThreadName("main");
+    ProcUtil::setThreadName("main");
 
     persistentWindowSizeStoreOK =
         (persistentWindowSizeStore.open
@@ -2308,7 +2807,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int showWindowMode)
             // warnings, but let's try to do as they want.
             argv[0] = _strdup("mobile");
             argv[1] = nullptr;
-            Util::setThreadName("app");
+            ProcUtil::setThreadName("app");
             while (true)
             {
                 coolwsd = new COOLWSD();

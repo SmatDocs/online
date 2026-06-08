@@ -154,7 +154,7 @@ class DeltaGenerator {
 
         // <rle data size> (byte), <bitmask>, [<unique pixel data>]
         size_t packForNetwork(unsigned char *output,
-                              LibreOfficeKitTileMode mode) const
+                              COKitTileMode mode) const
         {
             assert(_rleSize < 65536);
 
@@ -253,24 +253,24 @@ class DeltaGenerator {
                 {
                     uint32_t cpu_scratch[width];
                     uint64_t cpu_rleMask[_rleMaskUnits];
-                    unsigned int cpu_outp = 0;
+                    size_t cpu_outp = 0;
                     initPixRowCpu(from, cpu_scratch, &cpu_outp, cpu_rleMask, width);
 
                     // check our result
                     if (memcmp(cpu_rleMask, _rleMask, sizeof (cpu_rleMask)))
                     {
                         std::cerr << "Masks differ " <<
-                            Util::bytesToHexString(reinterpret_cast<const char *>(_rleMask), sizeof(_rleMask)) << "\n" <<
-                            Util::bytesToHexString(reinterpret_cast<const char *>(cpu_rleMask), sizeof(_rleMask)) << "\n";
+                            HexUtil::bytesToHexString(reinterpret_cast<const char *>(_rleMask), sizeof(_rleMask)) << "\n" <<
+                            HexUtil::bytesToHexString(reinterpret_cast<const char *>(cpu_rleMask), sizeof(_rleMask)) << "\n";
                     }
                     assert(_rleSize == cpu_outp);
                     if(_rleSize > 0 && memcmp(scratch, cpu_scratch, _rleSize))
                     {
                         std::cerr << "RLE pixels differ mask:\n" <<
-                            Util::bytesToHexString(reinterpret_cast<const char *>(_rleMask), sizeof(_rleMask)) << "\n" <<
+                            HexUtil::bytesToHexString(reinterpret_cast<const char *>(_rleMask), sizeof(_rleMask)) << "\n" <<
                             "pixels:\n" <<
-                            Util::bytesToHexString(reinterpret_cast<const char *>(scratch), _rleSize) << "\n" <<
-                            Util::bytesToHexString(reinterpret_cast<const char *>(cpu_scratch), _rleSize) << "\n";
+                            HexUtil::bytesToHexString(reinterpret_cast<const char *>(scratch), _rleSize) << "\n" <<
+                            HexUtil::bytesToHexString(reinterpret_cast<const char *>(cpu_scratch), _rleSize) << "\n";
                     }
                 }
 #endif
@@ -305,7 +305,7 @@ class DeltaGenerator {
         void diffRowTo(const DeltaBitmapRow &curRow,
                        const int width, const int curY,
                        std::vector<uint8_t> &output,
-                       LibreOfficeKitTileMode mode) const
+                       COKitTileMode mode) const
         {
             PixIterator oldPixels(*this);
             PixIterator curPixels(curRow);
@@ -520,14 +520,14 @@ class DeltaGenerator {
     }
 
     static void copy_row(unsigned char *dest, const unsigned char *srcBytes,
-                         unsigned int count, LibreOfficeKitTileMode mode)
+                         unsigned int count, COKitTileMode mode)
     {
         switch (mode)
         {
-        case LOK_TILEMODE_RGBA:
+        case KIT_TILEMODE_RGBA:
             std::memcpy(dest, srcBytes, count * 4);
             break;
-        case LOK_TILEMODE_BGRA:
+        case KIT_TILEMODE_BGRA:
             if (simd::HasAVX2 &&
                 simd_copyRowSwapRB(dest, srcBytes, count))
                 break;
@@ -548,7 +548,7 @@ class DeltaGenerator {
         const DeltaData &prev,
         const DeltaData &cur,
         std::vector<char>& outStream,
-        LibreOfficeKitTileMode mode) const
+        COKitTileMode mode) const
     {
         // TODO: should we split and compress alpha separately ?
         if (prev.getWidth() != cur.getWidth() || prev.getHeight() != cur.getHeight())
@@ -714,7 +714,7 @@ class DeltaGenerator {
         const TileLocation &loc,
         std::vector<char>& output,
         TileWireId wid, bool forceKeyframe,
-        LibreOfficeKitTileMode mode,
+        COKitTileMode mode,
         std::shared_ptr<DeltaData> &rleData)
     {
         rleData = nullptr;
@@ -782,7 +782,7 @@ class DeltaGenerator {
         const TileLocation &loc,
         std::vector<char>& output,
         TileWireId wid, bool forceKeyframe,
-        bool dumpTiles, LibreOfficeKitTileMode mode)
+        bool dumpTiles, COKitTileMode mode)
     {
         #if !ENABLE_DEBUG
         dumpTiles = false;

@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <common/ContainerUtil.hpp>
 #include <common/Log.hpp>
 #include <common/Util.hpp>
 
@@ -28,7 +29,6 @@
 #include <string>
 #include <map>
 #include <type_traits>
-#include <unordered_map>
 
 namespace ConfigUtil
 {
@@ -37,11 +37,14 @@ class AppConfigMap final : public Poco::Util::MapConfiguration
 {
 public:
     AppConfigMap() = default;
-    AppConfigMap(const std::unordered_map<std::string, std::string>& map)
+
+    /// Accepts any map-like container whose elements expose .first / .second
+    /// strings (std::unordered_map, std::map, Util::UnorderedStringMap, ...).
+    template <typename Map> explicit AppConfigMap(const Map& map)
     {
-        for (const auto& pair : map)
+        for (const auto& [key, value] : map)
         {
-            setRaw(pair.first, pair.second);
+            setRaw(key, value);
         }
     }
 
@@ -113,11 +116,14 @@ void initialize(const std::string& xml);
 /// Initialize the config given a pointer to a long-lived pointer.
 void initialize(const Poco::Util::AbstractConfiguration* config);
 
+/// Initialize the config from a file given it's name.
+void initializeFromFile(const std::string& filename);
+
 /// Check if the config has been initialized
 bool isInitialized();
 
 /// Returns the default config.
-const std::unordered_map<std::string, std::string>& getDefaultAppConfig();
+const Util::UnorderedStringMap<std::string>& getDefaultAppConfig();
 
 /// Extract all entries as key-value pairs. We use map to have the entries sorted.
 std::map<std::string, std::string> extractAll(const Poco::Util::AbstractConfiguration& config);
@@ -141,15 +147,19 @@ int getInt(const std::string& key, int def);
 inline bool isSslEnabled()
 {
 #if defined(ENABLE_SSL) && ENABLE_SSL
+    if constexpr (!Util::isFuzzing())
+    {
 #if ENABLE_DEBUG
-    // Unit-tests enable/disable SSL at will.
-    return !Util::isFuzzing() && getBool("ssl.enable", true);
+        // Unit-tests enable/disable SSL at will.
+        CONFIG_STATIC const bool isSslEnabled = getBool("ssl.enable", true);
+        return isSslEnabled;
 #else
-    return !Util::isFuzzing() && SslEnabled.get();
+        return SslEnabled.get();
 #endif
-#else
+    }
+#endif
+
     return false;
-#endif
 }
 
 /// Returns true if SSL Termination is enabled in the config and no fuzzing is enabled.
@@ -163,7 +173,7 @@ inline bool isSSLTermination()
 }
 
 /// Return true if build is support key enabled (ENABLE_SUPPORT_KEY is defined)
-inline constexpr bool isSupportKeyEnabled()
+constexpr bool isSupportKeyEnabled()
 {
 #ifdef ENABLE_SUPPORT_KEY
     return ENABLE_SUPPORT_KEY;

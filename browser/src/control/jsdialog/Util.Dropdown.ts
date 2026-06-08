@@ -33,6 +33,7 @@ JSDialog.OpenDropdown = function (
 	popupAnchor: string,
 	isSubmenu: boolean,
 	earlyCallbackCall?: boolean,
+	noDefaultSelection?: boolean,
 ) {
 	const json = {
 		id: _createDropdownId(id),
@@ -87,7 +88,7 @@ JSDialog.OpenDropdown = function (
 	}
 
 	const shouldSelectFirstEntry =
-		entries.length > 0
+		!noDefaultSelection && entries.length > 0
 			? !entries.some((entry) => entry.selected === true)
 			: false;
 	let initialSelectedId;
@@ -96,7 +97,8 @@ JSDialog.OpenDropdown = function (
 		const checkedValue =
 			entries[i].checked === undefined
 				? undefined
-				: entries[i].uno && isChecked('.uno' + entries[i].uno);
+				: (entries[i].uno ? isChecked('.uno' + entries[i].uno) : false) ||
+					(entries[i].action ? isChecked(String(entries[i].action)) : false);
 
 		let entry:
 			| WidgetJSON
@@ -136,7 +138,16 @@ JSDialog.OpenDropdown = function (
 				initialSelectedId = entry
 					? (entry as ComboBoxEntry).initialSelectedId
 					: undefined;
-				if (entry?.type === 'grid') json.gridKeyboardNavigation = true;
+				// A grid, or a widget that wraps a grid (the new slide layout
+				// picker wraps one so it can also show the Overview button),
+				// navigates with grid keys. Otherwise list navigation lets
+				// arrow + Tab + arrow select more than one cell in a
+				// single-choice grid.
+				if (
+					entry?.type === 'grid' ||
+					(entry as NewSlideLayoutEntryWidgetJSON)?.gridContent?.type === 'grid'
+				)
+					json.gridKeyboardNavigation = true;
 				break;
 
 			// horizontal separator in menu
@@ -160,12 +171,14 @@ JSDialog.OpenDropdown = function (
 					pos: i,
 					text: entries[i].text,
 					hint: entries[i].hint,
+					shortcut: entries[i].shortcut,
 					w2icon: entries[i].icon, // FIXME: DEPRECATED
 					icon: entries[i].img,
 					checked: entries[i].checked || checkedValue,
 					selected:
 						i === 0 && shouldSelectFirstEntry ? true : entries[i].selected,
 					hasSubMenu: !!entries[i].items,
+					class: entries[i].class,
 				} as ComboBoxEntry;
 				if ((entry as ComboBoxEntry).selected) initialSelectedId = entry.id;
 				break;
@@ -223,6 +236,7 @@ JSDialog.OpenDropdown = function (
 						'top-end',
 						true,
 						earlyCallbackCall,
+						noDefaultSelection,
 					);
 					lastSubMenuOpened = subMenuId;
 
@@ -241,13 +255,7 @@ JSDialog.OpenDropdown = function (
 					return;
 				} else if (eventType === 'selected' && entry && entry.uno) {
 					if (earlyCallbackCall && innerCallback) {
-						innerCallback(
-							objectType,
-							eventType,
-							object,
-							data,
-							entry || builder,
-						);
+						innerCallback(objectType, eventType, object, data, entry);
 					} else {
 						const uno =
 							entry.uno.indexOf('.uno:') === 0

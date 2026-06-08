@@ -51,6 +51,9 @@ class TextSelectionSection extends CanvasSectionObject {
 	}
 
 	onDraw(frameCount?: number, elapsedTime?: number): void {
+		Util.ensureValue(app.activeDocument);
+		Util.ensureValue(app.calc.splitCoordinate);
+
 		// Remove when visibility checks are done in layout views (on simple point instances).
 		if (
 			!app.activeDocument.isModeActive(this.mode) ||
@@ -66,31 +69,50 @@ class TextSelectionSection extends CanvasSectionObject {
 		this.context.strokeStyle = this.color;
 		this.context.fillStyle = this.color;
 
-		let deflectionX = 0;
-		let deflectionY = 0;
+		// In Calc RTL, polygons come from core in LTR document coords; mirror
+		// each x around the tile section's right edge so the rectangle lands
+		// on the visible cells that the user actually selected.
+		const mirrorX = app.calc.isRTL();
+		const mirrorAxis = mirrorX
+			? 2 * app.sectionContainer.getDocumentAnchor()[0] +
+				app.sectionContainer.getDocumentAnchorSection().size[0]
+			: 0;
+		const toCanvasX = (vX: number) => (mirrorX ? mirrorAxis - vX : vX);
 
-		if (app.map._docLayer._docType === 'spreadsheet') {
-			if (app.isXOrdinateInFrozenPane(this.polygons[0][0].pX))
-				deflectionX = app.activeDocument.activeLayout.viewedRectangle.pX1;
-
-			if (app.isYOrdinateInFrozenPane(this.polygons[0][0].pY))
-				deflectionY = app.activeDocument.activeLayout.viewedRectangle.pY1;
-		}
+		const isCalc = app.map._docLayer.isCalc();
 
 		for (let i = 0; i < this.polygons.length; i++) {
 			const polygon = this.polygons[i];
 
 			this.context.beginPath();
-			this.context.moveTo(
-				polygon[0].vX + deflectionX,
-				polygon[0].vY + deflectionY,
-			);
 
-			for (let i = 1; i < polygon.length; i++) {
-				this.context.lineTo(
-					polygon[i].vX + deflectionX,
-					polygon[i].vY + deflectionY,
-				);
+			for (let j = 0; j < polygon.length; j++) {
+				const point = polygon[j].clone();
+
+				if (isCalc) {
+					if (point.x < app.calc.splitCoordinate.x)
+						point.x += app.activeDocument.activeLayout.viewedRectangle.x1;
+					else if (
+						point.x - app.activeDocument.activeLayout.viewedRectangle.x1 <
+						app.calc.splitCoordinate.x
+					)
+						point.x =
+							app.calc.splitCoordinate.x +
+							app.activeDocument.activeLayout.viewedRectangle.x1;
+
+					if (point.y < app.calc.splitCoordinate.y)
+						point.y += app.activeDocument.activeLayout.viewedRectangle.y1;
+					else if (
+						point.y - app.activeDocument.activeLayout.viewedRectangle.y1 <
+						app.calc.splitCoordinate.y
+					)
+						point.y =
+							app.calc.splitCoordinate.y +
+							app.activeDocument.activeLayout.viewedRectangle.y1;
+				}
+
+				if (j === 0) this.context.moveTo(toCanvasX(point.vX), point.vY);
+				else this.context.lineTo(toCanvasX(point.vX), point.vY);
 			}
 
 			this.context.closePath();

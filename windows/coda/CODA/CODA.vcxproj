@@ -24,6 +24,8 @@
     <ProjectGuid>{01e897c1-3460-4aa1-a374-98a8dcd58a7c}</ProjectGuid>
     <RootNamespace>CODA</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <ResolveNuGetPackages>false</ResolveNuGetPackages>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -94,7 +96,7 @@
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;POCO_STATIC;NOMINMAX;_CRT_SECURE_NO_WARNINGS;COOLWSD_LOGLEVEL="debug";APP_VENDOR="$(APP_VENDOR)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;..\..\..\engine\workdir\UnpackedTarball\zlib;..\..\..\engine\workdir\UnpackedTarball\zstd\lib;..\..\..\engine\workdir\UnpackedTarball\libpng;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
@@ -104,7 +106,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>libpng.lib;zlib.lib;libzstd_static.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>..\..\..\engine\workdir\LinkTarget\StaticLibrary\zlib.lib;..\..\..\engine\workdir\LinkTarget\StaticLibrary\zstd.lib;..\..\..\engine\workdir\LinkTarget\StaticLibrary\libpng.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
@@ -112,7 +114,7 @@
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;POCO_STATIC;NOMINMAX;_CRT_SECURE_NO_WARNINGS;COOLWSD_LOGLEVEL="debug";APP_VENDOR="$(APP_VENDOR)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;..\..\..\engine\workdir\UnpackedTarball\zlib;..\..\..\engine\workdir\UnpackedTarball\zstd\lib;..\..\..\engine\workdir\UnpackedTarball\libpng;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
@@ -121,7 +123,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>libpng.lib;zlib.lib;libzstd_static.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>..\..\..\engine\workdir\LinkTarget\StaticLibrary\zlib.lib;..\..\..\engine\workdir\LinkTarget\StaticLibrary\zstd.lib;..\..\..\engine\workdir\LinkTarget\StaticLibrary\libpng.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -131,7 +133,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;POCO_STATIC;NOMINMAX;_CRT_SECURE_NO_WARNINGS;COOLWSD_LOGLEVEL="warning";APP_VENDOR="$(APP_VENDOR)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;..\..\..\engine\workdir\UnpackedTarball\zlib;..\..\..\engine\workdir\UnpackedTarball\zstd\lib;..\..\..\engine\workdir\UnpackedTarball\libpng;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
@@ -141,7 +143,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>libpng.lib;zlib.lib;libzstd_static.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>..\..\..\engine\workdir\LinkTarget\StaticLibrary\zlib.lib;..\..\..\engine\workdir\LinkTarget\StaticLibrary\zstd.lib;..\..\..\engine\workdir\LinkTarget\StaticLibrary\libpng.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
@@ -151,7 +153,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;POCO_STATIC;NOMINMAX;_CRT_SECURE_NO_WARNINGS;COOLWSD_LOGLEVEL="warning";APP_VENDOR="$(APP_VENDOR)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;..\..\..;..\..\..\common;..\..\..\net;..\..\..\kit;..\..\..\wsd;..\..\..\engine\workdir\UnpackedTarball\zlib;..\..\..\engine\workdir\UnpackedTarball\zstd\lib;..\..\..\engine\workdir\UnpackedTarball\libpng;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
@@ -160,7 +162,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>libpng.lib;zlib.lib;libzstd_static.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>..\..\..\engine\workdir\LinkTarget\StaticLibrary\zlib.lib;..\..\..\engine\workdir\LinkTarget\StaticLibrary\zstd.lib;..\..\..\engine\workdir\LinkTarget\StaticLibrary\libpng.lib;ws2_32.lib;iphlpapi.lib;crypt32.lib;shlwapi.lib;secur32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup>
@@ -296,6 +298,7 @@
     <ClCompile Include="..\..\..\common\Log-common.cpp" />
     <ClCompile Include="..\..\..\common\Log-windows.cpp" />
     <ClCompile Include="..\..\..\common\MobileApp.cpp" />
+    <ClCompile Include="..\..\..\common\ProcUtil.cpp" />
     <ClCompile Include="..\..\..\common\Protocol.cpp" />
     <ClCompile Include="..\..\..\common\RecentFiles.cpp" />
     <ClCompile Include="..\..\..\common\RegexUtil.cpp" />
@@ -341,18 +344,27 @@
     <Image Include="CODA.ico" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3719.77" GeneratePathProperty="true" />
+    <PackageReference Include="Microsoft.Windows.ImplementationLibrary" Version="1.0.260126.7" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
-    <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3719.77\build\native\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3719.77\build\native\Microsoft.Web.WebView2.targets')" />
-    <Import Project="..\packages\Microsoft.Windows.ImplementationLibrary.1.0.260126.7\build\native\Microsoft.Windows.ImplementationLibrary.targets" Condition="Exists('..\packages\Microsoft.Windows.ImplementationLibrary.1.0.260126.7\build\native\Microsoft.Windows.ImplementationLibrary.targets')" />
   </ImportGroup>
-  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
-    <PropertyGroup>
-      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
-    </PropertyGroup>
-    <Error Condition="!Exists('..\packages\Microsoft.Web.WebView2.1.0.3719.77\build\native\Microsoft.Web.WebView2.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Web.WebView2.1.0.3719.77\build\native\Microsoft.Web.WebView2.targets'))" />
-    <Error Condition="!Exists('..\packages\Microsoft.Windows.ImplementationLibrary.1.0.260126.7\build\native\Microsoft.Windows.ImplementationLibrary.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.ImplementationLibrary.1.0.260126.7\build\native\Microsoft.Windows.ImplementationLibrary.targets'))" />
+  <!--
+    Place WebView2Loader.dll next to the executable. The exe imports it at
+    load time, so it must sit in the output (program) directory. With the
+    PackageReference build the WebView2 package only deposits it under the
+    RID subtree (runtimes\win-<arch>\native\), so copy it flat ourselves.
+  -->
+  <PropertyGroup>
+    <WebView2Rid Condition="'$(Platform)'=='x64'">win-x64</WebView2Rid>
+    <WebView2Rid Condition="'$(Platform)'=='ARM64'">win-arm64</WebView2Rid>
+  </PropertyGroup>
+  <Target Name="CopyWebView2Loader" AfterTargets="Build"
+          Inputs="$(PkgMicrosoft_Web_WebView2)\runtimes\$(WebView2Rid)\native\WebView2Loader.dll"
+          Outputs="$(OutDir)WebView2Loader.dll">
+    <Copy SourceFiles="$(PkgMicrosoft_Web_WebView2)\runtimes\$(WebView2Rid)\native\WebView2Loader.dll"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
   </Target>
 </Project>

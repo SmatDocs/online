@@ -437,25 +437,38 @@ namespace FileUtil
         return ::mkdir(dir.c_str(), S_IRWXU);
     }
 
-    void createDirectory(const std::string& dir)
+    void createDirectory(std::string_view dir)
     {
         std::filesystem::create_directory(dir);
+    }
+
+    void createDirectories(std::string_view dir) { std::filesystem::create_directories(dir); }
+
+    void setSysTempDirectoryPath(const std::string& path)
+    {
+        ::setenv("TMPDIR", path.data(), 1);
+        ::setenv("TMP", path.data(), 1);
+        ::setenv("TEMP", path.data(), 1);
+        ::setenv("TEMPDIR", path.data(), 1);
     }
 
     std::string getSysTempDirectoryPath()
     {
         // Don't const to allow for automatic move on return.
-        std::string path = std::filesystem::temp_directory_path();
+        std::error_code ec;
+        std::string path = std::filesystem::temp_directory_path(ec);
 
-        if (!path.empty())
+        if (!ec && !path.empty())
             return path;
 
         // Sensible fallback, though shouldn't be needed.
         const char *tmp = getenv("TMPDIR");
         if (!tmp)
+            tmp = getenv("TMP");
+        if (!tmp)
             tmp = getenv("TEMP");
         if (!tmp)
-            tmp = getenv("TMP");
+            tmp = getenv("TEMPDIR");
         if (!tmp)
             tmp = "/tmp";
         return tmp;

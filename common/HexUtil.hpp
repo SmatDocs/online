@@ -11,8 +11,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cassert>
+#include <charconv>
 #include <cstdint>
 #include <sstream>
 #include <string>
@@ -67,7 +69,7 @@ template <typename T> bool dataFromHexString(const std::string_view hexString, T
     return true;
 }
 
-inline constexpr std::array<char, 2> hexFromByte(unsigned char byte)
+constexpr std::array<char, 2> hexFromByte(unsigned char byte)
 {
     constexpr auto hex = "0123456789ABCDEF";
     return { hex[byte >> 4], hex[byte & 0xf] };
@@ -98,16 +100,23 @@ inline std::string bytesToHexString(const std::string_view str)
     return bytesToHexString(str.data(), str.size());
 }
 
-inline int hexDigitFromChar(char c)
+/// Maps a char to its hex value (0..15) or -1 for any non-hex char.
+constexpr int hexDigitFromChar(char c)
 {
-    if (c >= '0' && c <= '9')
-        return c - '0';
-    else if (c >= 'a' && c <= 'f')
-        return c - 'a' + 10;
-    else if (c >= 'A' && c <= 'F')
-        return c - 'A' + 10;
-    else
-        return -1;
+    constexpr auto table = []
+    {
+        std::array<signed char, 256> t{};
+        t.fill(-1);
+        for (int i = 0; i <= 9; ++i)
+            t['0' + i] = static_cast<signed char>(i);
+        for (int i = 0; i < 6; ++i)
+        {
+            t['a' + i] = static_cast<signed char>(10 + i);
+            t['A' + i] = static_cast<signed char>(10 + i);
+        }
+        return t;
+    }();
+    return table[static_cast<unsigned char>(c)];
 }
 
 inline std::string hexStringToBytes(const uint8_t* data, size_t size)
@@ -238,6 +247,85 @@ inline std::string dumpHex(const char* legend, const char* prefix,
     std::vector<char> data(startIt, endIt);
     dumpHex(oss, data, legend, prefix, skipDup, width);
     return oss.str();
+}
+
+/// Hex-encode an integral ID into a buffer, with padding support.
+/// If @size is smaller than the encoded form needs, high-order hex digits are
+/// silently truncated to fit. A @size of 0 returns an empty view.
+inline std::string_view encodeId(char* buffer, std::size_t size, const std::uint64_t number,
+                                 int width, char pad = '0')
+{
+    if (buffer == nullptr || size == 0)
+    {
+        return std::string_view();
+    }
+
+    // Skip leading (high-order) zeros, if any. For number == 0 we stop at
+    // highNibble == 0 so we still emit a single '0' digit below.
+    int highNibble = (2 * sizeof(number) - 1) * 4;
+    while ((number & (std::uint64_t(0xf) << highNibble)) == 0)
+    {
+        highNibble -= 4;
+        if (highNibble <= 0)
+            break;
+    }
+
+    // Pad, if necessary.
+    highNibble = std::min<int>(size - 1, highNibble / 4) * 4;
+    width = std::min<int>(size, width);
+    int outIndex = 0;
+    const int hexDigits = (highNibble / 4) + 1;
+    for (; width > hexDigits; --width)
+    {
+        buffer[outIndex++] = pad;
+    }
+
+    // Hexify the remaining digits. We emit two chars per iteration when the
+    // remaining bit count is byte-aligned, and a single leading char otherwise.
+    constexpr const char* const Hex = "0123456789abcdef";
+    int bits = highNibble + 4; // total bits of @number still to emit
+    if ((bits & 7) != 0) // odd hex digits remaining: emit the leading nibble
+    {
+        bits -= 4;
+        const auto nibble = static_cast<unsigned char>((number >> bits) & 0xf);
+        buffer[outIndex++] = Hex[nibble];
+    }
+
+    while (bits > 0)
+    {
+        bits -= 8;
+        const auto byte = static_cast<unsigned char>((number >> bits) & 0xff);
+        buffer[outIndex++] = Hex[byte >> 4];
+        buffer[outIndex++] = Hex[byte & 0xf];
+    }
+
+    // Return a view over the given buffer.
+    return std::string_view(buffer, outIndex);
+}
+
+/// Hex-encode an integral ID into a string, with padding support.
+inline std::string encodeId(const std::uint64_t number, int width = 5, char pad = '0')
+{
+    char buffer[32];
+    return std::string(encodeId(buffer, sizeof(buffer), number, width, pad));
+}
+
+/// Hex-encode an integral ID into a stream, with padding support.
+inline std::ostringstream& encodeId(std::ostringstream& oss, const std::uint64_t number,
+                                    int width = 5, char pad = '0')
+{
+    char buffer[32];
+    oss << encodeId(buffer, sizeof(buffer), number, width, pad);
+    return oss;
+}
+
+/// Decode the hex-string into an ID. The reverse of encodeId().
+/// Returns 0 if @str is empty or has no parseable hex prefix.
+inline std::uint64_t decodeId(const std::string_view str)
+{
+    std::uint64_t id = 0;
+    std::from_chars(str.data(), str.data() + str.size(), id, 16);
+    return id;
 }
 
 } // namespace HexUtil

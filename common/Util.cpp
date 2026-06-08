@@ -18,7 +18,9 @@
 #include <config_version.h>
 
 #include <common/Common.hpp>
+#include <common/HexUtil.hpp>
 #include <common/Log.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Protocol.hpp>
 #include <common/Rectangle.hpp>
 #include <common/SigUtil.hpp>
@@ -26,7 +28,6 @@
 #include <common/Util.hpp>
 #include <common/base64.hpp>
 
-#include <Poco/HexBinaryEncoder.h>
 #include <Poco/URI.h>
 #include <Poco/Util/Application.h>
 
@@ -148,12 +149,10 @@ namespace Util
         /// Generate a string of random characters.
         std::string getHexString(const std::size_t length)
         {
-            std::stringstream ss;
-            Poco::HexBinaryEncoder hex(ss);
-            hex.rdbuf()->setLineLength(0); // Don't insert line breaks.
-            hex.write(getBytes(length).data(), length);
-            hex.close(); // Flush.
-            return ss.str().substr(0, length);
+            const auto bytes = getBytes(length);
+            std::string hex = HexUtil::bytesToHexString(bytes.data(), bytes.size());
+            hex.resize(length);
+            return hex;
         }
 
         /// Generates a random string in Base64.
@@ -183,10 +182,6 @@ namespace Util
     {
         return std::getenv("DISPLAY") != nullptr;
     }
-
-    bool kitInProcess = false;
-    void setKitInProcess(bool value) { kitInProcess = value; }
-    bool isKitInProcess() { return isFuzzing() || isMobileApp() || kitInProcess; }
 
     std::string replace(std::string result, const std::string_view from, const std::string_view to)
     {
@@ -255,123 +250,6 @@ namespace Util
         else
             r = s;
         return replace(std::move(r), "\n", " / ");
-    }
-
-    static thread_local long ThreadTid = 0;
-
-    long getThreadId()
-    {
-        // Avoid so many redundant system calls
-#if defined __linux__
-        if (!ThreadTid)
-            ThreadTid = ::syscall(SYS_gettid);
-        return ThreadTid;
-#elif defined __FreeBSD__
-        if (!ThreadTid)
-            thr_self(&ThreadTid);
-        return ThreadTid;
-#elif defined __APPLE__
-        if (!ThreadTid)
-        {
-            uint64_t tid;
-            if (pthread_threadid_np(NULL, &tid) == 0)
-                ThreadTid = tid;
-        }
-        return ThreadTid;
-#elif defined _WIN32
-        if (!ThreadTid)
-        {
-            DWORD tid = GetThreadId(GetCurrentThread());
-            if (tid)
-                ThreadTid = tid;
-        }
-        return ThreadTid;
-#else
-        static long threadCounter = 1;
-        if (!ThreadTid)
-            ThreadTid = threadCounter++;
-        return ThreadTid;
-#endif
-    }
-
-    void killThreadById(int tid, [[maybe_unused]] int signal)
-    {
-#if defined __linux__
-        ::syscall(SYS_tgkill, getpid(), tid, signal);
-#else
-        (void) signal;
-        LOG_WRN("No tgkill for thread " << tid);
-#endif
-    }
-
-    // prctl(2) supports names of up to 16 characters, including null-termination.
-    // Although in practice on linux more than 16 chars is supported.
-    static thread_local char ThreadName[32] = {0};
-    static_assert(sizeof(ThreadName) >= 16, "ThreadName should have a statically known size, and not be a pointer.");
-
-    void setThreadName(const std::string& s)
-    {
-        // Clear the cache - perhaps we forked
-        ThreadTid = 0;
-
-        // Copy the current name.
-        const std::string knownAs
-            = ThreadName[0] ? "known as [" + std::string(ThreadName) + ']' : "unnamed";
-
-        // Set the new name.
-        strncpy(ThreadName, s.c_str(), sizeof(ThreadName) - 1);
-        ThreadName[sizeof(ThreadName) - 1] = '\0';
-#ifdef __linux__
-        if (prctl(PR_SET_NAME, reinterpret_cast<unsigned long>(s.c_str()), 0, 0, 0) != 0)
-            LOG_SYS("Cannot set thread name of "
-                    << getThreadId() << " (" << std::hex << std::this_thread::get_id() << std::dec
-                    << ") of process " << getpid() << " currently " << knownAs << " to [" << s
-                    << ']');
-        else
-            LOG_INF("Thread " << getThreadId() << " (" << std::hex << std::this_thread::get_id()
-                              << std::dec << ") of process " << getpid() << " formerly " << knownAs
-                              << " is now called [" << s << ']');
-#elif defined IOS
-        [[NSThread currentThread] setName:[NSString stringWithUTF8String:ThreadName]];
-        LOG_INF("Thread " << getThreadId() << " is now called [" << s << ']');
-#elif defined __EMSCRIPTEN__
-        emscripten_console_logf("COOL thread name: \"%s\"", s.c_str());
-#elif defined _WIN32
-        SetThreadDescription(GetCurrentThread(), string_to_wide_string(s).c_str());
-        LOG_INF("Thread " << getThreadId() << " is now called [" << s << ']');
-#endif
-
-        // Emit a metadata Trace Event identifying this thread. This will invoke a different function
-        // depending on which executable this is in.
-        TraceEvent::emitOneRecordingIfEnabled(
-            R"({"name":"thread_name","ph":"M","args":{"name":")" + s + R"("},"pid":)" +
-            std::to_string(Util::getProcessId()) +
-            ",\"tid\":" + std::to_string(Util::getThreadId()) + "},\n");
-    }
-
-    const char *getThreadName()
-    {
-        // Main process and/or not set yet.
-        if (ThreadName[0] == '\0')
-        {
-#ifdef __linux__
-            // prctl(2): The buffer should allow space for up to 16 bytes; the returned string will be null-terminated.
-            if (prctl(PR_GET_NAME, reinterpret_cast<unsigned long>(ThreadName), 0, 0, 0) != 0)
-                strncpy(ThreadName, "<noid>", sizeof(ThreadName) - 1);
-#elif defined IOS
-            const char *const name = [[[NSThread currentThread] name] UTF8String];
-            strncpy(ThreadName, name, sizeof(ThreadName) - 1);
-#elif defined _WIN32
-            PWSTR description;
-            if (SUCCEEDED(GetThreadDescription(GetCurrentThread(), &description)))
-                strncpy(ThreadName, wide_string_to_string(description).c_str(), sizeof(ThreadName) - 1);
-            LocalFree(description);
-#endif
-            ThreadName[sizeof(ThreadName) - 1] = '\0';
-        }
-
-        // Avoid so many redundant system calls
-        return ThreadName;
     }
 
     std::string getCoolVersion() { return std::string(COOLWSD_VERSION); }
@@ -809,19 +687,6 @@ namespace Util
 #endif
     }
 
-    void assertCorrectThread(std::thread::id owner, LOG_CAPTURE_CALLER)
-    {
-        // uninitialized owner means detached and can be invoked by any thread.
-        const bool sameThread = (owner == std::thread::id() || owner == std::this_thread::get_id());
-        if (!sameThread)
-            LOG_ERR("Incorrect thread affinity. Expected: "
-                    << Log::to_string(owner) << " but called from "
-                    << Log::to_string(std::this_thread::get_id()) << " (" << Util::getThreadId()
-                    << ')');
-
-        assert(sameThread);
-    }
-
     void sleepFromEnvIfSet(const char *domain, const char *envVar)
     {
         const char *value;
@@ -832,149 +697,11 @@ namespace Util
             {
                 std::cerr << domain << ": Sleeping " << delaySecs
                           << " seconds to give you time to attach debugger to process "
-                          << Util::getProcessId() << std::endl
-                          << "sudo gdb --pid=" << Util::getProcessId() << std::endl;
+                          << ProcUtil::getProcessId() << std::endl
+                          << "sudo gdb --pid=" << ProcUtil::getProcessId() << std::endl;
                 std::this_thread::sleep_for(std::chrono::seconds(delaySecs));
             }
         }
-    }
-
-    std::string Backtrace::Symbol::toString() const
-    {
-        std::string s;
-        if (isDemangled())
-        {
-            s.append(demangled);
-            s.append(" <= ");
-        }
-        s.append(mangled);
-        if (!offset.empty())
-        {
-            s.append("+").append(offset);
-        }
-        if (!blob.empty())
-        {
-            s.append(" @ ").append(blob);
-        }
-        return s;
-    }
-    std::string Backtrace::Symbol::toMangledString() const
-    {
-        std::string s;
-        s.append(mangled);
-        if (!offset.empty())
-        {
-            s.append("+").append(offset);
-        }
-        if (!blob.empty())
-        {
-            s.append(" @ ").append(blob);
-        }
-        return s;
-    }
-    bool Backtrace::separateRawSymbol(const std::string& raw, Symbol& s)
-    {
-        auto idx0 = raw.find('(');
-        if (idx0 != std::string::npos)
-        {
-            auto idx2 = raw.find(')', idx0 + 1);
-            if (idx2 != std::string::npos && idx2 > idx0)
-            {
-                auto idx1 = raw.find('+', idx0 + 1);
-                if (idx1 != std::string::npos && idx1 > idx0 && idx1 < idx2)
-                {
-                    //  0123456789abcd
-                    // "abc(def+0x123)"
-                    s.blob = raw.substr(0, idx0);
-                    s.mangled = raw.substr(idx0 + 1, idx1 - idx0 - 1);
-                    s.offset = raw.substr(idx1 + 1, idx2 - idx1 - 1);
-                    return true;
-                }
-            }
-        }
-        s.mangled = raw;
-        return false;
-    }
-
-    Backtrace::Backtrace([[maybe_unused]] const int maxFrames, const int skip)
-        : skipFrames(skip)
-    {
-#if defined(__GLIBC__)
-        std::vector<void*> backtraceBuffer(maxFrames + skip, nullptr);
-
-        const int numSlots = ::backtrace(backtraceBuffer.data(), backtraceBuffer.size());
-        if (numSlots > 0)
-        {
-            char** rawSymbols = ::backtrace_symbols(backtraceBuffer.data(), numSlots);
-            if (rawSymbols)
-            {
-                for (int i = skip; i < numSlots; ++i)
-                {
-                    Symbol symbol;
-                    separateRawSymbol(rawSymbols[i], symbol);
-                    int status;
-                    char* demangled;
-                    std::string s("`");
-                    if ((demangled = abi::__cxa_demangle(symbol.mangled.c_str(), nullptr, nullptr,
-                                                         &status)) != nullptr)
-                    {
-                        symbol.demangled = demangled;
-                        free(demangled);
-                    }
-                    _frames.emplace_back(backtraceBuffer[i], symbol);
-                }
-                free(rawSymbols);
-            }
-        }
-#else
-        (void) maxFrames;
-#endif
-        if (0 == _frames.size())
-        {
-            _frames.emplace_back(nullptr, Symbol{"n/a", "empty", "0x00", ""});
-        }
-    }
-
-    std::ostream& Backtrace::send(std::ostream& os) const
-    {
-        os << "Backtrace:\n";
-        int fidx = skipFrames;
-        for (const auto& p : _frames)
-        {
-            const Symbol& sym = p.second;
-            if (sym.isDemangled())
-            {
-                os << fidx++ << ": " << sym.demangled << "\n";
-                os << "\t" << sym.toMangledString() << '\n';
-            }
-            else
-            {
-                os << fidx++ << ": " << sym.toMangledString() << '\n';
-            }
-        }
-        return os;
-    }
-    std::string Backtrace::toString() const
-    {
-        std::string s = "Backtrace:\n";
-        int fidx = skipFrames;
-        for (const auto& p : _frames)
-        {
-            const Symbol& sym = p.second;
-            if (sym.isDemangled())
-            {
-                s.append(std::to_string(fidx++)).append(": ").append(sym.demangled).append("\n");
-                s.append("\t").append(sym.toMangledString()).append("\n");
-            }
-            else
-            {
-                s.append(std::to_string(fidx++))
-                    .append(": ")
-                    .append(sym.toMangledString())
-                    .append("\n");
-            }
-        }
-        return s;
     }
 
     Rectangle::Rectangle(const std::string &rectangle)
@@ -982,10 +709,10 @@ namespace Util
         StringVector tokens(StringVector::tokenize(rectangle, ','));
         if (tokens.size() == 4)
         {
-            _x1 = std::stoi(tokens[0]);
-            _y1 = std::stoi(tokens[1]);
-            _x2 = _x1 + std::stoi(tokens[2]);
-            _y2 = _y1 + std::stoi(tokens[3]);
+            _x1 = NumUtil::stoi(tokens[0]);
+            _y1 = NumUtil::stoi(tokens[1]);
+            _x2 = _x1 + NumUtil::stoi(tokens[2]);
+            _y2 = _y1 + NumUtil::stoi(tokens[3]);
         }
         else
         {
@@ -1003,6 +730,58 @@ namespace Util
         std::string decoded;
         macaron::Base64::Decode(input, decoded);
         return decoded;
+    }
+
+    void LoadTimings::parse(std::string_view payload)
+    {
+        std::lock_guard<std::mutex> guard(_mutex);
+        std::size_t pos = payload.find(':');
+        if (pos == std::string_view::npos)
+            pos = 0;
+        else
+            ++pos;
+        while (pos < payload.size())
+        {
+            while (pos < payload.size() &&
+                   std::isspace(static_cast<unsigned char>(payload[pos])))
+                ++pos;
+            const std::size_t eq = payload.find('=', pos);
+            if (eq == std::string_view::npos)
+                break;
+            std::size_t end = payload.find_first_of(" \t", eq);
+            if (end == std::string_view::npos)
+                end = payload.size();
+            std::string key(payload.substr(pos, eq - pos));
+            const std::string val(payload.substr(eq + 1, end - eq - 1));
+            try
+            {
+                const long long us = std::stoll(val);
+                _stamps.push_back({ std::move(key),
+                    std::chrono::steady_clock::time_point(std::chrono::microseconds(us)) });
+            }
+            catch (const std::exception&)
+            {
+            }
+            pos = end;
+        }
+    }
+
+    std::string LoadTimings::format(std::string_view prefix) const
+    {
+        std::lock_guard<std::mutex> guard(_mutex);
+        if (_stamps.empty())
+            return std::string();
+
+        std::ostringstream oss;
+        oss << prefix;
+        for (const auto& s : _stamps)
+        {
+            const auto us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                s.t.time_since_epoch())
+                                .count();
+            oss << ' ' << s.key << '=' << us;
+        }
+        return oss.str();
     }
 
 } // namespace Util

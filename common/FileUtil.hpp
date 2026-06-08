@@ -77,11 +77,10 @@ namespace FileUtil
     int makeDirectory(const std::string& dir);
 
     // Wraps std::filesystem::create_directory.
-    void createDirectory(const std::string& dir);
+    void createDirectory(std::string_view dir);
 
-    // Wraps std::filesystem::temp_directory_path(), and if that fails, uses obvious fallbacks.
-    // Returns as UTF-8 on Windows. (And surely also on any sane Unix?)
-    std::string getSysTempDirectoryPath();
+    /// Wraps std::filesystem::create_directories.
+    void createDirectories(std::string_view dir);
 
     /// Returns true iff the path given is writable by our *real* UID.
     /// On Windows "real UID" is meaningless.
@@ -93,18 +92,21 @@ namespace FileUtil
 
     // End of wrappers for platform-dependent API.
 
-    /// Used for anonymizing URLs
-    void setUrlAnonymization(bool anonymize, std::uint64_t salt);
+    // Components of a per-download tmp path under the kit jail's document root.
+    // WSD recovers the file from a downloadId by looking up the registered URL
+    // (a path relative to the jail doc root) and joining it back with the jail
+    // (see ClientRequestDispatcher's GET handler under /cool/.../<downloadId>).
+    struct DownloadJailPath
+    {
+        std::string tmpDir;       // the random dir name; doubles as downloadId
+        std::string urlInJail;    // tmpDir + "/" + filename - relative to jailDocRoot
+        std::string absolutePath; // jailDocRoot + urlInJail - the path inside the jail
+    };
 
-    /// Anonymize the basename of filenames, preserving the path and extension.
-    std::string anonymizeUrl(const std::string& url);
-
-    /// Anonymize user names and IDs.
-    /// Will use the Obfuscated User ID if one is provided via WOPI.
-    std::string anonymizeUsername(const std::string& username);
-
-    /// Create a secure, random directory path.
-    std::string createRandomDir(const std::string& path);
+    // Create a fresh random tmp dir under jailDocRoot and return path components
+    // for delivering a saveAs/export to that location plus its subsequent download.
+    DownloadJailPath createDownloadJailPath(const std::string& jailDocRoot,
+                                            const std::string& filename);
 
     /// return the local path to the jailPath under localJailRoot
     /// localJailRoot /chroot/jailId
@@ -185,15 +187,22 @@ namespace FileUtil
     /// Platform-dependent implementations.
     bool linkOrCopyFile(const std::string& source, const std::string& newPath);
 
-    /// Returns the system temporary directory.
+    /// Changes the various envars used for the system temporary-files directory.
+    /// Used to privatize the directory we use for temporary files,
+    /// which some libraries use these envars to query.
+    void setSysTempDirectoryPath(const std::string& path);
+
+    /// Wraps std::filesystem::temp_directory_path(), and if that fails, uses obvious fallbacks.
+    /// Returns as UTF-8 on Windows. (And surely also on any sane Unix?)
     std::string getSysTempDirectoryPath();
 
-    /// Create randomized temporary directory in the root provided
-    /// with S_IRWXU (read, write, and execute by owner) permissions.
-    /// If root is empty, the current system temp directory is used.
+    /// Create randomized temporary directory in the root provided.
+    /// See createTmpDir for details.
     std::string createRandomTmpDir(std::string root = std::string());
 
     /// Create a temporary directory in the root provided
+    /// with S_IRWXU (read, write, and execute by owner) permissions.
+    /// If root is empty, the current system temp directory is used.
     std::string createTmpDir(const std::string& dirName, std::string root = std::string());
 
     /// Returns the realpath(3) of the provided path. This also has a separate implementation for
@@ -248,7 +257,7 @@ namespace FileUtil
     /// Reads the whole file to memory. Only for small files.
     std::unique_ptr<std::vector<char>> readFile(const std::string& path, int maxSize = 256 * 1024);
 
-    void copyDirectoryRecursive(const std::string& srcDir, const std::string& destDir, bool log);
+    void copyDirectoryRecursive(std::string_view srcDir, std::string_view destDir, bool log);
     /// File/Directory stat helper.
     class Stat
     {

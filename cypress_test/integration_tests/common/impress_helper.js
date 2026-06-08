@@ -266,8 +266,29 @@ function waitForSlideShowIdle(win) {
 		if (!presenter || !presenter._slideShowNavigator)
 			return false;
 		return presenter._slideShowNavigator.currentSlideIndex !== undefined;
-	}, { timeout: Cypress.config('defaultCommandTimeout'), interval: 50 });
+	}, { interval: 50 });
 	helper.waitForTimers(win, 'slideshowupdate');
+}
+
+// Click a slideshow-nav-container button. The nav container auto-hides after
+// 3s of inactivity via _showSlideControls' setTimeout. Under heavy CI load the
+// gap between cypress steps can be more than that and cypress's own retry
+// doesn't know about the auto-hide timer.
+// So re-call _showSlideControls each iteration and click as soon as the button
+// is visible.
+function clickSlideShowNav(win, buttonSelector) {
+	var presenter = win.app && win.app.map && win.app.map.slideShowPresenter;
+	cy.waitUntil(function () {
+		if (presenter && presenter._showSlideControls)
+			presenter._showSlideControls();
+		return getSlideShowContent()
+			.find('.slideshow-nav-container ' + buttonSelector)
+			.then(function ($el) {
+				if (!Cypress.dom.isVisible($el)) return false;
+				return cy.wrap($el).click().then(function () { return true; });
+			});
+	}, { interval: 500,
+		errorMsg: 'slideshow nav button "' + buttonSelector + '" never reachable' });
 }
 
 module.exports.assertNotInTextEditMode = assertNotInTextEditMode;
@@ -287,3 +308,4 @@ module.exports.getSlideShow = getSlideShow;
 module.exports.getSlideShowContent = getSlideShowContent;
 module.exports.getSlideShowCanvas = getSlideShowCanvas;
 module.exports.waitForSlideShowIdle = waitForSlideShowIdle;
+module.exports.clickSlideShowNav = clickSlideShowNav;

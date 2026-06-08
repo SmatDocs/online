@@ -1,7 +1,7 @@
 /* For btns hover status see device-desktop.css */
 
 .jsdialog:not(.sidebar) *[disabled]:not(.spinfieldbutton-up):not(.spinfieldbutton-down):not(.spinfield) {
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 	background: var(--color-background-lighter);
 }
 
@@ -56,6 +56,7 @@
 	border: none;
 	padding: 4px 8px;
 	height: var(--btn-size-s);
+	width: fit-content;
 }
 
 #viewModeDropdown .arrowbackground {
@@ -81,18 +82,29 @@
 	animation: viewmode-attention 200ms cubic-bezier(0.2, 0, 0, 1) 2;
 }
 
-/* toolbuttons non selected hover */
-.hasnotebookbar .ui-content.unotoolbutton.has-label:hover,
-.hasnotebookbar .ui-content.unotoolbutton.inline:hover,
-.hasnotebookbar .ui-content.unotoolbutton:not(.has-label):not(.inline):hover,
-.unotoolbutton:hover,
-.close-navigation-wrapper:hover,
-#readonlyMode:hover {
-	border: 1px solid var(--color-btn-border);
-	color: var(--color-text-darker);
-	border-radius: var(--border-radius);
-	background-color: var(--color-background-tabs-group);
-	overflow: hidden;
+/* Gated to real pointers - on touch, :hover sticks after a tap and would
+   mask the .selected styling until the user taps elsewhere. */
+@media (hover: hover) {
+	/* toolbuttons non selected hover */
+	.hasnotebookbar .ui-content.unotoolbutton.has-label:hover,
+	.hasnotebookbar .ui-content.unotoolbutton.inline:hover,
+	.hasnotebookbar .ui-content.unotoolbutton:not(.has-label):not(.inline):hover,
+	.unotoolbutton:hover,
+	.close-navigation-wrapper:hover,
+	#readonlyMode:hover {
+		border: 1px solid var(--color-btn-border);
+		color: var(--color-text-darker);
+		border-radius: var(--border-radius);
+		background-color: var(--color-background-tabs-group);
+	}
+
+	/* Scoped to notebookbar: applied broadly, overflow:hidden creates a new BFC
+	   on hover and resizes sidebar/jsdialog/mobile toolbuttons. */
+	.hasnotebookbar .ui-content.unotoolbutton.has-label:hover,
+	.hasnotebookbar .ui-content.unotoolbutton.inline:hover,
+	.hasnotebookbar .ui-content.unotoolbutton:not(.has-label):not(.inline):hover {
+		overflow: hidden;
+	}
 }
 
 /* toolbuttons selected */
@@ -119,16 +131,18 @@
 
 /* toolbuttons selected hover */
 /* toolbuttons have .unobuttons as children */
-.hasnotebookbar .ui-content.unotoolbutton.has-label:hover,
-.hasnotebookbar .ui-content.unotoolbutton.selected:hover,
-.hasnotebookbar .ui-content.unotoolbutton.selected:not(.has-label):not(.inline):hover,
-.sidebar.unotoolbutton.selected:hover,
-.ui-overflow-group-more.unotoolbutton:hover,
-.notebookbar.unotoolbutton.selected:hover,
-.jsdialog.unotoolbutton.selected:hover {
-	color: var(--color-text-darker);
-	border-radius: var(--border-radius);
-	background-color: var(--color-background-tabs-group);
+@media (hover: hover) {
+	.hasnotebookbar .ui-content.unotoolbutton.has-label:hover,
+	.hasnotebookbar .ui-content.unotoolbutton.selected:hover,
+	.hasnotebookbar .ui-content.unotoolbutton.selected:not(.has-label):not(.inline):hover,
+	.sidebar.unotoolbutton.selected:hover,
+	.ui-overflow-group-more.unotoolbutton:hover,
+	.notebookbar.unotoolbutton.selected:hover,
+	.jsdialog.unotoolbutton.selected:hover {
+		color: var(--color-text-darker);
+		border-radius: var(--border-radius);
+		background-color: var(--color-background-tabs-group);
+	}
 }
 
 /* if menubutton has text - be sure it is fully visible */
@@ -155,7 +169,7 @@ button.jsdialog[disabled] img {
 
 :not(.main-nav) .button-secondary,
 :not(.main-nav) .button-secondary:not(.arrowbackground),
-:not(.main-nav) > div:not(.toolbox) > button:not(.ui-tab):not(.ui-expander-btn):not(.ui-corner-all):not(.button-primary):not(.unobutton):not(.form-field-button):not(.col):not(.arrowbackground):not(.ui-combobox-button):not(.ui-linkbutton):not(.spinfieldbutton-up):not(.spinfieldbutton-down) {
+:not(.main-nav) > div:not(.toolbox) > button:not(.ui-tab):not(.ui-expander-btn):not(.ui-corner-all):not(.button):not(.button-primary):not(.unobutton):not(.form-field-button):not(.col):not(.arrowbackground):not(.ui-combobox-button):not(.ui-linkbutton):not(.spinfieldbutton-up):not(.spinfieldbutton-down):not(.ui-treeview-header-button):not(.ui-emoji-picker-cell):not(.ui-chip-main):not(.ui-chip-action) {
 	box-sizing: border-box;
 	height: 32px;
 	line-height: normal;
@@ -176,17 +190,65 @@ button.jsdialog[disabled] img {
 	min-width: 62px !important;
 }
 
-.button-primary {
+/* Generic button layout. Used standalone for a default secondary look, or
+ * paired with a color modifier (.button-primary, .button-danger) to get a
+ * fully styled button. */
+.button {
 	height: 32px;
 	line-height: 0em;
-	color: var(--color-primary-text);
 	min-width: 62px;
-	background-color: var(--color-primary);
-	border: 1px solid var(--color-primary-dark);
 	border-radius: var(--border-radius);
 	margin: 5px;
 	vertical-align: middle;
 	width: max-content;
+	cursor: pointer;
+	background-color: var(--color-background-dark);
+	color: var(--color-main-text);
+	border: 1px solid var(--color-border-dark);
+}
+
+/* Secondary hover: lighten the fill and darken text and border so the state
+ * is clearly distinguishable from the default. */
+.button:hover,
+.button:focus-visible {
+	background-color: var(--color-background-lighter);
+	color: var(--color-text-darker);
+	border-color: var(--color-border-darker);
+	outline: none;
+}
+
+.button-primary {
+	background-color: var(--color-primary);
+	border: 1px solid var(--color-primary-dark);
+	color: var(--color-primary-text);
+}
+
+.button-danger {
+	background-color: var(--color-btn-danger-bg);
+	border-color: var(--color-btn-danger-bg);
+	color: #fff;
+}
+
+/* Danger hover: light red fill with the danger color as text. */
+.button-danger:hover,
+.button-danger:focus-visible {
+	background-color: var(--color-btn-danger-hover-bg);
+	border-color: var(--color-btn-danger-bg);
+	color: var(--color-btn-danger-bg);
+}
+
+/* Outline-style destructive: transparent fill, red text and border. */
+.button-danger-outline {
+	background-color: transparent;
+	border-color: var(--color-btn-danger-outline);
+	color: var(--color-btn-danger-outline);
+}
+
+.button-danger-outline:hover,
+.button-danger-outline:focus-visible {
+	background-color: var(--color-btn-danger-hover-bg);
+	border-color: var(--color-btn-danger-bg);
+	color: var(--color-btn-danger-bg);
 }
 
 .jsdialog.ui-button-box.end {
@@ -196,7 +258,7 @@ button.jsdialog[disabled] img {
 }
 
 .jsdialog.ui-button-box button[disabled='disabled'] {
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 	background-color: var(--color-background-lighter) !important;
 	border-color: var(--color-border-lighter) !important;
 }
@@ -207,7 +269,7 @@ button.jsdialog[disabled] img {
 }
 
 .ui-pushbutton[disabled] {
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 	background-color: var(--color-background-lighter) !important;
 	border: 1px solid var(--color-border-lighter) !important;
 }

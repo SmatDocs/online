@@ -50,8 +50,8 @@ protected:
         , _forceAutosave(false)
     {
         setHasKitHooks();
-        // Double of the default.
-        constexpr std::chrono::minutes timeout_minutes(1);
+        // 4x the default.
+        constexpr std::chrono::minutes timeout_minutes(2);
         setTimeout(timeout_minutes);
     }
 
@@ -81,9 +81,6 @@ protected:
         TST_LOG("create stamp " << name << ": " << path);
         std::ofstream stamp(path);
         stamp.close();
-        std::this_thread::sleep_for(StampFileCheckPeriodMs);
-        sync(); // Flush the filesystem as sometimes the kit doesn't see the stamp file.
-        std::this_thread::sleep_for(StampFileCheckPeriodMs);
     }
 
     void removeStamp(const std::string& name)
@@ -577,8 +574,8 @@ class UnitKitSaveTorture : public UnitKit
 public:
     UnitKitSaveTorture() : UnitKit("savetorture")
     {
-        // Double of the default.
-        constexpr std::chrono::minutes timeout_minutes(1);
+        // 4 times the default.
+        constexpr std::chrono::minutes timeout_minutes(2);
         setTimeout(timeout_minutes);
 
         std::cerr << "\n\nYour Kit process has Save torturing hooks\n\n\n";

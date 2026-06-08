@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include <common/Util.hpp>
+#include <common/ProcUtil.hpp>
 
 #include <cassert>
 #include <chrono>
@@ -29,16 +29,16 @@ extern "C"
 /*
  * A class to watch to see when threads are not making progress.
  */
-class Watchdog : private std::thread
+class Watchdog final : private std::thread
 {
     std::condition_variable _condition;
     std::mutex _lock;
-    typedef std::pair<std::atomic<uint64_t>*,int *> WatchDetail;
+    typedef std::pair<std::atomic<uint64_t>*, ProcUtil::ThreadId*> WatchDetail;
     std::vector<WatchDetail> _times;
     std::unique_ptr<std::thread> _thread;
     std::atomic<bool> _exit;
 
-    static const uint64_t MsToTrigger = 100;
+    static const uint64_t MsToTrigger = 75;
 
 public:
     Watchdog()
@@ -94,16 +94,16 @@ public:
         {
             {
                 uint64_t msSinceEpoc = getTimestamp();
-                for (const auto& d : _times)
+                for (const auto& [time, tid] : _times)
                 {
-                    uint64_t snapshot = *d.first; // one atomic read
+                    const uint64_t snapshot = *time; // one atomic read
                     if (snapshot == 0) // sleeping / polling
                         continue;
                     // out of the poll for longer than threshold:
                     if (msSinceEpoc - snapshot > MsToTrigger)
                     {
                         // Signal the poorly behaved thread to profile it
-                        Util::killThreadById(*d.second, SIGUSR2);
+                        ProcUtil::killThreadById(*tid, SIGUSR2);
                         break;
                     }
                 }
@@ -112,10 +112,10 @@ public:
         }
     }
 
-    void addTime(std::atomic<uint64_t> *timeRef, int *threadIdRef)
+    void addTime(std::atomic<uint64_t>* timeRef, ProcUtil::ThreadId* threadIdRef)
     {
         std::lock_guard<std::mutex> guard(_lock);
-        _times.push_back(WatchDetail(timeRef, threadIdRef));
+        _times.emplace_back(timeRef, threadIdRef);
     }
 
     void removeTime(std::atomic<uint64_t> *timeRef)

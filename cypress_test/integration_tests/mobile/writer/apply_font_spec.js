@@ -15,8 +15,16 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply font changes.', funct
 
 	it('Apply font name.', function() {
 		helper.setDummyClipboardForCopy();
+
+		cy.cGet('#fontnamecombobox .ui-header-right .entry-value')
+			.should('not.have.text', 'Linux Libertine G');
+
 		cy.cGet('#fontnamecombobox').click();
 		cy.cGet('#font').contains('.mobile-wizard.ui-combobox-text', 'Linux Libertine G').click();
+
+		cy.cGet('#fontnamecombobox .ui-header-right .entry-value')
+			.should('have.text', 'Linux Libertine G');
+
 		writerHelper.selectAllTextOfDoc();
 		helper.copy();
 		cy.cGet('#copy-paste-container p font').should('have.attr', 'face', 'Linux Libertine G');
@@ -33,7 +41,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply font changes.', funct
 
 	it('Apply bold font.', function() {
 		helper.setDummyClipboardForCopy();
-		cy.cGet('.unoBold:visible').click();
+		cy.cGet('#mobile-wizard .unoBold').scrollIntoView().click();
 		writerHelper.selectAllTextOfDoc();
 		helper.copy();
 		cy.cGet('#copy-paste-container p b').should('exist');
@@ -41,7 +49,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply font changes.', funct
 
 	it('Apply italic font.', function() {
 		helper.setDummyClipboardForCopy();
-		cy.cGet('.unoItalic:visible').click();
+		cy.cGet('#mobile-wizard .unoItalic').scrollIntoView().click();
 		writerHelper.selectAllTextOfDoc();
 		helper.copy();
 		cy.cGet('#copy-paste-container p i').should('exist');
@@ -49,7 +57,7 @@ describe(['tagmobile', 'tagnextcloud', 'tagproxy'], 'Apply font changes.', funct
 
 	it('Apply underline.', function() {
 		helper.setDummyClipboardForCopy();
-		cy.cGet('.unoUnderline:visible').click();
+		cy.cGet('#mobile-wizard .unoUnderline').scrollIntoView().click();
 		writerHelper.selectAllTextOfDoc();
 		helper.copy();
 		cy.cGet('#copy-paste-container p u').should('exist');

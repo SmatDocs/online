@@ -14,8 +14,8 @@
 #include <common/StringVector.hpp>
 #include <common/Log.hpp>
 
-#define LOK_USE_UNSTABLE_API
-#include <LibreOfficeKit/LibreOfficeKitEnums.h>
+#define KIT_USE_UNSTABLE_API
+#include <COKit/COKitEnums.h>
 
 #include <typeinfo>
 
@@ -39,8 +39,8 @@
 #include <sstream>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
+#include <vector>
 
 #define STRINGIFY(X) #X
 
@@ -175,12 +175,52 @@ namespace Util
         uint64_t _startSys;
     };
 
+    /// Simple class to log basic document bootstrap time-stamps.
+    /// Thread-safe: callers on the request-handling thread and the
+    /// DocumentBroker poll thread can both record() into the same instance.
+    class LoadTimings
+    {
+    public:
+        void record(std::string key)
+        {
+            record(std::move(key), std::chrono::steady_clock::now());
+        }
+
+        void record(std::string key, std::chrono::steady_clock::time_point t)
+        {
+            std::lock_guard<std::mutex> guard(_mutex);
+            _stamps.push_back({ std::move(key), t });
+        }
+
+        void parse(std::string_view payload);
+
+        /// Build "<prefix> key=us key=us ...". Empty if no stamps recorded.
+        /// `prefix` should include the trailing colon, for e.g. "loadtiming:".
+        std::string format(std::string_view prefix) const;
+
+        bool empty() const
+        {
+            std::lock_guard<std::mutex> guard(_mutex);
+            return _stamps.empty();
+        }
+
+    private:
+        struct Stamp
+        {
+            std::string key;
+            std::chrono::steady_clock::time_point t;
+        };
+        mutable std::mutex _mutex;
+        std::vector<Stamp> _stamps;
+    };
+
     class CounterImpl;
 
     /// Needs to open dirent before forking in Kit process
     class ThreadCounter
     {
         std::unique_ptr<CounterImpl> _impl;
+
     public:
         ThreadCounter();
         ~ThreadCounter();
@@ -199,9 +239,6 @@ namespace Util
         int count();
     };
 
-    /// Spawn a process.
-    int spawnProcess(const std::string &cmd, const StringVector &args);
-
     /// Exception safe scope count/guard
     struct ReferenceHolder
     {
@@ -209,68 +246,6 @@ namespace Util
         ReferenceHolder(int &count) : _count(count) { _count++; }
         ~ReferenceHolder() { _count--; }
     };
-
-    /// Hex-encode an integral ID into a buffer, with padding support.
-    inline std::string_view encodeId(char* buffer, std::size_t size, const std::uint64_t number,
-                                     int width, char pad = '0')
-    {
-        // Skip leading (high-order) zeros, if any.
-        int highNibble = (2 * sizeof(number) - 1) * 4;
-        while ((number & (std::uint64_t(0xf) << highNibble)) == 0)
-        {
-            highNibble -= 4;
-            if (highNibble <= 0)
-                break;
-        }
-
-        // Pad, if necessary.
-        highNibble = std::min<int>(size - 1, highNibble / 4) * 4;
-        width = std::min<int>(size, width);
-        int outIndex = 0;
-        const int hexBytes = (highNibble / 4) + 1;
-        for (; width > hexBytes; --width)
-        {
-            buffer[outIndex++] = pad;
-        }
-
-        // Hexify the remaining, if any.
-        constexpr const char* const Hex = "0123456789abcdef";
-        while (highNibble >= 0)
-        {
-            const auto byte = static_cast<unsigned char>((number >> highNibble) & 0xf);
-            buffer[outIndex++] = (Hex[byte >> 4] << 8) | Hex[byte & 0xf];
-            highNibble -= 4;
-        }
-
-        // Return a reference to the given buffer.
-        return std::string_view(buffer, outIndex);
-    }
-
-    /// Hex-encode an integral ID into a string, with padding support.
-    inline std::string encodeId(const std::uint64_t number, int width = 5, char pad = '0')
-    {
-        char buffer[32];
-        return std::string(encodeId(buffer, sizeof(buffer), number, width, pad));
-    }
-
-    /// Hex-encode an integral ID into a stream, with padding support.
-    inline std::ostringstream& encodeId(std::ostringstream& oss, const std::uint64_t number,
-                                        int width = 5, char pad = '0')
-    {
-        char buffer[32];
-        oss << encodeId(buffer, sizeof(buffer), number, width, pad);
-        return oss;
-    }
-
-    /// Decode the hex-string into an ID. The reverse of encodeId().
-    inline std::uint64_t decodeId(const std::string_view str)
-    {
-        std::uint64_t id = 0;
-        std::stringstream ss;
-        ss << std::hex << str;
-        ss >> id;
-        return id;
-    }
 
     bool windowingAvailable();
 
@@ -314,33 +289,6 @@ namespace Util
     /// Returns the cgroup's soft memory limit, or 0 if not available in bytes
     std::size_t getCGroupMemSoftLimit();
 
-    /// Returns the process PSS in KB (works only when we have perms for /proc/pid/smaps).
-    size_t getMemoryUsagePSS(pid_t pid);
-
-    /// Returns the process RSS in KB.
-    size_t getMemoryUsageRSS(pid_t pid);
-
-    /// Returns the number of current threads, or zero on error
-    size_t getCurrentThreadCount();
-
-    /// Returns the RSS and PSS of the current process in KB.
-    /// Example: "procmemstats: pid=123 rss=12400 pss=566"
-    std::string getMemoryStats(FILE* file);
-
-    /// Reads from SMaps file Pss and Private_Dirty values and
-    /// returns them as a pair in the same order
-    std::pair<size_t, size_t> getPssAndDirtyFromSMaps(FILE* file);
-
-    /// Returns the total PSS usage of the process and all its children.
-    std::size_t getProcessTreePss(pid_t pid);
-
-    size_t getCpuUsage(pid_t pid);
-
-    size_t getStatFromPid(pid_t pid, int ind);
-
-    /// Sets priorities for a given pid & the current thread
-    void setProcessAndThreadPriorities(pid_t pid, int prio);
-
     /// Replace substring @a in string @s with string @b.
     std::string replace(std::string s, std::string_view a, std::string_view b);
 
@@ -370,15 +318,6 @@ namespace Util
     void replaceAllSubStr(std::string& input, const std::string& target, const std::string& replacement);
 
     std::string formatLinesForLog(std::string_view s);
-
-    void setThreadName(const std::string& s);
-
-    const char *getThreadName();
-
-    long getThreadId();
-    long getProcessId();
-
-    void killThreadById(int tid, int signal);
 
     /// Returns the COOL Version number string.
     std::string getCoolVersion();
@@ -996,57 +935,6 @@ int main(int argc, char**argv)
     /// either for a URL or for a file path
     std::string cleanupFilename(const std::string &filename);
 
-    /// Simple backtrace capture
-    /// Use case, e.g. streaming up to 20 frames to log: `LOG_TRC( Util::Backtrace::get(20) );`
-    /// Enabled for !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-    /// Using
-    /// - <https://www.man7.org/linux/man-pages/man3/backtrace.3.html>
-    /// - <https://gcc.gnu.org/onlinedocs/libstdc++/manual/ext_demangling.html>
-    class Backtrace
-    {
-    public:
-        struct Symbol
-        {
-            std::string blob;
-            std::string mangled;
-            std::string offset;
-            std::string demangled;
-            [[nodiscard]] std::string toString() const;
-            [[nodiscard]] std::string toMangledString() const;
-            bool isDemangled() const { return !demangled.empty(); }
-        };
-
-    private:
-        /// Stack frames {address, symbol}
-        std::vector<std::pair<void*, Symbol>> _frames;
-        int skipFrames;
-
-        static bool separateRawSymbol(const std::string& raw, Symbol& s);
-
-    public:
-        /// Produces a backtrace instance from current stack position
-        Backtrace(int maxFrames = 50, int skip = 1);
-
-        /// Produces a backtrace instance from current stack position
-        static Backtrace get(const int maxFrames = 50, const int skip = 2)
-        {
-            Backtrace bt(maxFrames, skip);
-            return bt;
-        }
-
-        /// Sends captured backtrace to given ostream
-        std::ostream& send(std::ostream& os) const;
-
-        /// Produces a string representation, one line per frame
-        [[nodiscard]] std::string toString() const;
-
-        /* constexpr */ size_t size() const { return _frames.size(); }
-        /* constexpr */ const Symbol& operator[](size_t idx) const
-        {
-            return _frames[idx].second;
-        }
-    };
-
     //// Return current time in HTTP format.
     std::string getHttpTimeNow();
 
@@ -1198,8 +1086,14 @@ int main(int argc, char**argv)
 #endif
     }
 
-    void setKitInProcess(bool value);
-    bool isKitInProcess();
+    constexpr bool isKitInProcess()
+    {
+#if defined(ENABLE_INPROC) && ENABLE_INPROC
+        return true;
+#else
+        return isFuzzing() || isMobileApp();
+#endif // ENABLE_INPROC
+    }
 
     /**
      * Splits string into vector<string>. Does not accept referenced variables for easy
@@ -1233,12 +1127,14 @@ int main(int argc, char**argv)
     // If OS is not mobile, it must be Linux.
     std::string getLinuxVersion();
 
-    /// Converts and returns the argument to lower-case.
-    inline std::string toLower(std::string s)
+    /// Converts in-place and returns the argument to lower-case.
+    inline std::string& toLowerInplace(std::string& s)
     {
         std::transform(s.begin(), s.end(), s.begin(), ::tolower);
         return s;
     }
+    /// Converts and returns a copy of the argument in lower-case.
+    inline std::string toLower(std::string s) { return toLowerInplace(s); }
 
     /// Case insensitive comparison of two strings.
     /// Returns true iff the two strings are equal, regardless of case.
@@ -1354,16 +1250,6 @@ int main(int argc, char**argv)
         return oss.str();
     }
 
-    /// Asserts in the debug builds, otherwise just logs.
-    void assertCorrectThread(std::thread::id owner, LOG_CAPTURE_CALLER_DECLARATION);
-
-#ifndef ASSERT_CORRECT_THREAD
-#define ASSERT_CORRECT_THREAD() assertCorrectThread()
-#endif
-#ifndef ASSERT_CORRECT_THREAD_OWNER
-#define ASSERT_CORRECT_THREAD_OWNER(OWNER) Util::assertCorrectThread(OWNER)
-#endif
-
     /// Sleep based on count of seconds in env. var
     void sleepFromEnvIfSet(const char *domain, const char *envVar);
 
@@ -1400,7 +1286,7 @@ int main(int argc, char**argv)
     std::string base64Decode(const std::string& input);
 
 #ifdef _WIN32
-    std::wstring string_to_wide_string(const std::string& string);
+    std::wstring string_to_wide_string(std::string_view string);
     std::string wide_string_to_string(const std::wstring& wide_string);
 #endif
 } // end namespace Util
@@ -1410,8 +1296,6 @@ inline std::ostream& operator<<(std::ostream& os, const std::chrono::system_cloc
     os << Util::getIso8601FracformatTime(ts);
     return os;
 }
-
-inline std::ostream& operator<<(std::ostream& os, const Util::Backtrace& bt) { return bt.send(os); }
 
 inline std::ostream& operator<<(std::ostream& os, const Poco::Net::HTTPRequest& request)
 {

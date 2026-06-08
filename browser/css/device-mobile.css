@@ -4,7 +4,6 @@
 html[dir='rtl'] .w2ui-icon.closemobile,
 html[dir='rtl'] #toolbar-hamburger.menuwizard-opened,
 html[dir='rtl'] .mobile-wizard-back {
-	-webkit-transform: scaleX(-1);
 	transform: scaleX(-1);
 }
 html[dir='rtl'] .sub-menu-arrow {
@@ -49,7 +48,7 @@ html[dir='rtl'] .sub-menu-arrow {
 /* Permisson mode status */
 .mobile .ui-badge {
 	background-color: transparent;
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 }
 .status-edit-mode {
 	display: none;
@@ -90,7 +89,6 @@ html[dir='rtl'] .sub-menu-arrow {
 	height: 0;
 	width: 100%;
 	margin: 0;
-	-webkit-overflow-scrolling: touch;
 	overflow: scroll;
 	z-index: 1010;
 	bottom: 34px !important;
@@ -119,8 +117,6 @@ html[dir='rtl'] .sub-menu-arrow {
 .spreadsheet-tab-scroll {
 	overflow-x: scroll;
 	scrollbar-width: none; /*css draft (firefox only)*/
-	-ms-scrollbar: none; /*ie*/
-	-webkit-overflow-scrolling: touch;
 	margin: 0;
 }
 
@@ -141,9 +137,7 @@ html[dir='rtl'] .sub-menu-arrow {
 }
 
 textarea.cool-annotation-textarea {
-	min-width: -moz-available !important;
-	min-width: -webkit-fill-available !important;
-	min-width: fill-available !important;
+	min-width: stretch !important;
 }
 
 /* Related to toolbar.css */
@@ -214,7 +208,6 @@ textarea.cool-annotation-textarea {
 .ui-scroll-wrapper {
 	overflow-x: scroll !important;
 	scrollbar-width: none; /*css draft (firefox only)*/
-	-ms-scrollbar: none; /*ie*/
 }
 .ui-scroll-wrapper::-webkit-scrollbar { /*webkit only*/
 	display: none;
@@ -231,10 +224,6 @@ textarea.cool-annotation-textarea {
 .ui-scroll-right {
 	display: block !important;
 	right: 0;
-	-webkit-transform: rotate(180deg);
-	-moz-transform: rotate(180deg);
-	-ms-transform: rotate(180deg);
-	-o-transform: rotate(180deg);
 	transform: rotate(180deg);
 }
 .w2ui-icon.equal, .w2ui-icon.autosum {width: 38px !important;}
@@ -245,7 +234,6 @@ textarea.cool-annotation-textarea {
 	box-shadow: none;
 }
 #toolbar-up .checked .w2ui-tb-image, #toolbar-up .w2ui-tb-image:hover, #toolbar-up .w2ui-tb-image:focus, #toolbar-up .w2ui-tb-image:active, #toolbar-hamburger.menuwizard-closed:active {
-	-webkit-filter: drop-shadow(0px 0px 4px var(--color-primary-darker));
 	filter: drop-shadow(0px 0px 4px var(--color-primary-darker));
 }
 #toolbar-up .over {
@@ -253,7 +241,6 @@ textarea.cool-annotation-textarea {
 	box-shadow: none !important;
 }
 #toolbar-up .over:hover .w2ui-tb-image, #toolbar-up .over:active .w2ui-tb-image {
-	-webkit-filter: drop-shadow(0px 0px 4px var(--color-primary-darker));
 	filter: drop-shadow(0px 0px 4px var(--color-primary-darker));
 	border-color: transparent;
 }
@@ -424,7 +411,7 @@ textarea.cool-annotation-textarea {
 /* Related to jsdialogs.css */
 /*   - macros */
 #mobile-wizard-content #MacroWarnMedium p {
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 }
 #mobile-wizard-content #MacroWarnMedium p:first-child {
 	color: #333;
@@ -473,7 +460,7 @@ textarea.cool-annotation-textarea {
 	line-height: 11px;
 	display: block;
 	padding-left: 8px;
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	font-size: 22px;
 }
 
@@ -589,7 +576,7 @@ textarea.cool-annotation-textarea {
 	margin-top: -5px;
 }
 
-#coolwsd-version, #lokit-version {
+#coolwsd-version {
 	flex-direction: column;
 }
 
@@ -617,7 +604,7 @@ div#fontstyletoolbox + div#style.mobile-wizard {
 }
 
 #product-name {
-	margin: 2px;
+	margin: var(--spacing-xs);
 	font-size: 29px;
 }
 

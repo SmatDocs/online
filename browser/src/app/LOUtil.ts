@@ -29,6 +29,16 @@ interface IconNameMap {
 
 declare var DOMPurify: any;
 
+// cool: URLs are used by mobile/derivative apps (iOS, Android, CODA-W,
+// CODA-Q) for embedded media; DOMPurify's default allow-list rejects them.
+if (window.ThisIsAMobileApp && DOMPurify.isSupported) {
+	DOMPurify.addHook('uponSanitizeAttribute', (_node: Node, data: any) => {
+		if (data.attrValue.startsWith('cool:')) {
+			data.forceKeepAttr = true;
+		}
+	});
+}
+
 // LOUtil contains various LO related utility functions used
 // throughout the code.
 
@@ -210,9 +220,18 @@ class LOUtil {
 		return rectangles;
 	}
 
+	// Locales whose icons live under another locale's directory because the
+	// localized glyph is identical (e.g. Danish "Fed"/"Kursiv" share the F/K
+	// drawn for German "Fett"/"Kursiv"). The key is the UI language code; the
+	// value is the directory under images/ that actually holds the SVGs.
+	private static localeIconAlias: Record<string, string> = {
+		da: 'de',
+	};
+
 	// Map of locale → icon filenames that have locale-specific variants.
 	private static localizedIcons: Record<string, string[]> = {
 		ar: ['lc_chapternumberingdialog.svg', 'lc_linenumberingdialog.svg'],
+		da: ['lc_bold.svg', 'lc_italic.svg'],
 		de: [
 			'lc_bold.svg',
 			'lc_italic.svg',
@@ -324,10 +343,15 @@ class LOUtil {
 		return url;
 	}
 
-	public static setImage(img: HTMLImageElement, name: string, map: any): void {
+	public static setImage(
+		img: HTMLImageElement,
+		name: string,
+		map: any,
+		imageIsLayoutCritical?: boolean,
+	): void {
 		const setupIcon = function () {
 			img.src = LOUtil.getImageURL(name);
-			LOUtil.checkIfImageExists(img);
+			LOUtil.checkIfImageExists(img, imageIsLayoutCritical);
 		};
 		setupIcon();
 
@@ -374,14 +398,16 @@ class LOUtil {
 
 		const lang = LOUtil.getUILanguageCode();
 		const hasLocalized = lang && LOUtil.localizedIcons[lang]?.includes(imgName);
+		const iconLang = LOUtil.localeIconAlias[lang] || lang;
 
 		if ((window as any).prefs.getBoolean('darkTheme')) {
 			if (hasLocalized)
-				return LOUtil.getURL('images/dark/' + lang + '/' + imgName);
+				return LOUtil.getURL('images/dark/' + iconLang + '/' + imgName);
 			return LOUtil.getURL('images/dark/' + imgName);
 		}
 
-		if (hasLocalized) return LOUtil.getURL('images/' + lang + '/' + imgName);
+		if (hasLocalized)
+			return LOUtil.getURL('images/' + iconLang + '/' + imgName);
 
 		const dummyEmptyImg =
 			'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -405,11 +431,22 @@ class LOUtil {
 			cleanName = cleanName.toLowerCase();
 		}
 
-		// Skip icon lookup for numeric-only IDs (JSDialog artifacts like 1, 5, 65535)
-		if (/^\d+$/.test(cleanName)) return '';
+		// Skip icon lookup for numeric-only IDs (JSDialog artifacts like 1, 5, 65535),
+		// core sr* resource IDs (like sr20006), and JSDialog submenu placeholder IDs
+		// (submenu1, submenu2, ...).
+		if (
+			/^\d+$/.test(cleanName) ||
+			/^sr\d+$/.test(cleanName) ||
+			/^submenu\d+$/.test(cleanName)
+		)
+			return '';
 
 		// Skip icon lookup for overflow button pseudo-commands
 		if (cleanName.startsWith('overflow-button-')) return '';
+
+		// Strip 'sc_' prefix from sidebar controller command names
+		// (core's small-command icon prefix that doesn't apply to COOL)
+		if (cleanName.startsWith('sc_')) cleanName = cleanName.substring(3);
 
 		var iconURLAliases: IconNameMap = {
 			// lc_closemobile.svg is generated when loading in NB mode then
@@ -425,13 +462,16 @@ class LOUtil {
 			defineprintarea: 'menuprintranges',
 			deleteprintarea: 'delete',
 			sheetrighttoleft: 'pararighttoleft',
+			duplicatesheet: 'duplicatepage',
 			alignleft: 'leftpara',
 			alignright: 'rightpara',
 			alignhorizontalcenter: 'centerpara',
 			alignblock: 'justifypara',
 			formatsparklinemenu: 'insertsparkline',
+			formatungroup: 'ungroup',
 			insertdatecontentcontrol: 'datefield',
 			editheaderandfooter: 'headerandfooter',
+			insertfooter: 'insertpagefooter',
 			exportas: 'saveas',
 			insertheaderfooter: 'headerandfooter',
 			previoustrackedchange: 'prevrecord',
@@ -452,10 +492,10 @@ class LOUtil {
 			alignmentpropertypanel: 'alignvcenter',
 			cellvertcenter: 'alignvcenter',
 			charbackcolor: 'backcolor',
-			charmapcontrol: 'insertsymbol',
 			insertrowsafter: 'insertrowsmenu',
 			insertobjectchart: 'drawchart',
 			textpropertypanel: 'sidebartextpanel',
+			textbodyparastyle: 'parastyle',
 			spacepara15: 'linespacing',
 			orientationdegrees: 'rotation',
 			clearoutline: 'delete',
@@ -485,6 +525,7 @@ class LOUtil {
 			openhyperlinkoncursor: 'inserthyperlink',
 			pageformatdialog: 'pagedialog',
 			backgroundcolor: 'fillcolor',
+			settabbgcolor: 'fillcolor',
 			cellappearancepropertypanel: 'fillcolor',
 			formatarea: 'fillcolor',
 			glowcolor: 'fillcolor',
@@ -494,7 +535,6 @@ class LOUtil {
 			insertcurrentdate: 'datefield',
 			insertdatefieldfix: 'datefield',
 			insertdatefield: 'datefield',
-			insertdatefieldvar: 'datefield',
 			setparagraphlanguagemenu: 'spelldialog',
 			spellingandgrammardialog: 'spelldialog',
 			styleapply3fstyle3astring3ddefault26familyname3astring3dcellstyles:
@@ -507,7 +547,6 @@ class LOUtil {
 			cellvertbottom: 'alignbottom',
 			insertcurrenttime: 'inserttimefield',
 			inserttimefieldfix: 'inserttimefield',
-			inserttimefieldvar: 'inserttimefield',
 			cancelformula: 'cancel',
 			resetattributes: 'setdefault',
 			tabledialog: 'tablemenu',
@@ -527,6 +566,8 @@ class LOUtil {
 			tableautofitmenu: 'columnwidth',
 			menucolumnwidth: 'columnwidth',
 			hyphenation: 'hyphenate',
+			validatedialogsa11y: 'validation',
+			validatesidebara11y: 'validation',
 			objectbackone: 'behindobject',
 			deleteannotation: 'deletenote',
 			areapropertypanel: 'chartareapanel',
@@ -631,6 +672,8 @@ class LOUtil {
 			graphicfiltersharpen: 'graphicfiltersharpen',
 			graphicfiltersobel: 'graphicfiltersobel',
 			effects: 'pictureeffectsmenu',
+			showmultiplepages: 'multipageview',
+			showtwopages: 'multipageview',
 			fitwidthzoom: 'pagewidth',
 			open: 'formularesfapopen',
 			'exportas-pdf': 'exportpdf',
@@ -917,6 +960,31 @@ class LOUtil {
 			return DOMPurify.sanitize(html, { USE_PROFILES: { [profile]: true } });
 		}
 		return '';
+	}
+
+	// Mirror data-cooltip onto aria-label so the accessible name
+	// matches the visible tooltip, even when branding overrides
+	// data-cooltip after load (e.g. to "Collabora Online"). When
+	// branding also sets an href, target="_blank" takes effect and
+	// the link opens a new tab, so announce that to screen readers.
+	public static syncDocumentLogoAriaLabel(docLogo: HTMLElement): void {
+		const syncAriaLabel = () => {
+			const cooltip = docLogo.getAttribute('data-cooltip');
+			let label;
+			if (cooltip) {
+				label = docLogo.getAttribute('href')
+					? _('{0} website, opens in new tab').replace('{0}', cooltip)
+					: cooltip;
+			} else {
+				label = _('file type icon');
+			}
+			docLogo.setAttribute('aria-label', label);
+		};
+		syncAriaLabel();
+		new MutationObserver(syncAriaLabel).observe(docLogo, {
+			attributes: true,
+			attributeFilter: ['data-cooltip', 'href'],
+		});
 	}
 
 	public static getDocumentLogoClass(docType: string) {

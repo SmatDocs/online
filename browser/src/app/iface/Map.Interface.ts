@@ -12,6 +12,22 @@ interface ParsedJSONResult {
 	[name: string]: any;
 }
 
+// One argument of a UNO command as carried over postMessage: the UNO value
+// type (e.g. 'string', 'int32', 'boolean') and the value itself.
+interface UnoCommandValue {
+	type: string;
+	value: string | number | boolean;
+}
+
+// Arguments for insertCommentInteractive(): the inserted comment's UNO command
+// arguments (Text, Author, ...) keyed by argument name, plus the
+// InteractiveAnchor flag that asks the browser to let the user pick the anchor
+// before the command is dispatched.
+interface InteractiveCommentArgs {
+	InteractiveAnchor?: boolean;
+	[arg: string]: UnoCommandValue | boolean | undefined;
+}
+
 interface CRSInterface {
 	scale(zoom: number): number;
 }
@@ -24,7 +40,11 @@ interface LatLngLike {
 interface MapInterface extends Evented {
 	_docLayer: DocLayerInterface;
 	uiManager: UIManager;
-	_textInput: { debug(value: boolean): void };
+	_textInput: {
+		debug(value: boolean): void;
+		_isDebugOn: boolean;
+		update(): void;
+	};
 	addressInputField: AddressInputField;
 
 	removeLayer(layer: any): void;
@@ -49,12 +69,14 @@ interface MapInterface extends Evented {
 	getDocSize(): cool.Point;
 	getSize(): cool.Point;
 	getCenter(): LatLngLike;
+	getContainer(): Element;
 	_getCurrentFontName(): string;
 
 	_docLoadedOnce: boolean;
 	_debug: DebugManager;
 	_fatal: boolean;
 	_docPassword: string;
+	_serverLoadTimings?: { [k: string]: number };
 
 	options: {
 		timestamp: number;
@@ -77,12 +99,15 @@ interface MapInterface extends Evented {
 
 	wopi: {
 		resetAppLoaded(): void;
+		onRenameFile(newName: string): void;
 		DisableInactiveMessages: boolean;
 		UserCanNotWriteRelative: boolean;
 		IsOwner: boolean;
 		BaseFileName: string;
 		HideExportOption: boolean;
 		DisableAISettings: boolean;
+		AIConfigured: boolean;
+		AIModelName: string;
 		UserCanWrite: boolean;
 		HideChangeTrackingControls: boolean;
 		EnableRemoteLinkPicker: boolean;
@@ -139,6 +164,7 @@ interface MapInterface extends Evented {
 	// TODO fix types:
 	jsdialog: any;
 	zotero: any;
+	_extensions: { [id: string]: any };
 
 	_cacheSVG: string[];
 	calcInputBarHasFocus(): boolean;
@@ -198,6 +224,8 @@ interface MapInterface extends Evented {
 		id?: string,
 	): void;
 	insertComment(): void;
+	insertThreadedComment(): void;
+	insertCommentInteractive(command: string, args: InteractiveCommentArgs): void;
 	zoomIn(delta: number, options?: any, animate?: boolean): MapInterface;
 	zoomOut(delta: number, options?: any, animate?: boolean): MapInterface;
 	cancelSearch(): void;
@@ -228,6 +256,12 @@ interface MapInterface extends Evented {
 	// TODO: window.L.control.lokDialog
 	dialog: any;
 	isAIConfigured?: boolean;
+	aiRequestTimeout?: number;
+	aiModelName?: string;
+	aiEthicalRating?: string;
+	// Set when a valid AI provider was just saved from the settings dialog;
+	// consumed once isAIConfigured updates to open the AI sidebar.
+	_aiJustConfigured?: boolean;
 
 	_controlCorners: Record<string, Node>;
 	_contextMenu: ContextMenuControl;

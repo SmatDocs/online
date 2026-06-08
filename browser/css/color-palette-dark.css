@@ -9,10 +9,12 @@
 	--color-main-text: #e8e8e8;
 	--color-text-dark: #e8e8e8;  /* select */
 	--color-text-darker: #c0bfbc;  /* hover */
-	--color-text-lighter: #fff; /* secondard text, disabled */
+	--color-text-light: #fff; /* secondard text, disabled */
+	--color-text-lighter: #f8f9fa;
 	--color-status-badge: #d6d6d6;
 	--color-slideshow: #d6d6d6;
 	--color-date-text: #d6d6d6;
+	--color-annotation-line: #c0bfbc;
 
 	--color-main-background: #121212;
 	--color-background-dark: #1E1E1E;  /* select */
@@ -25,6 +27,8 @@
 	--brightness-stylesview: 0.9;
 
 	--color-canvas: #141414;
+	--color-scrollbar-thumb: #E8E8E8;
+	--color-scrollbar-railway: #404040;
 
 	--color-primary: #0b87e7; /* border-color */
 	--color-primary-text: #fff; /* text color when primary-lighter is background */
@@ -48,6 +52,10 @@
 	--color-error: #e9322d;
 	--color-warning: #eca700;
 	--color-success: #46ba61;
+
+	--color-btn-danger-bg: #b62723;
+	--color-btn-danger-hover-bg: #fdeaea;
+	--color-btn-danger-outline: #ff6b6b;
 
 	--color-box-shadow-light: rgba(0, 0, 0, 0.1);
 	--color-box-shadow: rgba(0, 0, 0, 0.5);
@@ -78,6 +86,11 @@
 
 	--color-backstage-background: #1E1E1E;
 	--color-backstage-background-dark: #121212;
+
+	/* --opacity-icon: 1; */
+	/* --opacity-icon-hover: 1; */
+	/* --opacity-icon-active: 1; */
+	--opacity-icon-disabled: 0.65;
 }
 
 [data-bg-theme='dark'] {

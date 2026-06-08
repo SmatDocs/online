@@ -20,6 +20,10 @@ interface ViewSetting {
 	accessibilityState: boolean;
 	signatureCertificate?: string;
 	aiConfigured?: boolean;
+	aiRequestTimeout?: string;
+	aiModelName?: string;
+	aiEthicalRating?: string;
+	presentationViewMode?: string;
 }
 
 class ServerConnectionService {
@@ -35,6 +39,23 @@ class ServerConnectionService {
 		app.tableStyles = new TableStylesService();
 	}
 
+	public onWopiProps(props: {
+		AIConfigured: boolean;
+		AIModelName: string;
+		AIEthicalRating: string;
+	}) {
+		app.console.debug('ServerConnectionService: onWopiProps');
+
+		if (!app.map) {
+			app.console.error('ServerConnectionService: missing map reference');
+			return;
+		}
+
+		app.map.isAIConfigured = !!props.AIConfigured;
+		app.map.aiModelName = props.AIModelName || '';
+		app.map.aiEthicalRating = props.AIEthicalRating || 'U';
+	}
+
 	public onViewSetting(viewSetting: ViewSetting) {
 		app.console.debug('ServerConnectionService: onViewSetting');
 
@@ -43,7 +64,33 @@ class ServerConnectionService {
 			return;
 		}
 
+		// Remember the view mode the user last used for this document. Only
+		// ImpressTileLayer acts on this, so it is harmless for other doc types.
+		app.impress.savedViewMode = viewSetting.presentationViewMode ?? null;
+
 		app.map.isAIConfigured = !!viewSetting.aiConfigured;
+		app.map.aiRequestTimeout = viewSetting.aiRequestTimeout
+			? Math.max(10, Number(viewSetting.aiRequestTimeout))
+			: 120;
+		app.map.aiModelName = viewSetting.aiModelName || '';
+		app.map.aiEthicalRating = viewSetting.aiEthicalRating || 'U';
+
+		// The user just changed the AI provider from the settings dialog. Now
+		// that isAIConfigured / aiModelName / aiEthicalRating reflect the new
+		// state, give them the payoff.
+		if (app.map._aiJustConfigured) {
+			app.map._aiJustConfigured = false;
+			if (app.map.isAIConfigured) {
+				const sidebar = JSDialog.getAIChatSidebar();
+				if (sidebar.isVisible()) {
+					sidebar.refreshModelAndRating();
+				} else {
+					const viewTab = document.getElementById('View-tab-label');
+					if (viewTab) viewTab.click();
+					sidebar.show();
+				}
+			}
+		}
 
 		let zoteroPlugin = app.map.zotero;
 		const zoteroAPIKey = viewSetting.zoteroAPIKey;
@@ -73,6 +120,37 @@ class ServerConnectionService {
 	/// see _appLoadedConditions in Map.Wopi.js
 	public onDocumentLoaded() {
 		app.console.debug('ServerConnectionService: onDocumentLoaded');
+
+		if (!app.map._extensions) {
+			// Mark synchronously so a re-entry of onDocumentLoaded doesn't
+			// kick off a second discovery; loadExtensions replaces this with
+			// the real map once each manifest has resolved.
+			app.map._extensions = {};
+			window.L.loadExtensions(app.map, app.map.getDocType()).then(
+				function (exts: { [id: string]: any }) {
+					app.map._extensions = exts;
+					// Nothing to add to the notebookbar tab or the menubar
+					// submenu, the initial render's "no extensions" placeholder
+					// is still correct, so skip the rebuild work:
+					if (Object.keys(exts).length === 0) return;
+					// Both the menubar's Extensions submenu and the
+					// notebookbar's Extensions tab build from
+					// app.map._extensions; refresh whichever is in use so the
+					// just-discovered list shows up.
+					if (app.map.menubar) app.map.menubar.refresh();
+					// uiManager.notebookbar is the NotebookbarBase wrapper;
+					// the JS notebookbar that holds the model + loadTab is on
+					// its .impl field (see Control.NotebookbarBase.ts).
+					if (
+						app.map.uiManager &&
+						app.map.uiManager.notebookbar &&
+						app.map.uiManager.notebookbar.impl
+					) {
+						app.map.uiManager.notebookbar.impl.refresh();
+					}
+				},
+			);
+		}
 	}
 
 	public onFirstTileReceived() {

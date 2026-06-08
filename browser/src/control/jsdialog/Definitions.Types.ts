@@ -19,13 +19,16 @@ interface WidgetJSON {
 	type: string; // type of widget
 	enabled?: boolean; // enabled state
 	visible?: boolean; // visibility state
+	userHidden?: boolean; // hidden by user preference (separate from doc-type preferences)
 	children?: Array<WidgetJSON>; // child nodes
 	title?: string;
 	text?: string; // TODO: remove, its for not yet defined widget types
+	editText?: string; // text content from WeldEditView (EditEngine)
 	tooltip?: string; // tooltip text (QuickHelpText from VCL)
 	top?: string; // placement in the grid - row
 	left?: string; // placement in the grid - column
 	width?: string; // inside grid - width in number of columns
+	hexpand?: boolean; // horizontal expand in grid column
 	labelledBy?: string | string[];
 	allyRole?: string;
 	accessibility?: NotebookbarAccessibilityDescriptor;
@@ -59,6 +62,7 @@ interface JSBuilder {
 	options: JSBuilderOptions; // current state
 	map: MapInterface; // reference to map
 	rendersCache: any; // on demand content cache
+	wizard: any;
 	windowId?: WindowId | number;
 
 	build: (
@@ -84,6 +88,7 @@ interface JSBuilder {
 	_getAccessKeyFromText: (text: string) => string;
 	_stressAccessKey: (element: HTMLElement, accessKey: string) => void;
 	_expanderHandler: any; // FIXME: use handlers getter instead
+	_unitToVisibleString: (unit: string) => string;
 }
 
 // widget handler, returns true if child nodes should be still processed by the builder
@@ -139,6 +144,7 @@ interface ActionData {
 	control_id: string;
 	action_type: string;
 	data: any;
+	new_id?: string;
 }
 
 // JSDialog message (full, update or action)
@@ -161,6 +167,7 @@ interface PopupData extends JSDialogJSON {
 	popupParent?: string;
 	clickToClose?: string;
 	persistKeyboard?: boolean;
+	serverSyncSelection?: boolean;
 	posx: number;
 	posy: number;
 }
@@ -221,6 +228,8 @@ interface MenuDefinition extends WidgetJSON {
 	selected?: boolean; // selected state for entry
 	statusCommand?: string; // UNO command used to retrieve the status/value of the entry
 	pos?: number | string; // identifier of an entry
+	class?: string; // extra CSS class to add to the rendered entry
+	shortcut?: string; // keyboard shortcut to display right-aligned next to the entry
 }
 
 interface HtmlContentJson extends WidgetJSON {
@@ -263,6 +272,13 @@ interface GridWidgetJSON extends ContainerWidgetJSON {
 	rows: number; // numer of grid rows
 	tabIndex?: number;
 	initialSelectedId?: string; // id of the first selected element
+	columnSpacing?: number;
+}
+
+// the slide layout presets shown in the "New Slide" dropdown: a grid of
+// layout choices plus the extra Overview button
+interface NewSlideLayoutEntryWidgetJSON extends WidgetJSON {
+	gridContent: GridWidgetJSON; // the grid of layout presets
 }
 
 interface ToolboxWidgetJSON extends WidgetJSON {
@@ -306,9 +322,11 @@ interface TextWidget extends WidgetJSON {
 	text: string;
 	html?: string;
 	labelFor?: string;
+	labelForType?: string;
 	style?: string;
 	hidden?: boolean;
 	renderAsStatic?: boolean;
+	xalign: string;
 }
 
 // type: 'pushbutton'
@@ -395,6 +413,9 @@ interface TreeHeaderJSON {
 	text: string;
 	sortable: boolean; // can be sorted by column
 	arrow?: 'up' | 'down'; // sorting arrow to show
+	color?: string; // series color as hex string (RRGGBB) for color bar indicator
+	headerName?: string; // series name for chart data table headers
+	headerNameAriaLabel?: string; // accessible name for the headerName input
 }
 
 interface TreeWidgetJSON extends WidgetJSON {
@@ -402,6 +423,7 @@ interface TreeWidgetJSON extends WidgetJSON {
 	singleclickactivate: boolean; // activates element on single click instead of just selection
 	fireKeyEvents?: boolean; // do we sent key events to core
 	hideIfEmpty?: boolean; // hide the widget if no entries available
+	serverSyncSelection?: boolean; // When false, suppresses sending the select message to the server.
 	checkboxtype: string; // radio or checkbox
 	draggable?: boolean; // indicates if we can drag entries to another treeview
 	entries: Array<TreeEntryJSON>;
@@ -464,10 +486,35 @@ interface EditWidgetJSON extends WidgetJSON {
 	widthInChars: number; // width hint in characters
 }
 
+// type: 'emojipicker'
+interface EmojiPickerWidgetJSON extends WidgetJSON {
+	recentsPrefsKey?: string; // window.prefs key for the "Recently used" row
+	maxRecents?: number; // cap on the recents row length (default 16)
+	searchPlaceholder?: string; // placeholder for the search input
+}
+
+// trailing action button rendered inside a chip's pill
+interface ChipAction {
+	id: string; // unique id; click is dispatched as a 'pushbutton' callback
+	text?: string; // glyph / short label (e.g. '✎')
+	image?: string; // lc_*.svg icon (uses LOUtil.setImage like pushbuttons)
+	enabled?: boolean;
+	aria?: AriaLabelAttributes;
+}
+
+// type: 'chip'
+interface ChipWidgetJSON extends WidgetJSON {
+	text: string; // chip label
+	icon?: string; // optional leading glyph / emoji (or lc_*.svg path)
+	pressed?: boolean; // selected state, drives aria-pressed on the main button
+	actions?: ChipAction[]; // optional trailing action buttons inside the pill
+}
+
 // type: 'checkbox'
 interface CheckboxWidgetJSON extends WidgetJSON {
 	text: string;
 	command?: string; // used to just execute uno command or dispatch command instead of sending message
+	commandField?: string; // for commands whose state is a multi-field object: name of the field within that state to bind to
 	checked?: boolean; // checkbox state
 	hidden?: boolean;
 }
@@ -476,6 +523,7 @@ interface AriaLabelAttributes {
 	label?: string;
 	description?: string;
 	role?: string;
+	pressed?: boolean; // drives aria-pressed on widgets that honour it (e.g. pushbutton)
 }
 
 interface SeparatorWidgetJSON extends WidgetJSON {

@@ -17,14 +17,9 @@
 #include <common/Util.hpp>
 
 #include <Poco/DirectoryIterator.h>
-#include <Poco/Environment.h>
 #include <Poco/File.h>
-#include <Poco/FileStream.h>
 #include <Poco/JSON/Object.h>
 #include <Poco/JSON/Parser.h>
-#include <Poco/StreamCopier.h>
-#include <Poco/String.h>
-#include <Poco/Util/Application.h>
 
 #include <exception>
 #include <fstream>
@@ -68,6 +63,9 @@ FileResult fetchSettingsFile(const std::string& relPath)
 {
     Poco::Path target = getConfigPath();
     target.append(relPath);
+
+    if (!Poco::File(target).exists())
+        return {};
 
     std::ifstream in(target.toString(), std::ios::binary);
     if (!in.is_open())
@@ -198,7 +196,11 @@ void syncSettings(const std::function<void(const std::vector<char>&)>& sendFileC
         };
 
         sendFile("viewsetting");
-        sendFile("browsersetting");
+        // browsersetting.json is unused on the desktop apps: the Options
+        // dialog's Interface Settings section is hidden, View-menu toggles
+        // persist via localStorage, and AI/Zotero/signature credentials live
+        // in viewsetting.json. Skip the sync to avoid stale values shadowing
+        // anything.
     }
     catch (const std::exception& ex)
     {
@@ -206,63 +208,80 @@ void syncSettings(const std::function<void(const std::vector<char>&)>& sendFileC
     }
 }
 
-void processIntegratorAdminFile(const std::string& payload)
+static Poco::Path preferencesPath()
 {
-    static bool alreadyProcessed = false;
-    if (alreadyProcessed)
-        return;
-    alreadyProcessed = true;
+    Poco::Path path = getConfigPath();
+    path.append("preferences.json");
+    return path;
+}
 
-    const std::string subFolder =
-#if defined(_WIN32)
-        "cool"
-#elif defined(MACOS)
-        "Resources"
-#else
-        "browser/dist"
-#endif
-        ;
-    const std::string filePath =
-        getDataDir() + "/" + subFolder + "/adminIntegratorSettings.html";
-
-    std::string adminFile;
+std::optional<bool> getDarkMode()
+{
+    try
     {
-        Poco::FileInputStream fis(filePath);
-        if (!fis.good())
-            throw Poco::FileNotFoundException(filePath);
+        const Poco::Path path = preferencesPath();
+        if (!Poco::File(path).exists())
+            return std::nullopt;
 
-        std::ostringstream oss;
-        Poco::StreamCopier::copyStream(fis, oss);
-        adminFile = oss.str();
+        std::ifstream in(path.toString(), std::ios::binary);
+        if (!in.is_open())
+            return std::nullopt;
+        std::ostringstream ss;
+        ss << in.rdbuf();
+
+        Poco::JSON::Parser parser;
+        const auto obj = parser.parse(ss.str()).extract<Poco::JSON::Object::Ptr>();
+        if (obj && obj->has("darkMode"))
+            return obj->getValue<bool>("darkMode");
     }
+    catch (const std::exception& ex)
+    {
+        LOG_ERR("getDarkMode failed: " << ex.what());
+    }
+    return std::nullopt;
+}
 
-    Poco::JSON::Parser parser;
-    const Poco::JSON::Object::Ptr json = parser.parse(payload).extract<Poco::JSON::Object::Ptr>();
+void setDarkMode(bool value)
+{
+    try
+    {
+        const Poco::Path path = preferencesPath();
 
-    auto replaceOrEmpty = [&](const std::string& token, const std::string& jsonKey) {
-        std::string value;
-        if (json->has(jsonKey))
-            value = json->get(jsonKey).convert<std::string>();
+        // Merge into any existing preferences so other keys are preserved.
+        Poco::JSON::Object::Ptr obj;
+        if (Poco::File(path).exists())
+        {
+            std::ifstream in(path.toString(), std::ios::binary);
+            std::ostringstream ss;
+            ss << in.rdbuf();
+            try
+            {
+                Poco::JSON::Parser parser;
+                obj = parser.parse(ss.str()).extract<Poco::JSON::Object::Ptr>();
+            }
+            catch (const std::exception&)
+            {
+                obj = nullptr;
+            }
+        }
+        if (!obj)
+            obj = new Poco::JSON::Object();
 
-        Poco::replaceInPlace(adminFile, token, value);
-    };
+        obj->set("darkMode", value);
 
-    replaceOrEmpty("%IFRAME_TYPE%", "iframe_type");
-    replaceOrEmpty("<!--%CSS_VARIABLES%-->", "css_variables");
-    replaceOrEmpty("%UI_THEME%", "ui_theme");
-
-    Poco::replaceInPlace(adminFile, std::string("%ENABLE_DEBUG%"),
-                         std::string(Util::isDebugEnabled() ? "true" : "false"));
-
-    const auto& config = Poco::Util::Application::instance().config();
-    std::string enableAccessibility =
-        config.getBool("accessibility.enable", false) ? "true" : "false";
-
-    Poco::replaceInPlace(adminFile, std::string("%ENABLE_ACCESSIBILITY%"), enableAccessibility);
-    std::ofstream ofs(filePath, std::ios::binary | std::ios::trunc);
-    if (!ofs.good())
-        throw Poco::FileAccessDeniedException(filePath);
-    ofs << adminFile;
+        Poco::File(path.parent()).createDirectories();
+        std::ofstream out(path.toString(), std::ios::trunc);
+        if (!out.is_open())
+        {
+            LOG_ERR("setDarkMode failed: could not open " << path.toString());
+            return;
+        }
+        obj->stringify(out);
+    }
+    catch (const std::exception& ex)
+    {
+        LOG_ERR("setDarkMode failed: " << ex.what());
+    }
 }
 
 } // namespace Desktop

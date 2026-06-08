@@ -2,20 +2,23 @@
 
 set -e
 
-srcdir="$PWD"
-if [ -n "${abs_srcdir}" ]; then
-    srcdir="${abs_srcdir}"
-fi
+srcdir="${abs_srcdir:-$PWD}"
 
-if [ ! -d "${srcdir}/.git" ]; then
+if [ -d "${srcdir}/.git" ]; then
+    gitdir="${srcdir}/.git"
+elif gitdir=$(git -C "${srcdir}" rev-parse --git-common-dir 2>/dev/null) && [ -d "${gitdir}" ]; then
+    :
+else
+    # Not a git checkout (e.g. tarball build) — nothing to do.
     exit 0
 fi
 
-mkdir -p ${srcdir}/.git/hooks
+mkdir -p "${gitdir}"/hooks
 
-for hook_name in ${srcdir}/.git-hooks/*
+shopt -s nullglob
+for hook_name in "${srcdir}"/.git-hooks/*
 do
-    hook="${srcdir}/.git/hooks/${hook_name##*/}"
+    hook="${gitdir}/hooks/${hook_name##*/}"
     if [ ! -e "${hook}" ]; then
         rm -f "${hook}"
         ln -sf "${hook_name}" "${hook}"

@@ -19,8 +19,10 @@
 #include "Seccomp.hpp"
 
 #include <common/Log.hpp>
+#include <common/NumUtil.hpp>
 #include <common/SigUtil.hpp>
 
+#include <csignal>
 #include <dlfcn.h>
 #include <ftw.h>
 #include <sys/resource.h>
@@ -286,41 +288,37 @@ void setRLimit(rlim_t confLim, int resource, const std::string& resourceText,
     if (lim <= 0)
         lim = RLIM_INFINITY;
     const std::string limTextWithUnit((lim == RLIM_INFINITY) ? "unlimited" : std::to_string(lim) + ' ' + unitText);
-    if (resource != RLIMIT_FSIZE && resource != RLIMIT_NOFILE)
+    if (resource == RLIMIT_FSIZE)
     {
-        /* FIXME Currently the RLIMIT_FSIZE handling is non-ideal, and can
-         * lead to crashes of the kit processes due to not handling signal
-         * 25 gracefully.  Let's disable for now before there's a more
-         * concrete plan.
-         * Similar issues with RLIMIT_NOFILE
-         */
-        rlimit rlim = { lim, lim };
-        if (setrlimit(resource, &rlim) != 0)
+        // Without this, a write past the limit terminates the kit with
+        // SIGXFSZ (default action: core dump). Ignoring the signal leaves
+        // write(2) returning EFBIG so LibreOffice's normal disk-full path
+        // can surface the error to the client.
+        std::signal(SIGXFSZ, SIG_IGN);
+    }
+
+    rlimit rlim = { lim, lim };
+    if (setrlimit(resource, &rlim) != 0)
+    {
+        // Infinity is the default, and it's not an error if we fail to set it
+        // as increasing limits are not valid. Error when the increase is intentional.
+        if (lim != RLIM_INFINITY)
             LOG_SYS("Failed to set " << resourceText << " to " << limTextWithUnit << '.');
-        if (getrlimit(resource, &rlim) == 0)
-        {
-            const std::string setLimTextWithUnit((rlim.rlim_max == RLIM_INFINITY) ? "unlimited" : std::to_string(rlim.rlim_max) + ' ' + unitText);
-            LOG_INF(resourceText << " is " << setLimTextWithUnit << " after setting it to " << limTextWithUnit << '.');
-        }
         else
-            LOG_SYS("Failed to get " << resourceText << " after trying to set it to "
-                                     << limTextWithUnit);
+            LOG_DBG("Failed to set " << resourceText << " to " << limTextWithUnit << '.');
+    }
+
+    if (getrlimit(resource, &rlim) == 0)
+    {
+        const std::string setLimTextWithUnit((rlim.rlim_max == RLIM_INFINITY)
+                                                 ? "unlimited"
+                                                 : std::to_string(rlim.rlim_max) + ' ' + unitText);
+        LOG_INF(resourceText << " is " << setLimTextWithUnit << " after setting it to "
+                             << limTextWithUnit << '.');
     }
     else
-    {
-        rlimit rlim = { 0, 0 };
-        if (getrlimit(resource, &rlim) == 0)
-        {
-            const std::string curLimTextWithUnit(
-                (rlim.rlim_max == RLIM_INFINITY) ? "unlimited"
-                                                 : std::to_string(rlim.rlim_max) + ' ' + unitText);
-            LOG_INF("Ignored setting " << resourceText << " to " << limTextWithUnit
-                                       << ", current limit is " << curLimTextWithUnit);
-        }
-        else
-            LOG_SYS("Failed to get " << resourceText << " while ignoring to set it to "
-                                     << limTextWithUnit);
-    }
+        LOG_SYS("Failed to get " << resourceText << " after trying to set it to "
+                                 << limTextWithUnit);
 }
 
 bool handleSetrlimitCommand(const StringVector& tokens)
@@ -329,19 +327,20 @@ bool handleSetrlimitCommand(const StringVector& tokens)
     {
         if (tokens.equals(1, "limit_virt_mem_mb"))
         {
-            setRLimit(std::stoi(tokens[2]) * 1024 * 1024, RLIMIT_AS, "RLIMIT_AS", "bytes");
+            setRLimit(NumUtil::stoi(tokens[2]) * 1024 * 1024, RLIMIT_AS, "RLIMIT_AS", "bytes");
         }
         else if (tokens.equals(1, "limit_stack_mem_kb"))
         {
-            setRLimit(std::stoi(tokens[2]) * 1024, RLIMIT_STACK, "RLIMIT_STACK", "bytes");
+            setRLimit(NumUtil::stoi(tokens[2]) * 1024, RLIMIT_STACK, "RLIMIT_STACK", "bytes");
         }
         else if (tokens.equals(1, "limit_file_size_mb"))
         {
-            setRLimit(std::stoi(tokens[2]) * 1024 * 1024, RLIMIT_FSIZE, "RLIMIT_FSIZE", "bytes");
+            setRLimit(NumUtil::stoi(tokens[2]) * 1024 * 1024, RLIMIT_FSIZE, "RLIMIT_FSIZE",
+                      "bytes");
         }
         else if (tokens.equals(1, "limit_num_open_files"))
         {
-            setRLimit(std::stoi(tokens[2]), RLIMIT_NOFILE, "RLIMIT_NOFILE", "files");
+            setRLimit(NumUtil::stoi(tokens[2]), RLIMIT_NOFILE, "RLIMIT_NOFILE", "files");
         }
         else
             return false;

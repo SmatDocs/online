@@ -1,0 +1,11 @@
+--- configure.dt
++++ configure
+@@ -24916,6 +24916,8 @@
+ if test $platform_win32 = yes
+ then :
+
++  HAVE_VISIBILITY_TRUE='#'
++  HAVE_VISIBILITY_FALSE=
+ else case e in #(
+   e)
+         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for -fvisibility=hidden compiler flag" >&5

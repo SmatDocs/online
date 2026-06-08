@@ -18,6 +18,7 @@
 
 #include <common/Common.hpp>
 #include <common/ConfigUtil.hpp>
+#include <common/HexUtil.hpp>
 #include <common/JsonUtil.hpp>
 #include <common/Syscall.hpp>
 #include <common/Unit.hpp>
@@ -179,7 +180,7 @@ inline std::string getTempFileCopyPath(const std::string& srcDir, const std::str
 
     bool retry;
     do {
-        std::string dstFilename = dstFilenamePrefix + Util::encodeId(Util::rng::getNext()) + '_' + srcFilename;
+        std::string dstFilename = dstFilenamePrefix + HexUtil::encodeId(Util::rng::getNext()) + '_' + srcFilename;
 
         retry = false;
         dstPath = std::filesystem::temp_directory_path() / dstFilename;
@@ -834,11 +835,11 @@ void parseDocSize(const std::string& message, const std::string& type,
     const Poco::SharedPtr<Poco::JSON::Object>& statusJsonObject = statusJsonVar.extract<Poco::JSON::Object::Ptr>();
 
     const std::string text = statusJsonObject->get("type").toString();
-    parts = std::stoi(statusJsonObject->get("partscount").toString());
-    part = std::stoi(statusJsonObject->get("selectedpart").toString());
-    width = std::stoi(statusJsonObject->get("width").toString());
-    height = std::stoi(statusJsonObject->get("height").toString());
-    viewid = std::stoi(statusJsonObject->get("viewid").toString());
+    parts = NumUtil::stoi(statusJsonObject->get("partscount").toString());
+    part = NumUtil::stoi(statusJsonObject->get("selectedpart").toString());
+    width = NumUtil::stoi(statusJsonObject->get("width").toString());
+    height = NumUtil::stoi(statusJsonObject->get("height").toString());
+    viewid = NumUtil::stoi(statusJsonObject->get("viewid").toString());
     LOK_ASSERT_EQUAL(type, text);
     LOK_ASSERT(parts > 0);
     LOK_ASSERT(part >= 0);

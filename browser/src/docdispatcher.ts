@@ -145,9 +145,6 @@ class Dispatcher {
 			});
 		};
 
-		this.actionsMap['charmapcontrol'] = function () {
-			app.map.sendUnoCommand('.uno:InsertSymbol');
-		};
 		this.actionsMap['closetablet'] = function () {
 			app.map.uiManager.enterReadonlyOrClose();
 		};
@@ -160,6 +157,11 @@ class Dispatcher {
 		};
 		this.actionsMap['home-search'] = function () {
 			app.map.uiManager.focusSearch();
+		};
+		this.actionsMap['backstage-new'] = function () {
+			if (app.map.backstageView) {
+				app.map.backstageView.show('new');
+			}
 		};
 		this.actionsMap['renamedocument'] = function () {
 			app.map.uiManager.renameDocument();
@@ -221,6 +223,10 @@ class Dispatcher {
 
 		this.actionsMap['insertcomment'] = function () {
 			app.map.insertComment();
+		};
+
+		this.actionsMap['insertthreadedcomment'] = function () {
+			app.map.insertThreadedComment();
 		};
 
 		this.actionsMap['showcommentsnavigator'] = function (data?: any) {
@@ -816,6 +822,81 @@ class Dispatcher {
 				}
 			}
 		};
+
+		// View Changes menu: radio-style actions (Inline / Side by Side / Hidden).
+		// Each action activates its mode and deactivates the others.
+
+		const updateViewChangesState = function (mode: string) {
+			const states: Record<string, boolean> = {
+				'viewchanges-inline': mode === 'inline',
+				'viewchanges-sidebyside': mode === 'sidebyside',
+				'viewchanges-hidden': mode === 'hidden',
+				viewchanges: mode !== 'hidden',
+			};
+
+			for (const key in states) {
+				const val = states[key] ? 'true' : 'false';
+				app.map['stateChangeHandler'].setItemValue(key, val);
+				app.map.fire('commandstatechanged', {
+					commandName: key,
+					state: val,
+				});
+			}
+		};
+
+		const switchToWriterLayout = function () {
+			if (
+				app.activeDocument?.activeLayout?.type === 'ViewLayoutCompareChanges'
+			) {
+				app.activeDocument.activeLayout = new ViewLayoutWriter();
+				TileManager.redraw();
+				app.map._docLayer._fitWidthZoom(null, null, true);
+				app.activeDocument.activeLayout.sendClientVisibleArea();
+				app.sectionContainer.requestReDraw();
+			}
+		};
+
+		this.actionsMap['viewchanges-inline'] = function () {
+			if (!app.activeDocument?.activeLayout) return;
+
+			switchToWriterLayout();
+
+			// Ensure inline tracked changes are visible.
+			const showState = app.map['stateChangeHandler'].getItemValue(
+				'.uno:ShowTrackedChanges',
+			);
+			if (showState !== 'true')
+				app.map.sendUnoCommand('.uno:ShowTrackedChanges');
+
+			updateViewChangesState('inline');
+		};
+
+		this.actionsMap['viewchanges-sidebyside'] = function () {
+			if (!app.activeDocument?.activeLayout) return;
+
+			Util.ensureValue(app.activeDocument);
+			app.socket.sendMessage('uno .uno:RedlineRenderMode');
+
+			if (app.activeDocument.activeLayout.type !== 'ViewLayoutCompareChanges')
+				app.activeDocument.activeLayout = new ViewLayoutCompareChanges();
+
+			updateViewChangesState('sidebyside');
+		};
+
+		this.actionsMap['viewchanges-hidden'] = function () {
+			if (!app.activeDocument?.activeLayout) return;
+
+			switchToWriterLayout();
+
+			// Ensure inline tracked changes are hidden.
+			const showState = app.map['stateChangeHandler'].getItemValue(
+				'.uno:ShowTrackedChanges',
+			);
+			if (showState === 'true')
+				app.map.sendUnoCommand('.uno:ShowTrackedChanges');
+
+			updateViewChangesState('hidden');
+		};
 	}
 
 	private addMobileCommands() {
@@ -950,6 +1031,13 @@ class Dispatcher {
 			return;
 		}
 
+		if (action.startsWith('extension-toggle-')) {
+			const id = action.substring('extension-toggle-'.length);
+			const ext = app.map._extensions && app.map._extensions[id];
+			if (ext) ext.toggle();
+			return;
+		}
+
 		if (
 			action === '.uno:Copy' ||
 			action === '.uno:Cut' ||
@@ -967,6 +1055,15 @@ class Dispatcher {
 
 		if (window.ThisIsTheWindowsApp && action.startsWith('new-')) {
 			window.postMobileMessage(action);
+			return;
+		}
+
+		// Generic fallback for bare .uno:* commands with no JS-side handler.
+		// Forwards to core via sendUnoCommand — typically a fire-and-forget
+		// toggle (the slot reads current state and flips). Optional args go
+		// through `data` if the caller supplied any.
+		if (action.startsWith('.uno:')) {
+			app.map.sendUnoCommand(action, data);
 			return;
 		}
 

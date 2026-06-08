@@ -11,26 +11,25 @@
 
 #pragma once
 
-#include <math.h>
-#include <iomanip>
-#include <chrono>
-#include <cstring>
-#include <unordered_map>
-
-#include <Socket.hpp>
-#include <WebSocketHandler.hpp>
-#include <TraceFile.hpp>
-#include <common/Util.hpp>
 #include <common/Log.hpp>
-#include <net/Ssl.hpp>
+#include <common/Util.hpp>
+#include <net/Socket.hpp>
+#include <net/WebSocketHandler.hpp>
 #include <wsd/TileDesc.hpp>
+#include <wsd/TraceFile.hpp>
 #if ENABLE_SSL
-#  include <SslSocket.hpp>
+#include <net/Ssl.hpp>
+#include <net/SslSocket.hpp>
 #endif
 
-#include <iostream>
-#include <fstream>
+#include <chrono>
+#include <cstring>
 #include <ctime>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <math.h>
+#include <unordered_map>
 #include <utility>
 
 struct PerfMetricInfo
@@ -322,11 +321,11 @@ struct Stats {
         return PerfMetricInfo(std::move(testPhase), "CPU Usage (us)", cpuUsage);
     }
 
-    std::vector<PerfMetricInfo> getNetworkStats(size_t recievedKb, size_t sentKb, const std::string& testPhase)
+    std::vector<PerfMetricInfo> getNetworkStats(size_t receivedKb, size_t sentKb, const std::string& testPhase)
     {
         std::vector<PerfMetricInfo> networkStatsList;
 
-        networkStatsList.emplace_back(testPhase, "Bytes recieved (kB)", recievedKb);
+        networkStatsList.emplace_back(testPhase, "Bytes received (kB)", receivedKb);
         networkStatsList.emplace_back(testPhase, "Bytes sent (kB)", sentKb);
 
         return networkStatsList;

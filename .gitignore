@@ -33,6 +33,7 @@ config.guess
 config.status
 config.sub
 configure
+!snap/hooks/configure
 compile
 depcomp
 install-sh
@@ -50,6 +51,7 @@ compile_commands.json
 macos/coolwsd/gmake-wrapper.sh
 macos/coda/coda/Assets.xcassets
 /qt/run-from-build
+scripts/__pycache__
 
 # Test stuff
 systemplate
@@ -133,6 +135,8 @@ coolbench
 
 # Fuzzer
 *_fuzzer
+*.afl
+fuzzer/.*
 fuzz*.log
 slow-unit-*
 crash-*
@@ -259,3 +263,8 @@ windows/coda/config.props
 qt/flatpak/build-dir/
 qt/flatpak/repo/
 qt/translations/*.qm
+
+# coplugin
+/clang/plugin.so
+
+/engine/translations

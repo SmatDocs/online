@@ -15,6 +15,7 @@
 #include <qt/DBusService.hpp>
 #include <net/FakeSocket.hpp>
 #include <common/Log.hpp>
+#include <common/SettingsStorage.hpp>
 #include <common/Util.hpp>
 #include <qt/WebView.hpp>
 #include <qt/qt.hpp>
@@ -33,6 +34,7 @@
 #include <QString>
 #include <QTranslator>
 #include <QWebEngineProfile>
+#include <QWebEngineUrlScheme>
 
 #include <pwd.h>
 
@@ -129,6 +131,18 @@ namespace
 
 int main(int argc, char** argv)
 {
+    // Must run before QApplication.
+    // LocalScheme + LocalAccessAllowed lets the file:// page reach cool:.
+    {
+        QWebEngineUrlScheme scheme("cool");
+        scheme.setSyntax(QWebEngineUrlScheme::Syntax::Path);
+        scheme.setFlags(QWebEngineUrlScheme::SecureScheme
+                      | QWebEngineUrlScheme::LocalScheme
+                      | QWebEngineUrlScheme::LocalAccessAllowed
+                      | QWebEngineUrlScheme::CorsEnabled);
+        QWebEngineUrlScheme::registerScheme(scheme);
+    }
+
     QApplication app(argc, argv);
 
     user_name = getUserName();
@@ -211,7 +225,7 @@ int main(int argc, char** argv)
     Log::initialize(QApplication::applicationName().toStdString(), logLevel);
     Log::setDisabledAreas(argParser.value(logDisabledAreasOption).toStdString());
 
-    Util::setThreadName("main");
+    ProcUtil::setThreadName("main");
 
     fakeSocketSetLoggingCallback([](const std::string& line) { LOG_TRC_NOFILE(line); });
 
@@ -246,11 +260,25 @@ int main(int argc, char** argv)
         return 0;
     }
 
+    // The engine's xmlsecurity initializes NSS at startup and fails ("Error
+    // initializing security context") when no Mozilla profile is available. We
+    // don't have one on the desktop, so point NSS at a dedicated directory
+    // under the app's config and let it create an empty database there. The
+    // 'sql:' prefix forces the modern SQLite-based store (the legacy DBM format
+    // NSS would otherwise default to is read-only/deprecated on most distros).
+    {
+        Poco::Path nssdb = Desktop::getConfigPath();
+        nssdb.append("nssdb");
+        Poco::File(nssdb).createDirectories();
+        const std::string nssEnv = "sql:" + nssdb.toString();
+        setenv("MOZILLA_CERTIFICATE_FOLDER", nssEnv.c_str(), 1);
+    }
+
     // COOLWSD in a background thread
     coolwsdThread = std::thread(
         []
         {
-            Util::setThreadName("app");
+            ProcUtil::setThreadName("app");
             char* argv_local[2] = { strdup("coda"), nullptr };
             coolwsd = new COOLWSD();
             coolwsd->run(1, argv_local);

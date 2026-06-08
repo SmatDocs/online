@@ -104,13 +104,12 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 			docLogo.setAttribute('id', 'document-logo');
 			docLogo.setAttribute('type', 'action');
 			docLogo.setAttribute('target', '_blank');
-			docLogo.setAttribute('aria-label', _('file type icon'));
 			docLogo.setAttribute('tabIndex', 0);
-			docLogo.setAttribute('aria-label', _('file type icon'));
 
 			if (iconTooltip) {
 				docLogo.setAttribute('data-cooltip', iconTooltip);
 			}
+			app.LOUtil.syncDocumentLogoAriaLabel(docLogo);
 			window.L.control.attachTooltipEventListener(docLogo, this.map);
 			$('.main-nav').prepend(docLogoHeader);
 
@@ -261,6 +260,77 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 	getTabsJSON: function() {
 		// implement in child classes
 		return [];
+	},
+
+	// Shared filter used by each doc-type notebookbar's getTabs/getTabsJSON
+	// to drop the Extensions entries.  The tab strip (getTabs labels) and the
+	// tab pages (getTabsJSON) are zipped by index in NotebookbarBuilder, so the
+	// label and its page must be dropped together or every following tab shifts
+	// by one.  Drop the Extensions label when extension support is disabled by
+	// runtime config, or when no extension is installed; the matching page is a
+	// null from getExtensionsTab in those cases and is dropped by the !t guard.
+	_filterExtensionsTab: function(arr) {
+		var noExtensions = Object.keys(app.map._extensions || {}).length === 0;
+		return arr.filter(function(t) {
+			if (!t) return false;
+			if (t.name === 'Extensions' && (!window.enableExperimentalFeatures || noExtensions))
+				return false;
+			return true;
+		});
+	},
+
+	// Shared entry used by each doc-type notebookbar's getTabsJSON to build
+	// the "Extensions" tab: one bigcustomtoolitem per loaded manifest, or a
+	// fixed-text placeholder when discovery hasn't yet populated
+	// app.map._extensions.  Click ids start with "extension-toggle-" so
+	// docdispatcher.dispatch routes them to ext.toggle().  Call
+	// notebookbar.refresh() after loadExtensions resolves to rebuild this
+	// tab against the real extension list.
+	getExtensionsTab: function() {
+		var exts = app.map._extensions || {};
+		var ids = Object.keys(exts).sort();
+		// Drop the Extensions tab entirely when no extension is installed:
+		// returning null here lets _filterExtensionsTab strip it.  refresh()
+		// (called once Control.Extension.loadExtensions resolves) rebuilds
+		// the notebookbar, so the tab appears as soon as discovery populates
+		// app.map._extensions.
+		if (ids.length === 0)
+			return null;
+		var content = [];
+		for (var i = 0; i < ids.length; i++) {
+			var id = ids[i];
+			var manifest = exts[id].options.manifest;
+			var baseUrl = exts[id].options.baseUrl;
+			content.push({
+				'id': 'extension-toggle-' + id,
+				'type': 'bigcustomtoolitem',
+				'text': manifest.name,
+				'icon': manifest.icon ? baseUrl + manifest.icon : undefined,
+				'command': 'extension-toggle-' + id,
+			});
+		}
+		//HACK: Control.JSDialogBuilder.build's "hasManyChildren && isContainer" path only
+		// emits the <div id="Extensions-container"> wrapper when the inner overflowmanager
+		// has more than one child; so pin a trailing dummy spacer so the 1-extension case
+		// still produces the wrapper that A11yValidator's checkTabContainerConsistency
+		// (and any future selector wanting #Extensions-container) expects:
+		content.push({
+			'id': 'extensions-tail-pin',
+			'type': 'spacer',
+		});
+		return this.getTabPage('Extensions', content);
+	},
+
+	// Rebuild the notebookbar from a fresh tabsJSON.  Used by
+	// ServerConnectionService once extensions have been discovered so the
+	// Extensions tab picks them up; preserves whichever tab the user has
+	// open by passing _lastSelectedTabName back through getFullJSON.
+	refresh: function() {
+		var selected = this._lastSelectedTabName
+			? this._lastSelectedTabName + '-tab-label'
+			: this.HOME_TAB_ID;
+		this.model.fullUpdate(this.getFullJSON(selected));
+		if (this.container) this.loadTab();
 	},
 
 	getShortcutsBarData: function() {
@@ -460,6 +530,14 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 		let alreadySelected = null;
 		// Currently selected tab name, part of the element's ID.
 		let currentlySelectedTabName = null;
+
+		if (requestedContext)
+			if (requestedContext.includes('MasterPage'))
+				this._isMasterView = true;
+			else if (requestedContext.includes('DrawPage') ||
+				requestedContext.includes('NotesPage'))
+				this._isMasterView = false;
+
 		for (var tab in tabs) {
 			var tabElement = $('#' + tabs[tab].name + '-tab-label');
 			if (tabElement.hasClass('selected')) {
@@ -468,6 +546,8 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 			if (tabs[tab].context) {
 				tabElement.hide();
 				var contexts = tabs[tab].context.split('|');
+				var tabMatched = false;
+
 				for (var context in contexts) {
 					// Check the tab isn't hidden.
 					if (!this.map.uiManager.isTabVisible(tabs[tab].name)) {
@@ -480,11 +560,22 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 							contextTab = tabElement;
 						else
 							alreadySelected = tabElement;
+						tabMatched = true;
+					} else if (this._isMasterView && contexts[context] === 'MasterPage') {
+						tabElement.show();
+						tabElement.removeClass('hidden');
+						tabMatched = true;
 					} else if (contexts[context] === 'default') {
 						tabElement.show();
+						tabElement.removeClass('hidden');
+						tabMatched = true;
+
 						if (!tabElement.hasClass('selected'))
 							defaultTab = tabElement;
 					}
+				}
+				if (!tabMatched) {
+					tabElement.addClass('hidden');
 				}
 			} else if (!this.map.uiManager.isTabVisible(tabs[tab].name)) {
 				// There is no context, but we check if the tab is hidden
@@ -640,7 +731,6 @@ window.L.Control.Notebookbar = window.L.Control.extend({
 				'command': 'shareas',
 				'inlineLabel': true,
 				'accessibility': { focusBack: false, combination: 'ZS', de: null },
-				'tabIndex': 0,
 			});
 		}
 

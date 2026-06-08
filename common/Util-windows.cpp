@@ -41,11 +41,6 @@ namespace Util
         }
     } // namespace rng
 
-    long getProcessId()
-    {
-        return _getpid();
-    }
-
     std::tm *time_t_to_gmtime(std::time_t t, std::tm& tm)
     {
         if (gmtime_s(&tm, &t) != 0)
@@ -53,7 +48,7 @@ namespace Util
         return &tm;
     }
 
-    std::wstring string_to_wide_string(const std::string& string)
+    std::wstring string_to_wide_string(const std::string_view string)
     {
         if (string.empty())
         {
@@ -91,5 +86,13 @@ namespace Util
         return result;
     }
 } // namespace Util
+
+namespace ProcUtil
+{
+    long getProcessId()
+    {
+        return _getpid();
+    }
+} // namespace ProcUtil
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

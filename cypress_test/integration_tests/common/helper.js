@@ -132,6 +132,45 @@ function setupAndLoadDocument(filePath, isMultiUser = false, copyCertificates = 
 }
 
 /*
+ * Sets up two independent documents and opens each in its own multiuser
+ * iframe (iframe1 and iframe2). The cypress-multiuser.html template reads
+ * file_path for iframe1 and file_path2 for iframe2.
+ */
+function setupAndLoadTwoDocuments(filePath1, filePath2, lang) {
+	cy.log('>> setupAndLoadTwoDocuments - start');
+
+	var newFilePath1 = setupDocument(filePath1);
+	var newFilePath2 = setupDocument(filePath2);
+
+	cy.viewport(2000, 660);
+	cy.cSetActiveFrame('#iframe1');
+
+	var URI = '/browser/' + Cypress.env('WSD_VERSION_HASH') + '/cypress-multiuser.html'
+		+ '?lang=' + (lang || 'en-US')
+		+ '&file_path=' + Cypress.env('DATA_WORKDIR') + newFilePath1
+		+ '&file_path2=' + Cypress.env('DATA_WORKDIR') + newFilePath2;
+
+	cy.visit(URI, {
+		onBeforeLoad: function(win) {
+			win.addEventListener('error', logError);
+			win.addEventListener('DOMContentLoaded', function () {
+				for (var i = 0; i < win.frames.length; i++) {
+					win.frames[i].addEventListener('error', logError);
+				}
+			});
+		}
+	});
+
+	cy.cSetActiveFrame('#iframe1');
+	documentChecks();
+	cy.cSetActiveFrame('#iframe2');
+	documentChecks();
+
+	cy.log('<< setupAndLoadTwoDocuments - end');
+	return [newFilePath1, newFilePath2];
+}
+
+/*
  * Covers most use cases. For more flexibility,
  * call closeDocument and loadDocument directly
  */
@@ -140,6 +179,11 @@ function reloadDocument(filePath) {
 
 	closeDocument(filePath);
 	loadDocument(filePath, /*skipDocumentChecks*/ true);
+
+	// loadDocument skips full documentChecks on reload, but we still
+	// need to wait for the document canvas to be visible before
+	// callers start asserting on document content.
+	cy.cGet('#document-canvas').should('be.visible');
 
 	cy.log('<< reloadDocument - end');
 }
@@ -228,7 +272,7 @@ function loadDocumentNextcloud(filePath) {
 	// Open test document
 	cy.cGet('tr[data-file=\'' + fileName + '\']').click();
 
-	cy.cGet('iframe#richdocumentsframe').should('be.visible', {timeout : Cypress.config('defaultCommandTimeout') * 2.0});
+	cy.cGet('iframe#richdocumentsframe').should('be.visible');
 
 	cy.wait(10000);
 
@@ -365,8 +409,7 @@ function upLoadFileToNextCloud(filePath, subsequentLoad) {
 function waitForInterferingUser() {
 	cy.log('>> waitForInterferingUser - start');
 
-	cy.cGet('#toolbar-up #userlist', { timeout: Cypress.config('defaultCommandTimeout') * 2.0 })
-		.should('be.visible');
+	cy.cGet('#toolbar-up #userlist').should('be.visible');
 
 	cy.wait(10000);
 
@@ -376,11 +419,10 @@ function waitForInterferingUser() {
 function documentChecks(skipInitializedCheck = false) {
 	cy.log('>> documentChecks - start');
 
-	var canvasCheck = cy.cGet('#document-canvas', {timeout : Cypress.config('defaultCommandTimeout') * 2.0});
+	var canvasCheck = cy.cGet('#document-canvas');
 	if (!skipInitializedCheck) {
 		canvasCheck.should('be.visible');
-		cy.cGet('#map', {timeout : Cypress.config('defaultCommandTimeout') * 2.0})
-			.should('have.class', 'initialized');
+		cy.cGet('#map').should('have.class', 'initialized');
 	}
 
 	// With php-proxy the client is irresponsive for some seconds after load, because of the incoming messages.
@@ -390,8 +432,7 @@ function documentChecks(skipInitializedCheck = false) {
 
 	if (!skipInitializedCheck /* TODO: if notebookbar mode */) {
 		doIfOnDesktop(() => {
-			cy.cGet('.notebookbar-scroll-wrapper', {timeout : Cypress.config('defaultCommandTimeout') * 2.0})
-				.should('have.class', 'initialized');
+			cy.cGet('.notebookbar-scroll-wrapper').should('have.class', 'initialized');
 		});
 	}
 
@@ -399,7 +440,7 @@ function documentChecks(skipInitializedCheck = false) {
 	if (Cypress.env('INTEGRATION') !== 'nextcloud') {
 		doIfOnDesktop(function() {
 			if (Cypress.env('pdf-view') !== true)
-				cy.cGet('#sidebar-panel', { timeout: 20000 }).should('be.visible').should('not.be.empty');
+				cy.cGet('#sidebar-panel').should('be.visible').should('not.be.empty');
 
 			// Check that the document does not take the whole window width.
 			cy.window()
@@ -413,7 +454,10 @@ function documentChecks(skipInitializedCheck = false) {
 				});
 		});
 
-		// In Writer wait for styles to appear in notebookbar
+		// In Writer wait for styles to appear in notebookbar. The img only
+		// exists after the on-demand renderer round-trips with core for at
+		// least one entry, so use the same 20s timeout as the other
+		// document-load checks rather than the default 10s.
 		doIfOnDesktop(() => {
 			doIfInWriter(() => {
 				cy.cGet('#stylesview.notebookbar .icon-view-item-container img')
@@ -1370,12 +1414,55 @@ function processToIdle(win) {
 	});
 }
 
+// Retry an action until a condition holds. Re-runs the action each poll
+// (cy.should only re-checks), so the action must be idempotent.
+function retryUntil(action, condition, options) {
+	var opts = Object.assign(
+		{ timeout: Cypress.config('defaultCommandTimeout'),
+			errorMsg: 'retryUntil: condition never met' },
+		options || {});
+	return cy.waitUntil(function() {
+		action();
+		return cy.wrap(null, { log: false }).then(function() {
+			return condition();
+		});
+	}, opts);
+}
+
 // Wait until no timers of the given tag exist.
 // If no timers with the tag exist at call time resolve immediately.
 function waitForTimers(win, tag) {
 	return cy.waitUntil(function() {
 		return !win.app.timerRegistry.hasActive(tag);
-	}, { timeout: Cypress.config('defaultCommandTimeout'), interval: 50 });
+	}, { interval: 50 });
+}
+
+// Wait until every in-flight render_entry request from
+// jsdialog/Util.OnDemandRenderer has been answered. processToIdle
+// returns once core is idle and the layout queue has drained, but
+// the iconview's IntersectionObserver-driven on-demand renders can
+// still be in flight after that, replacing placeholders with images
+// and shifting layout. Visual tests that capture an element below
+// such an iconview must wait for this counter to reach zero, or
+// cypress will compute the element bbox before the shift and capture
+// a stale rect.
+//
+// Two RAFs precede the counter check because IntersectionObserver
+// callbacks dispatched by observe() fire on the next animation frame,
+// not synchronously - we need to give them a chance to run and
+// increment the counter before we sample it.
+function waitForOnDemandRenders(win) {
+	return cy.then(function() {
+		return new Cypress.Promise(function(resolve) {
+			win.requestAnimationFrame(function() {
+				win.requestAnimationFrame(resolve);
+			});
+		});
+	}).then(function() {
+		return cy.waitUntil(function() {
+			return (win.app.pendingOnDemandRenders || 0) === 0;
+		}, { interval: 50 });
+	});
 }
 
 // Waits for a map stateChangeHandler item to reach the expected value.
@@ -1436,6 +1523,7 @@ function getContextMenuItemList() {
 module.exports.setupDocument = setupDocument;
 module.exports.loadDocument = loadDocument;
 module.exports.setupAndLoadDocument = setupAndLoadDocument;
+module.exports.setupAndLoadTwoDocuments = setupAndLoadTwoDocuments;
 module.exports.reloadDocument = reloadDocument;
 module.exports.documentChecks = documentChecks;
 module.exports.assertCursorAndFocus = assertCursorAndFocus;
@@ -1486,7 +1574,9 @@ module.exports.getMenuEntry = getMenuEntry;
 module.exports.waitUntilCoreIsIdle = waitUntilCoreIsIdle;
 module.exports.waitUntilLayoutingIsIdle = waitUntilLayoutingIsIdle;
 module.exports.processToIdle = processToIdle;
+module.exports.retryUntil = retryUntil;
 module.exports.waitForTimers = waitForTimers;
+module.exports.waitForOnDemandRenders = waitForOnDemandRenders;
 module.exports.waitForMapState = waitForMapState;
 module.exports.maxScreenshotableViewportHeight = maxScreenshotableViewportHeight;
 module.exports.getContextMenuItem = getContextMenuItem;

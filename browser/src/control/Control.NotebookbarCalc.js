@@ -23,7 +23,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 	},
 
 	getTabs: function() {
-		return [
+		return this._filterExtensionsTab([
 			{
 				'id': 'File-tab-label',
 				'text': _('File'),
@@ -88,6 +88,13 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'accessibility': { focusBack: true,	combination: 'G', de: null }
 			},
 			{
+				'id': 'Chart-tab-label',
+				'text': _('Chart'),
+				'name': 'Chart',
+				'context': 'Chart|Series|ErrorBar|Axis|Grid|ChartElements|Trendline|ChartTitle|ChartLegend|ChartLabel',
+				'accessibility': { focusBack: true,	combination: 'CH', de: null }
+			},
+			{
 				'id': 'View-tab-label',
 				'text': _('View'),
 				'name': 'View',
@@ -102,16 +109,22 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			},
 			JSDialog.CalcTableTab.getEntry(),
 			{
+				'id': 'Extensions-tab-label',
+				'text': _('Extensions'),
+				'name': 'Extensions',
+				'accessibility': { focusBack: true, combination: 'X' }
+			},
+			{
 				'id': 'Help-tab-label',
 				'text': _('Help'),
 				'name': 'Help',
 				'accessibility': { focusBack: true,	combination: 'Y', de: null }
 			}
-		];
+		]);
 	},
 
 	getTabsJSON: function () {
-		return [
+		return this._filterExtensionsTab([
 			this.getFileTab(),
 			this.getHomeTab(),
 			this.getInsertTab(),
@@ -122,11 +135,13 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			this.getFormatTab(),
 			this.getShapeTab(),
 			this.getPictureTab(),
+			this.getChartTab(),
 			this.getViewTab(),
 			this.getSparklineTab(),
 			this.getCalcTableTab(),
+			this.getExtensionsTab(),
 			this.getHelpTab()
-		]
+		]);
 	},
 
 	getFullJSON: function (selectedId) {
@@ -370,22 +385,6 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			);
 		}
 
-		if (window.wopiSettingBaseUrl) {
-			content.push({
-				'type': 'separator',
-				'id': 'file-properties-break',
-				'orientation': 'vertical'
-			});
-
-			content.push({
-				'id': 'settings-dialog',
-				'type': 'bigtoolitem',
-				'text': _('Options'),
-				'command': '.uno:Settings',
-				'accessibility': { focusBack: false, combination: 'T', de: null }
-			});
-		}
-
 		return this.getTabPage('File', content);
 	},
 
@@ -445,7 +444,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 									'type': 'toolitem',
 									'text': _UNO('.uno:FormatPaintbrush'),
 									'tooltip': _('Clone Formatting (double click to keep active)'),
-									'activeTooltip': _('Clone Formatting is active (click again or press Esc to exit)'),
+									'activeTooltip': _('Clone Formatting is active (press Enter on a cell to apply, click again or press Esc to exit)'),
 									'command': '.uno:FormatPaintbrush',
 									'doubleClickCommand': '.uno:FormatPaintbrush',
 									'doubleClickCommandArgs': { PersistentCopy: { type: 'boolean', value: true } },
@@ -667,25 +666,18 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 											'accessibility': { focusBack: true,	combination: 'AB', de: null }
 										},
 										{
-											'id': 'home-increment-indent',
-											'type': 'toolitem',
-											'text': _UNO('.uno:IncrementIndent'),
-											'command': '.uno:IncrementIndent',
-											'accessibility': { focusBack: true,	combination: '7', de: null }
-										},
-										{
-											'id': 'home-decrement-indent',
-											'type': 'toolitem',
-											'text': _UNO('.uno:DecrementIndent'),
-											'command': '.uno:DecrementIndent',
-											'accessibility': { focusBack: true,	combination: '8', de: null }
-										},
-										{
 											'id': 'home-para-left-to-right',
 											'type': 'toolitem',
 											'text': _UNO('.uno:ParaLeftToRight'),
 											'command': '.uno:ParaLeftToRight',
 											'accessibility': { focusBack: true,	combination: 'RL', de: null }
+										},
+										{
+											'id': 'home-para-right-to-left',
+											'type': 'toolitem',
+											'text': _UNO('.uno:ParaRightToLeft'),
+											'command': '.uno:ParaRightToLeft',
+											'accessibility': { focusBack: true,	combination: 'RR', de: null }
 										}
 									]
 								}
@@ -729,18 +721,18 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 											'accessibility': { focusBack: true,	combination: 'AO', de: null }
 										},
 										{
-											'id': 'home-wrap-text',
+											'id': 'home-increment-indent',
 											'type': 'toolitem',
-											'text': _UNO('.uno:WrapText', 'spreadsheet'),
-											'command': '.uno:WrapText',
-											'accessibility': { focusBack: true,	combination: 'W', de: null }
+											'text': _UNO('.uno:IncrementIndent'),
+											'command': '.uno:IncrementIndent',
+											'accessibility': { focusBack: true,	combination: '7', de: null }
 										},
 										{
-											'id': 'home-para-right-to-left',
+											'id': 'home-decrement-indent',
 											'type': 'toolitem',
-											'text': _UNO('.uno:ParaRightToLeft'),
-											'command': '.uno:ParaRightToLeft',
-											'accessibility': { focusBack: true,	combination: 'RR', de: null }
+											'text': _UNO('.uno:DecrementIndent'),
+											'command': '.uno:DecrementIndent',
+											'accessibility': { focusBack: true,	combination: '8', de: null }
 										}
 									]
 								}
@@ -750,15 +742,39 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 					],
 					'vertical': 'true'
 				},
+				{ type: 'separator', id: 'home-wrap-merge-break', orientation: 'vertical' },
 				{
-					'id': 'home-merge-cells',
-					'type': 'bigtoolitem',
-					'text': _('Merge & Center'),
-					'command': '.uno:ToggleMergeCells',
-					'accessibility': { focusBack: true, combination: 'MC', de: null }
-				}
-			]
-		},
+					'type': 'container',
+					'children': [
+						{
+							'type': 'toolbox',
+							'children': [
+								{
+									'id': 'home-wrap-text',
+									'type': 'toolitem',
+									'text': _UNO('.uno:WrapText', 'spreadsheet'),
+									'command': '.uno:WrapText',
+									'accessibility': { focusBack: true,	combination: 'W', de: null }
+								}
+							]
+						},
+						{
+							'type': 'toolbox',
+							'children': [
+								{
+									'id': 'home-merge-cells',
+									'type': 'toolitem',
+									'text': _('Merge & Center'),
+									'command': '.uno:ToggleMergeCells',
+									'accessibility': { focusBack: true, combination: 'MC', de: null }
+								}
+							]
+						}
+					],
+					'vertical': 'true'
+					}
+				]
+			},
 			{ type: 'separator', id: 'home-pararighttoleft-break', orientation: 'vertical' },
 			{
 				'type': 'overflowgroup',
@@ -1213,11 +1229,11 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 										'accessibility': { focusBack: true,	combination: 'RB', de: null }
 									},
 									{
-										'id': 'layout-insert-columns-before',
+										'id': 'layout-insert-rows-after',
 										'type': 'toolitem',
-										'text': _('Insert Columns Before'),
-										'command': '.uno:InsertColumnsBefore',
-										'accessibility': { focusBack: true,	combination: 'CB', de: null }
+										'text': _('Insert Rows Below'),
+										'command': '.uno:InsertRowsAfter',
+										'accessibility': { focusBack: true,	combination: 'RA', de: null }
 									},
 									{
 										'id': 'layout-delete-rows',
@@ -1232,11 +1248,11 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 								'type': 'toolbox',
 								'children': [
 									{
-										'id': 'layout-insert-rows-after',
+										'id': 'layout-insert-columns-before',
 										'type': 'toolitem',
-										'text': _('Insert Rows Below'),
-										'command': '.uno:InsertRowsAfter',
-										'accessibility': { focusBack: true,	combination: 'RA', de: null }
+										'text': _('Insert Columns Before'),
+										'command': '.uno:InsertColumnsBefore',
+										'accessibility': { focusBack: true,	combination: 'CB', de: null }
 									},
 									{
 										'id': 'layout-insert-columns-after',
@@ -1634,7 +1650,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'text': _('Invert Background'),
 				'accessibility': { focusBack: true, combination: 'BG', de: null }
 			},
-			{ type: 'separator', id: 'layout-invertbackground-break', orientation: 'vertical' },
+			{ type: 'separator', id: 'view-invertbackground-break', orientation: 'vertical' },
 			{
 				'id': 'view-sidebardeck',
 				'type': 'bigtoolitem',
@@ -1649,16 +1665,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'command': '.uno:Navigator',
 				'accessibility': { focusBack: true,	combination: 'NV', de: null }
 			},
-			!this.map['wopi'].DisableAISettings ? {
-				'id': 'view-ai-sidebar',
-				'type': 'bigcustomtoolitem',
-				'text': _('AI Assistant'),
-				'icon': 'lc_ai_sidebar.svg',
-				'command': 'aichat',
-				'accessibility': { focusBack: true, combination: 'AI', de: null }
-			} : {},
-
-		];
+			];
 
 		return this.getTabPage('View', content);
 	},
@@ -1892,15 +1899,6 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'command': 'remotelink',
 				'accessibility': { focusBack: true,	combination: 'LR', de: null }
 			} : {},
-			(this.map['wopi'].EnableRemoteAIContent) ? {
-				'id': 'insert-insert-remote-ai-content',
-				'class': 'unoremoteaicontent',
-				'type': 'bigcustomtoolitem',
-				'text': _('Assistant'),
-				'command': 'remoteaicontent',
-				'accessibility': { focusBack: true, combination: 'RL', de: null }
-			} : {},
-			{ type: 'separator', id: 'insert-remoteaicontent-break', orientation: 'vertical' },
             {
                 'type': 'container',
                 'children': [
@@ -2034,9 +2032,9 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 							{
 								'id': 'CharmapControl',
 								'class': 'unoCharmapControl',
-								'type': 'customtoolitem',
+								'type': 'toolitem',
 								'text': _UNO('.uno:CharmapControl'),
-								'command': 'charmapcontrol',
+								'command': '.uno:InsertSymbol',
 								'accessibility': { focusBack: true,	combination: 'ZS', de: null }
 							}
 						]
@@ -2046,9 +2044,18 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 						'type': 'toolbox',
 						'children': [
 							{
+								'id': 'insert-insert-threaded-comment',
+								'type': 'customtoolitem',
+								'text': _UNO('.uno:InsertThreadedComment', 'spreadsheet'),
+								'command': 'insertthreadedcomment',
+								'icon': 'lc_insertthreadedcomment.svg',
+								'lockUno': '.uno:InsertAnnotation',
+								'accessibility': { focusBack: true,	combination: 'TC', de: null }
+							},
+							{
 								'id': 'insert-insert-annotation',
 								'type': 'toolitem',
-								'text': _UNO('.uno:InsertAnnotation', 'text'),
+								'text': _UNO('.uno:InsertAnnotation', 'spreadsheet'),
 								'command': '.uno:InsertAnnotation',
 								'accessibility': { focusBack: true,	combination: 'IA', de: null }
 							}
@@ -2325,10 +2332,15 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 				'children' : [
 					{
 						'id': 'data-data-sort',
-						'type': 'bigtoolitem',
+						'type': 'menubutton',
 						'text': _UNO('.uno:DataSort', 'spreadsheet'),
 						'command': '.uno:DataSort',
-						'accessibility': { focusBack: true,	combination: 'SS', de: null }
+						'applyCallback': '.uno:DataSort',
+						'accessibility': { focusBack: true,	combination: 'SS', de: null },
+						'menu': [
+							{ type: 'comboboxentry', id: 'data-sort-custom', text: _UNO('.uno:DataSort', 'spreadsheet'), uno: '.uno:DataSort' },
+							{ type: 'comboboxentry', id: 'data-sort-shuffle', text: _UNO('.uno:Shuffle', 'spreadsheet'), uno: '.uno:Shuffle' },
+						]
 					},
 					{
 						'type': 'container',
@@ -2529,6 +2541,13 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 								'command': '.uno:GoalSeekDialog',
 								'accessibility': { focusBack: true,	combination: 'SG', de: null }
 							},
+							{
+								'id': 'data-solver-dialog',
+								'type': 'toolitem',
+								'text': _UNO('.uno:SolverDialog', 'spreadsheet'),
+								'command': '.uno:SolverDialog',
+								'accessibility': { focusBack: true,	combination: 'SV', de: null }
+							},
 						]
 					},
 					{
@@ -2564,70 +2583,78 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 		// Note: when adding track changes elements, consider this._map['wopi'].HideChangeTrackingControls
 		var content = [
 			{
-				'id': 'review-spell-dialog',
-				'type': 'bigtoolitem',
-				'text': _UNO('.uno:SpellDialog'),
-				'command': '.uno:SpellDialog',
-				'accessibility': { focusBack: true,	combination: 'S', de: null }
-			},
-			{
-				'id': 'LanguageMenu',
-				'type': 'bigcustomtoolitem',
-				'text': _UNO('.uno:LanguageMenu'),
-				'command': 'languagemenu',
-				'accessibility': { focusBack: true,	combination: 'L', de: null }
-			},
-			{
-				'id': 'Review-Section-Language1',
-				'type': 'container',
-				'children': [
+				'type': 'overflowgroup',
+				'id': 'review-proofing',
+				'name': _('Proofing'),
+				'accessibility': { focusBack: true, combination: 'S', de: null },
+				'children' : [
 					{
-						'id': 'LineA19',
-						'type': 'toolbox',
-						'children': [
-							{
-								'id': 'review-spell-online',
-								'type': 'toolitem',
-								'text': _('Auto Spell Check'),
-								'command': '.uno:SpellOnline',
-								'accessibility': { focusBack: true,	combination: 'O', de: null },
-								'stateIcons': {
-									on: 'autospellcheck-on',
-									off: 'autospellcheck-off',
-								}
-							}
-						]
+						'id': 'review-spell-dialog',
+						'type': 'bigtoolitem',
+						'text': _UNO('.uno:SpellDialog'),
+						'command': '.uno:SpellDialog',
+						'accessibility': { focusBack: true,	combination: 'S', de: null }
 					},
 					{
-						'id': 'LineB20',
-						'type': 'toolbox',
+						'id': 'LanguageMenu',
+						'type': 'bigcustomtoolitem',
+						'text': _UNO('.uno:LanguageMenu'),
+						'command': 'languagemenu',
+						'accessibility': { focusBack: true,	combination: 'L', de: null }
+					},
+					{
+						'id': 'Review-Section-Language1',
+						'type': 'container',
 						'children': [
 							{
-								'id': 'review-hyphenate',
-								'type': 'toolitem',
-								'text': _UNO('.uno:Hyphenate', 'spreadsheet'),
-								'command': '.uno:Hyphenate',
-								'accessibility': { focusBack: true,	combination: 'H', de: null }
+								'id': 'LineA19',
+								'type': 'toolbox',
+								'children': [
+									{
+										'id': 'review-spell-online',
+										'type': 'toolitem',
+										'text': _('Auto Spell Check'),
+										'command': '.uno:SpellOnline',
+										'accessibility': { focusBack: true,	combination: 'O', de: null },
+										'stateIcons': {
+											on: 'autospellcheck-on',
+											off: 'autospellcheck-off',
+										}
+									}
+								]
+							},
+							{
+								'id': 'LineB20',
+								'type': 'toolbox',
+								'children': [
+									{
+										'id': 'review-hyphenate',
+										'type': 'toolitem',
+										'text': _UNO('.uno:Hyphenate', 'spreadsheet'),
+										'command': '.uno:Hyphenate',
+										'accessibility': { focusBack: true,	combination: 'H', de: null }
+									}
+								]
 							}
-						]
-					}
-				],
-				'vertical': 'true'
+						],
+						'vertical': 'true'
+					},
+				]
 			},
 			{ type: 'separator', id: 'review-hyphenate-break', orientation: 'vertical' },
 			{
 				'type': 'overflowgroup',
 				'id': 'review-comments',
-				'name':_('Comments'),
+				'name': _('Comments'),
 				'accessibility': { focusBack: true,	combination: 'IA', de: null },
 				'children' : [
 					{
-						'id': 'review-insert-annotation:AnnotationMenu',
+						'id': 'review-insert-threaded-comment:CalcAnnotationMenu',
 						'type': 'menubutton',
-						'text': _UNO('.uno:InsertAnnotation'),
-						'applyCallback': 'insertcomment',
-						'command': '.uno:InsertAnnotation',
-						'accessibility': { focusBack: true,	combination: 'IA', de: null }
+						'text': _UNO('.uno:InsertThreadedComment', 'spreadsheet'),
+						'applyCallback': 'insertthreadedcomment',
+						'command': '.uno:InsertThreadedComment',
+						'accessibility': { focusBack: true,	combination: 'TC', de: null }
 					},
 					{
 						'id': 'Review-Section-Annotation2',
@@ -2666,15 +2693,23 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 			},
 			{ type: 'separator', id: 'review-deletenote-break', orientation: 'vertical' },
 			{
-				'type': 'toolbox',
-				'children': [
+				'type': 'overflowgroup',
+				'id': 'review-protect',
+				'nofold': true,
+				'name': _('Protection'),
+				'children' : [
 					{
-						'id': 'review-protect-sheet',
-						'type': 'bigtoolitem',
-						'text': _UNO('.uno:Protect', 'spreadsheet'),
-						'command': '.uno:Protect',
-						'accessibility': { focusBack: true,	combination: 'DP', de: null }
-					}
+						'type': 'toolbox',
+						'children': [
+							{
+								'id': 'review-protect-sheet',
+								'type': 'bigtoolitem',
+								'text': _UNO('.uno:Protect', 'spreadsheet'),
+								'command': '.uno:Protect',
+								'accessibility': { focusBack: true,	combination: 'DP', de: null }
+							}
+						]
+					},
 				]
 			},
 		];
@@ -2791,6 +2826,7 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 					{
 						'id': 'iconview_theme_colors-iconview-list',
 						'type': 'iconviewlist',
+						'accessibility': { focusBack: false, combination: 'TC', de: null },
 						'children': [
 							{
 								'id': 'iconview_theme_colors', // has to match core id
@@ -3084,7 +3120,16 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 						'type': 'bigtoolitem',
 						'text': _UNO('.uno:FormatGroup'),
 						'command': '.uno:FormatGroup',
+						'hideWhenEnabled': '.uno:FormatUngroup',
 						'accessibility': { focusBack: true,	combination: 'FG', de: null }
+					},
+					{
+						'id': 'shape-format-ungroup',
+						'type': 'bigtoolitem',
+						'text': _UNO('.uno:FormatUngroup'),
+						'command': '.uno:FormatUngroup',
+						'hideWhenDisabled': true,
+						'accessibility': { focusBack: true,	combination: 'UG', de: null }
 					},
 					{
 						'type': 'container',
@@ -3441,7 +3486,16 @@ window.L.Control.NotebookbarCalc = window.L.Control.NotebookbarWriter.extend({
 						'type': 'bigtoolitem',
 						'text': _UNO('.uno:FormatGroup'),
 						'command': '.uno:FormatGroup',
+						'hideWhenEnabled': '.uno:FormatUngroup',
 						'accessibility': { focusBack: true,	combination: 'FG', de: null }
+					},
+					{
+						'id': 'picture-format-ungroup',
+						'type': 'bigtoolitem',
+						'text': _UNO('.uno:FormatUngroup'),
+						'command': '.uno:FormatUngroup',
+						'hideWhenDisabled': true,
+						'accessibility': { focusBack: true,	combination: 'UG', de: null }
 					},
 					{
 						'type': 'container',

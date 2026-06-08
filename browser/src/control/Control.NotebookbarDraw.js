@@ -51,7 +51,7 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 	},
 
 	getTabs: function() {
-		return [
+		return this._filterExtensionsTab([
 			{
 				'id': 'File-tab-label',
 				'text': _('File'),
@@ -111,10 +111,23 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 				'accessibility': { focusBack: true, combination: 'G', de: null }
 			},
 			{
+				'id': 'Chart-tab-label',
+				'text': _('Chart'),
+				'name': 'Chart',
+				'context': 'Chart|Series|ErrorBar|Axis|Grid|ChartElements|Trendline|ChartTitle|ChartLegend|ChartLabel',
+				'accessibility': { focusBack: true, combination: 'CH', de: null }
+			},
+			{
 				'id': 'View-tab-label',
 				'text': _('View'),
 				'name': 'View',
 				'accessibility': { focusBack: true, combination: 'V', de: null }
+			},
+			{
+				'id': 'Extensions-tab-label',
+				'text': _('Extensions'),
+				'name': 'Extensions',
+				'accessibility': { focusBack: true, combination: 'X' }
 			},
 			{
 				'id': 'Help-tab-label',
@@ -122,11 +135,11 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 				'name': 'Help',
 				'accessibility': { focusBack: true, combination: 'Y', de: null }
 			}
-		];
+		]);
 	},
 
 	getTabsJSON: function () {
-		return [
+		return this._filterExtensionsTab([
 			this.getFileTab(),
 			this.getHomeTab(),
 			this.getInsertTab(),
@@ -136,9 +149,11 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 			this.getTableTab(),
 			this.getShapeTab(),
 			this.getPictureTab(),
+			this.getChartTab(),
 			this.getViewTab(),
+			this.getExtensionsTab(),
 			this.getHelpTab()
-		];
+		]);
 	},
 
 	getFullJSON: function(selectedId) {
@@ -391,22 +406,6 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 				}
 			);
 
-		}
-
-		if (window.wopiSettingBaseUrl) {
-			content.push({
-				'type': 'separator',
-				'id': 'file-properties-break',
-				'orientation': 'vertical'
-			});
-
-			content.push({
-				'id': 'settings-dialog',
-				'type': 'bigtoolitem',
-				'text': _('Options'),
-				'command': '.uno:Settings',
-				'accessibility': { focusBack: false, combination: 'T', de: null }
-			});
 		}
 
 		return this.getTabPage('File', content);
@@ -1590,14 +1589,6 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 						'command': 'remotelink',
 						'accessibility': { focusBack: true, combination: 'RL', de: null }
 					} : {},
-					(this.map['wopi'].EnableRemoteAIContent) ? {
-						'id': 'insert-insert-remote-ai-content',
-						'class': 'unoremoteaicontent',
-						'type': 'bigcustomtoolitem',
-						'text': _('Assistant'),
-						'command': 'remoteaicontent',
-						'accessibility': { focusBack: true, combination: 'RL', de: null }
-					} : {},
 					{
 						'type': 'container',
 						'children': [
@@ -1723,9 +1714,9 @@ window.L.Control.NotebookbarDraw = window.L.Control.NotebookbarImpress.extend({
 							{
 								'id': 'CharmapControl',
 								'class': 'unoCharmapControl',
-								'type': 'customtoolitem',
+								'type': 'toolitem',
 								'text': _UNO('.uno:CharmapControl'),
-								'command': 'charmapcontrol',
+								'command': '.uno:InsertSymbol',
 								'accessibility': { focusBack: true, combination: 'CM', de: null }
 							}
 						]

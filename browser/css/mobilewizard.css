@@ -230,16 +230,9 @@ p.mobile-wizard.ui-combobox-text.selected {
 }
 .ui-tabs-content > div[title='Layouts'] {
 	justify-content: center;
-	-ms-box-orient: horizontal !important;
-	display: -webkit-box;
-	display: -moz-box;
-	display: -ms-flexbox;
-	display: -moz-flex;
-	display: -webkit-flex;
 	display: flex;
 	align-self: center !important;
 	align-items: center !important;
-	-webkit-flex-wrap: wrap !important;
 	flex-wrap: wrap !important;
 	margin-top: 25px;
 }
@@ -324,11 +317,9 @@ p.mobile-wizard.ui-combobox-text.selected {
 	width: 42px;
 	padding: 1px;
 	background-color: #eeeeee;
-	-webkit-box-shadow: inset 0px 0px 0px 2px #fff;
 	box-shadow: inset 0px 0px 0px 2px #fff;
 }
 #mobile-wizard-content > #ScCellAppearancePropertyPanel + .ui-content.level-0.mobile-wizard .borderbutton.selected {
-	-webkit-box-shadow: inset 0px 0px 0px 2px #0867af !important;
 	box-shadow: inset 0px 0px 0px 2px #0867af !important;
 }
 .ui-header.mobile-wizard {
@@ -346,7 +337,7 @@ p.mobile-wizard.ui-combobox-text.selected {
 }
 
 .ui-explorable-entry.mobile-wizard.disabled .ui-header .ui-header-left * {
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 }
 
 .ui-header.mobile-wizard:active, .mobile-wizard.ui-combobox-text:active, .ui-header.mobile-wizard:focus, .mobile-wizard.ui-combobox-text:focus, .ui-header.mobile-wizard:hover, .mobile-wizard.ui-combobox-text:hover {
@@ -383,7 +374,6 @@ p.mobile-wizard.ui-combobox-text.selected {
 }
 
 .unotoolbutton.disabled img, .mobile-wizard-widebutton.disabled img {
-	-webkit-filter: grayscale(90%) brightness(120%);
 	filter: grayscale(90%) brightness(120%);
 	opacity: 0.75;
 }
@@ -409,10 +399,6 @@ p.mobile-wizard.ui-combobox-text.selected {
 	padding-left: 4%;
 }
 .sub-menu-arrow {
-	-webkit-transform: rotate(180deg);
-	-moz-transform: rotate(180deg);
-	-ms-transform: rotate(180deg);
-	-o-transform: rotate(180deg);
 	transform: rotate(180deg);
 	display: table-cell;
 	padding-left: 10px;
@@ -487,7 +473,7 @@ p.mobile-wizard.ui-combobox-text.selected {
 	margin: 0px 5%;
 	border-radius: 10px;
 	border: none;
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 }
 
 .ui-tab.selected.mobile-wizard {
@@ -558,17 +544,17 @@ p.mobile-wizard.ui-combobox-text.selected {
 }
 .mobile-wizard input.spinfield:disabled {
 	background: linear-gradient(to right, var(--color-background-lighter) 0%, var(--color-background-dark) 15%, var(--color-background-dark) 40%, var(--color-background-lighter) 100%);
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 	border-radius: var(--border-radius);
 	height: 48px !important;
 }
 
 input.spinfield:disabled + .spinfieldunit {
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 }
 
 input.spinfield:disabled ~ .spinfieldcontrols * {
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 	border-color: var(--color-border-lighter) !important;
 	background-color: var(--color-background-lighter);
 }
@@ -582,7 +568,7 @@ input.spinfield:disabled ~ .spinfieldcontrols *:active, input.spinfield:disabled
 
 input.ui-edit.mobile-wizard {
 	background-color: var(--color-background-lighter);
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	border: 1px solid var(--color-border-dark);
 	border-radius: var(--border-radius);
 	height: 32px;
@@ -626,7 +612,7 @@ a.leaflet-control-zoom-in {
 	padding: 8px !important;
 	background-color: var(--color-primary) !important;
 	color: var(--color-primary-text) !important;
-	box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2), 0 4px 6px 0 rgba(0, 0, 0, 0.19) !important;
+	box-shadow: 0 2px 4px 0 var(--color-black-20), 0 4px 6px 0 rgba(0, 0, 0, 0.19) !important;
 	border: none !important;
 }
 #slide-sorter .preview-img {
@@ -745,7 +731,7 @@ a.leaflet-control-zoom-in {
 
 #mobile-wizard [id^='info-modal-label'].mobile-wizard.ui-text:first-child {
 	font-size: 1em;
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 }
 
 #mobile-wizard [id^='mobile-wizard-content-modal-dialog-'] {
@@ -759,14 +745,12 @@ div#mobile-wizard-content input[type='number'] {
 	width: 37%;
 	padding-left: 8%;
 	border: none;
-	-moz-appearance: textfield;
-	-webkit-appearance: textfield;
+	appearance: textfield;
 	background-color: var(--color-background-dark);
 }
 div#mobile-wizard-content .spinfieldcontainer {
 	height: 48px;
-	width: -moz-available;
-	width: -webkit-fill-available;
+	width: stretch;
 	margin: 0px 4% 8px !important;
 	border: 1px solid var(--color-border-dark);
 	background-color: var(--color-background-dark);
@@ -786,8 +770,6 @@ div#mobile-wizard-content .spinfieldcontainer .spinfieldimage.disabled {
 }
 #mobile-wizard #Bold, #mobile-wizard #Italic, #mobile-wizard #Underline, #mobile-wizard #Strikeout {
 	margin: 0;
-	-webkit-appearance: none;
-	-moz-appearance: none;
 	appearance: none;
 	padding: 24px 32px;
 	background-size: 24px !important;
@@ -795,8 +777,6 @@ div#mobile-wizard-content .spinfieldcontainer .spinfieldimage.disabled {
 #mobile-wizard #buttonbefore, #mobile-wizard #buttonafter, #mobile-wizard #buttonoptimal,
 #mobile-wizard #buttonparallel, #mobile-wizard #buttonnone, #mobile-wizard #buttonthrough,
 #mobile-wizard #bottom, #mobile-wizard #top, #mobile-wizard #standard {
-	-webkit-appearance: none;
-	-moz-appearance: none;
 	appearance: none;
 	padding: 4% !important;
 	margin: 0px !important;
@@ -851,9 +831,6 @@ div#mobile-wizard-content .spinfieldcontainer .spinfieldimage.disabled {
 	height: var(--btn-size);
 	margin: 10px 10px 10px auto !important;
 	float: right;
-	-webkit-appearance: none;
-	-moz-appearance: none;
-	-o-appearance: none;
 	appearance: none;
 	border-radius: var(--border-radius);
 	border: 2px solid var(--color-border);
@@ -886,9 +863,6 @@ div#mobile-wizard-content .spinfieldcontainer .spinfieldimage.disabled {
 	width: var(--btn-size);
 	height: var(--btn-size);
 	margin: 10px 10px 10px auto !important;
-	-webkit-appearance: none;
-	-moz-appearance: none;
-	-o-appearance: none;
 	appearance: none;
 	border: 2px solid var(--color-border);
 	outline: none;
@@ -965,12 +939,12 @@ input[type='checkbox']#UseBandingColumnStyle, input[type='checkbox']#UseLastColu
 #mobile-wizard button:disabled {
 	background-color: var(--color-background-lighter);
 	border-color: var(--color-background-lighter);
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 }
 #mobile-wizard button#cancel {
 	background-color: transparent;
 	border-color: var(--color-border-lighter);
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 }
 #enablecontour + button {
 	float: right;
@@ -979,7 +953,7 @@ input[type='checkbox']#UseBandingColumnStyle, input[type='checkbox']#UseLastColu
 div#enablecontour + label, #arrangelabel, #SetMinimalRowHeight {clear: both;}
 
 label[disabled] {
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 }
 
 .ui-checkbox.mobile-wizard {
@@ -994,19 +968,13 @@ label[disabled] {
 }
 
 .combobox {
-	width: -moz-available !important;
-	width: -webkit-fill-available !important;
+	width: stretch !important;
 }
 
 .ui-edit.mobile-wizard,
 .ui-textarea.mobile-wizard,
 #mobile-wizard-content .cool-annotation-table {
-	/*
-	, textarea was also here assign but it was messing up with all textareas (annotations on desktop and mobile):
-	- added 93038: jsdialog: style dialogs; a5016d547c6242f6f9b28748b5724b0bc10cdb67
-	*/
-	width: -moz-available;
-	width: -webkit-fill-available;
+	width: stretch;
 	margin: 10px 5% !important;
 }
 
@@ -1050,14 +1018,13 @@ label[disabled] {
 	padding: 5px 10px 10px !important;
 	display: table !important;
 	width: 100% !important;
-	width: -webkit-fill-available !important;
-	width: -moz-available !important;
+	width: stretch !important;
 }
 
 #mobile-wizard .ui-header[id^='comment'] {
 	padding: 5px 10px 10px !important;
 	display: table;
-	width: -moz-available !important;
+	width: stretch !important;
 	box-sizing: border-box !important;
 }
 
@@ -1068,7 +1035,7 @@ label[disabled] {
 }
 
 #mobile-wizard .cool-annotation-author * {
-	color: var(--color-text-lighter) !important;
+	color: var(--color-text-light) !important;
 	font-size: var(--default-font-size);
 }
 
@@ -1132,7 +1099,7 @@ label[disabled] {
 	flex: 1;
 	font-size: xx-large;
 	text-align: center;
-	color: var(--color-text-lighter);
+	color: var(--color-text-light);
 	padding-bottom: 32px;
 }
 

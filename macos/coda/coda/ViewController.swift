@@ -49,6 +49,17 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
 
     var consoleController: ConsoleController!
 
+    /// Whether UI testing mode is active.
+    private lazy var isUITesting: Bool = {
+        ProcessInfo.processInfo.arguments.contains("--uitesting")
+    }()
+
+    /// Offscreen text view that accumulates all "lok" messages for XCUITest assertions.
+    private var testMessageLog: NSTextView?
+
+    /// Handle this document webview is registered under in WebDriverManager.
+    private var webDriverHandle: String?
+
     var savedViewFrame: NSRect!
     var savedConsoleViewFrame: NSRect!
 
@@ -89,6 +100,8 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
         // Add it to the view controller's view
         self.view.addSubview(webView)
 
+        webView.setAccessibilityIdentifier("CODA.DocumentWebView")
+
         webView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             webView.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
@@ -96,6 +109,26 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
             webView.topAnchor.constraint(equalTo: self.view.topAnchor),
             webView.bottomAnchor.constraint(equalTo: self.view.bottomAnchor)
         ])
+
+        if isUITesting {
+            let scrollView = NSScrollView(frame: NSRect(x: -10000, y: 0, width: 100, height: 100))
+            let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+            textView.isEditable = false
+            textView.setAccessibilityIdentifier("CODA.TestMessageLog")
+            scrollView.documentView = textView
+            self.view.addSubview(scrollView)
+            testMessageLog = textView
+        }
+
+        // Register this webview with the WebDriver manager (no-op when
+        // the WebDriver server is not running).
+        webDriverHandle = WebDriverManager.shared.register(webView: webView)
+    }
+
+    deinit {
+        if let h = webDriverHandle {
+            WebDriverManager.shared.unregister(handle: h)
+        }
     }
 
     /**
@@ -154,16 +187,19 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
                 switch body {
 
                 case "read":
-                    COWrapper.setClipboard(document, from: .general)
+                    // If we still own the pasteboard from our own copy, leave the
+                    // engine's in-memory clipboard untouched so the paste uses it
+                    // directly (full fidelity, no round-trip).
+                    if !COWrapper.pasteboardOwned(by: document) {
+                        COWrapper.setClipboard(document, from: .general)
+                    }
                     return ("(internal)", nil);
 
                 case "write":
-                    guard let content = COWrapper.getClipboard(document) else {
+                    if !COWrapper.writeClipboard(for: document) {
                         COWrapper.LOG_ERR("Failed to get clipboard contents")
                         return (nil, nil)
                     }
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.writeObjects(content)
 
                 case let s where s.hasPrefix("sendToInternal "):
                     if !COWrapper.sendToInternalClipboard(document, content: String(s.dropFirst("sendToInternal ".count))) {
@@ -179,6 +215,10 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
         case "lok":
             if let body = message.body as? String {
                 COWrapper.LOG_DBG("To Online: '\(message.body)'")
+
+                if isUITesting, let log = testMessageLog {
+                    log.string += body + "\n"
+                }
 
                 if body == "HULLO" {
                     // Now we know that the JS has started completely
@@ -314,6 +354,10 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
                     // TODO implement
                     return (nil, nil)
                 }
+                else if body.hasPrefix("SETDARKMODE ") {
+                    COWrapper.setDarkMode(body == "SETDARKMODE true")
+                    return (nil, nil)
+                }
                 else if body.hasPrefix("downloadas ") {
                     let messageBodyItems = body.components(separatedBy: " ")
                     var format: String?
@@ -382,6 +426,43 @@ class ViewController: NSViewController, WKScriptMessageHandlerWithReply, WKNavig
                 else if body == "uno .uno:SaveAs" {
                     // Trigger the NSDocument Save As… panel
                     document.saveAs(nil)
+                    return (nil, nil)
+                }
+                else if body.hasPrefix("exportfile ") {
+                    // The kit's KIT_CALLBACK_EXPORT_FILE branch sends this for
+                    // export flows like .uno:ExportToPDF (PDF with options).
+                    // The file has already been written to a tmp URL; show a
+                    // native NSSavePanel and copy it to the user's choice.
+                    var fileUrlString: String?
+                    for item in body.dropFirst("exportfile ".count).components(separatedBy: " ") {
+                        if item.hasPrefix("url=") {
+                            fileUrlString = String(item.dropFirst("url=".count))
+                        }
+                    }
+                    guard let urlString = fileUrlString,
+                          let srcURL = URL(string: urlString),
+                          FileManager.default.fileExists(atPath: srcURL.path) else {
+                        COWrapper.LOG_ERR("exportfile: source file missing: \(fileUrlString ?? "(no url)")")
+                        return (nil, nil)
+                    }
+
+                    let suggestedName = srcURL.lastPathComponent
+                    let savePanel = NSSavePanel()
+                    savePanel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+                    savePanel.nameFieldStringValue = suggestedName
+                    savePanel.begin { result in
+                        if result == .OK, let dstURL = savePanel.url {
+                            do {
+                                if FileManager.default.fileExists(atPath: dstURL.path) {
+                                    try FileManager.default.removeItem(at: dstURL)
+                                }
+                                try FileManager.default.copyItem(at: srcURL, to: dstURL)
+                            } catch {
+                                COWrapper.LOG_ERR("exportfile: copy failed: \(error)")
+                            }
+                        }
+                        try? FileManager.default.removeItem(at: srcURL)
+                    }
                     return (nil, nil)
                 }
                 else if body.hasPrefix("TEXTCLIPBOARD ") {

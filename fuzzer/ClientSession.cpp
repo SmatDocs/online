@@ -23,10 +23,11 @@
 
 bool DoInitialization()
 {
-    COOLWSD::ChildRoot = "/fuzz/child-root";
+    COOLWSD::ChildRoot = "/tmp/clientsession-fuzzer/child-root";
     UnitBase::init(UnitBase::UnitType::Wsd, std::string());
 
     fuzzer::DoInitialization();
+    Admin::initialize();
     return true;
 }
 

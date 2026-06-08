@@ -15,6 +15,7 @@
 
 #include <config.h>
 
+#include <common/Log.hpp>
 #include <common/Unit.hpp>
 #include <net/HttpRequest.hpp>
 #include <net/Socket.hpp>
@@ -49,7 +50,7 @@ class UnitTimeoutBase0 : public UnitWSD
 {
 public:
     bool assertMessage(http::WebSocketSession& session, const std::string_view expectedPrefix,
-                       const std::string_view expectedId)
+                       const std::string_view expectedId, LOG_CAPTURE_CALLER_DECLARATION)
     {
         std::vector<char> res = session.poll(
             [&](const std::vector<char>& message) -> bool
@@ -126,7 +127,8 @@ public:
         return UnitBase::socketPoll();
     }
 
-    void assertHttpResponse(const http::Session& session, const http::Response& response)
+    void assertHttpResponse(const http::Session& session, const http::Response& response,
+                            LOG_CAPTURE_CALLER_DECLARATION)
     {
         if (session.isConnected())
         {
@@ -156,7 +158,7 @@ public:
                                   std::vector<std::shared_ptr<TerminatingPoll>>& socketPollers,
                                   size_t maxConnections, size_t connectionsCount,
                                   size_t connectionLimit, bool useOwnPoller,
-                                  bool pollerOnClientThread)
+                                  bool pollerOnClientThread, LOG_CAPTURE_CALLER_DECLARATION)
     {
         size_t connected = 0;
         for (size_t sockIdx = 0; sockIdx < connectionsCount; ++sockIdx)
@@ -184,7 +186,8 @@ public:
         }
         TST_LOG("Test: Connected: " << connected << " / " << connectionsCount << ", limit "
                                     << connectionLimit);
-        LOK_ASSERT(maxConnections - 1 <= connected && connected <= maxConnections + 1);
+        LOK_ASSERT_MESSAGE("connected: " << connected << ", maxConnections: " << maxConnections,
+                           maxConnections - 1 <= connected && connected <= maxConnections + 1);
 
         TST_LOG("Clearing Sessions: " << testname);
         sessions.clear();
@@ -388,6 +391,7 @@ UnitBase::TestResult UnitTimeoutBase1::testWSDChatPing()
             // LOK_ASSERT_EQUAL(false, session->isConnected());
         }
     }
+
     for (size_t sockIdx = 0; sockIdx < _connectionCount; ++sockIdx)
     {
         const std::shared_ptr<http::WebSocketSession>& wsSession = sessions[sockIdx];
@@ -435,12 +439,10 @@ class UnitTimeoutInactivity : public UnitTimeoutBase0
 
     void configure(Poco::Util::LayeredConfiguration& /* config */) override
     {
-        // net::Defaults.inactivityTimeout = 3600s;
+        // Set every net::Defaults field this suite cares about: tests share global state,
+        // so each test must establish the values it needs rather than inherit them.
         net::Defaults.inactivityTimeout = 360ms;
-        //
-        // The following WSPing setup would cause ping/pong packages avoiding the inactivity TO
-        //   net::Defaults.wsPingAvgTimeout = std::chrono::microseconds(25);
-        //   net::Defaults.wsPingInterval = 30ms;
+        net::Defaults.maxExtConnections = net::DefaultMaxExtConnections;
     }
 
 public:
@@ -626,7 +628,9 @@ class UnitTimeoutConnections : public UnitTimeoutBase1
 {
     void configure(Poco::Util::LayeredConfiguration& /* config */) override
     {
-        net::Defaults.inactivityTimeout = 3600s;
+        // Set every net::Defaults field this suite cares about: tests share global state,
+        // so each test must establish the values it needs rather than inherit them.
+        net::Defaults.inactivityTimeout = net::DefaultInactivityTimeout;
         net::Defaults.maxExtConnections = connectionLimit();
     }
 
@@ -642,7 +646,10 @@ class UnitTimeoutNone : public UnitTimeoutBase1
 {
     void configure(Poco::Util::LayeredConfiguration& /* config */) override
     {
-        // Keep original values -> No timeout
+        // Set every net::Defaults field this suite cares about: tests share global state,
+        // so each test must establish the values it needs rather than inherit them.
+        net::Defaults.inactivityTimeout = net::DefaultInactivityTimeout;
+        net::Defaults.maxExtConnections = net::DefaultMaxExtConnections;
     }
 
 public:

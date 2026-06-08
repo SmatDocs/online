@@ -148,7 +148,7 @@ m4_ifelse(MOBILEAPP,[true],
           <div id="followingChipBackground">
             <div id="followingChip"></div>
           </div>
-          <div id="userListSummaryBackground"><button id="userListSummary"></button></div>
+          <div id="userListSummaryBackground"><button id="userListSummaryButton"></button></div>
         </div>
         <div id="viewMode">
         </div>
@@ -238,11 +238,9 @@ m4_ifelse(MOBILEAPP,[true],
         <div id="about-dialog-container">
           <div id="about-dialog-logos">
             <fig id="product-logo"></fig>
-            <fig id="lokit-logo"></fig>
           </div>
           <div id="about-dialog-info-container">
             <div id="about-dialog-info">
-              <div id="lokit-version" dir="ltr"></div>
             </div>
           </div>
         </div>
@@ -261,6 +259,8 @@ m4_ifelse(MOBILEAPP, [true],
         ]
       )
       data-mobile-app-name='MOBILEAPPNAME'
+      data-copyright-year='_YEAR_'
+      data-vendor='VENDOR'
       />
       ],
      [
@@ -302,7 +302,7 @@ m4_ifelse(MOBILEAPP, [true],
       data-ui-defaults = "%UI_DEFAULTS%"
       data-use-integration-theme = "%USE_INTEGRATION_THEME%"
       data-user-interface-mode = "%USER_INTERFACE_MODE%"
-      data-vendor = VENDOR
+      data-vendor = "VENDOR"
       data-version-path = "%VERSION%"
       data-wasm-enabled = "%WASM_ENABLED%"
       data-wopi-host-id = "%WOPI_HOST_ID%"

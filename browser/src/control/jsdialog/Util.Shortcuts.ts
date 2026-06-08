@@ -11,92 +11,67 @@
 
 /*
  * Shortcuts for the classic toolbar & the Notebookbar.
+ *
+ * UNO command shortcuts are generated from core's Accelerators.xcu by
+ * scripts/unoshortcuts.py into browser/src/unoshortcuts.js.
  */
 
 declare var JSDialog: any;
 
+// Non-UNO IDs that share a shortcut with a UNO (or findbar protocol)
+// command.  Routing them through the locale-aware shortcut table keeps
+// tooltips in sync with what the user actually has to press.
+const UNO_ALIASES: Record<string, string> = {
+	save: '.uno:Save',
+	print: '.uno:Print',
+	insertcomment: '.uno:InsertAnnotation',
+	hyperlinkdialog: '.uno:HyperlinkDialog',
+	inserthyperlink: '.uno:HyperlinkDialog',
+	search: 'vnd.sun.star.findbar:FocusToFindbar',
+	'home-search': 'vnd.sun.star.findbar:FocusToFindbar',
+};
+
+// Non-UNO IDs with explicit shortcuts not from Accelerators.xcu.
+const EXPLICIT_ALIASES: Record<string, string> = {
+	'keyboard-shortcuts': 'Ctrl+Shift+?',
+};
+
 class ShortcutsUtil {
 	private shortcutMap: Map<string, string> = new Map();
 
-	// Available Shortcuts
-	public SAVE = 'Ctrl+S';
-	public UNDO = 'Ctrl+Z';
-	public REDO = 'Ctrl+Y';
-	public PRINT = 'Ctrl+P';
-	public CUT = 'Ctrl+X';
-	public COPY = 'Ctrl+C';
-	public PASTE = 'Ctrl+V';
-	public PASTE_SPECIAL = 'Ctrl+Shift+Alt+V';
-	public SELECT_ALL = 'Ctrl+A';
-	public COMMENT = 'Ctrl+Alt+C';
-	public FOOTNOTE = 'Ctrl+Alt+F';
-	public ENDNOTE = 'Ctrl+Alt+D';
-	public BOLD = 'Ctrl+B';
-	public ITALIC = 'Ctrl+I';
-	public UNDERLINE = 'Ctrl+U';
-	public DOUBLE_UNDERLINE = 'Ctrl+D';
-	public STRIKETHROUGH = 'Ctrl+Alt+5';
-	public SUPERSCRIPT = 'Ctrl+Shift+P';
-	public SUBSCRIPT = 'Ctrl+Shift+B';
-	public LEFT = 'Ctrl+L';
-	public CENTERED = 'Ctrl+E';
-	public RIGHT = 'Ctrl+R';
-	public JUSTIFIED = 'Ctrl+J';
-	public KEYBOARD_SHORTCUTS = 'Ctrl+Shift+?';
-	public HYPERLINK = 'Ctrl+K';
-	public CLEAR_FORMATTING = 'Ctrl+M';
-	public INSERT_TABLE = 'Ctrl+F12';
-	public INSERT_PAGEBREAK = 'Ctrl+Return';
-	public FIND = 'Ctrl+F';
-	public FIND_REPLACE = 'Ctrl+H';
-	public FORMAT_CELL = 'Ctrl+1';
-
 	constructor() {
-		this.shortcutMap.set('.uno:Save', this.SAVE);
-		this.shortcutMap.set('save', this.SAVE);
-		this.shortcutMap.set('.uno:Undo', this.UNDO);
-		this.shortcutMap.set('.uno:Redo', this.REDO);
-		this.shortcutMap.set('.uno:Print', this.PRINT);
-		this.shortcutMap.set('print', this.PRINT);
-		this.shortcutMap.set('.uno:Cut', this.CUT);
-		this.shortcutMap.set('.uno:Copy', this.COPY);
-		this.shortcutMap.set('.uno:Paste', this.PASTE);
-		this.shortcutMap.set('.uno:PasteSpecial', this.PASTE_SPECIAL);
-		this.shortcutMap.set('.uno:SelectAll', this.SELECT_ALL);
-		this.shortcutMap.set('.uno:InsertAnnotation', this.COMMENT);
-		this.shortcutMap.set('insertcomment', this.COMMENT);
-		this.shortcutMap.set('.uno:InsertFootnote', this.FOOTNOTE);
-		this.shortcutMap.set('.uno:InsertEndnote', this.ENDNOTE);
-		this.shortcutMap.set('.uno:Bold', this.BOLD);
-		this.shortcutMap.set('.uno:Italic', this.ITALIC);
-		this.shortcutMap.set('.uno:Underline', this.UNDERLINE);
-		this.shortcutMap.set('.uno:UnderlineDouble', this.DOUBLE_UNDERLINE);
-		this.shortcutMap.set('.uno:Strikeout', this.STRIKETHROUGH);
-		this.shortcutMap.set('.uno:SuperScript', this.SUPERSCRIPT);
-		this.shortcutMap.set('.uno:SubScript', this.SUBSCRIPT);
-		this.shortcutMap.set('.uno:LeftPara', this.LEFT);
-		this.shortcutMap.set('.uno:AlignLeft', this.LEFT);
-		this.shortcutMap.set('.uno:CommonAlignLeft', this.LEFT);
-		this.shortcutMap.set('.uno:AlignHorizontalCenter', this.CENTERED);
-		this.shortcutMap.set('.uno:CenterPara', this.CENTERED);
-		this.shortcutMap.set('.uno:CommonAlignHorizontalCenter', this.CENTERED);
-		this.shortcutMap.set('.uno:AlignRight', this.RIGHT);
-		this.shortcutMap.set('.uno:RightPara', this.RIGHT);
-		this.shortcutMap.set('.uno:CommonAlignRight', this.RIGHT);
-		this.shortcutMap.set('.uno:AlignBlock', this.JUSTIFIED);
-		this.shortcutMap.set('.uno:JustifyPara', this.JUSTIFIED);
-		this.shortcutMap.set('.uno:CommonAlignJustified', this.JUSTIFIED);
-		this.shortcutMap.set('.uno:KeyboardShortcuts', this.KEYBOARD_SHORTCUTS);
-		this.shortcutMap.set('keyboard-shortcuts', this.KEYBOARD_SHORTCUTS);
-		this.shortcutMap.set('hyperlinkdialog', this.HYPERLINK);
-		this.shortcutMap.set('inserthyperlink', this.HYPERLINK);
-		this.shortcutMap.set('.uno:ResetAttributes', this.CLEAR_FORMATTING);
-		this.shortcutMap.set('.uno:InsertTable', this.INSERT_TABLE);
-		this.shortcutMap.set('.uno:InsertPagebreak', this.INSERT_PAGEBREAK);
-		this.shortcutMap.set('search', this.FIND);
-		this.shortcutMap.set('home-search', this.FIND);
-		this.shortcutMap.set('.uno:SearchDialog', this.FIND_REPLACE);
-		this.shortcutMap.set('.uno:FormatCellDialog', this.FORMAT_CELL);
+		// Load shortcuts generated from core's Accelerators.xcu.
+		if (typeof unoShortcutsMap !== 'undefined') {
+			for (const [command, shortcut] of Object.entries(unoShortcutsMap)) {
+				this.shortcutMap.set(command, shortcut);
+			}
+		}
+
+		// Apply per-language shortcut overrides from Accelerators.xcu.
+		// Core defines different key combos per language
+		if (typeof unoShortcutsL10N !== 'undefined') {
+			for (const [lang, overrides] of Object.entries(unoShortcutsL10N)) {
+				if ((String as any).locale.startsWith(lang)) {
+					for (const [command, shortcut] of Object.entries(overrides)) {
+						this.shortcutMap.set(command, shortcut);
+					}
+					break;
+				}
+			}
+		}
+
+		// Aliases: non-UNO IDs that resolve to a UNO command's shortcut.
+		for (const [alias, unoCmd] of Object.entries(UNO_ALIASES)) {
+			const shortcut = this.shortcutMap.get(unoCmd);
+			if (shortcut) {
+				this.shortcutMap.set(alias, shortcut);
+			}
+		}
+
+		// Explicit aliases not derived from the XCU.
+		for (const [alias, shortcut] of Object.entries(EXPLICIT_ALIASES)) {
+			this.shortcutMap.set(alias, shortcut);
+		}
 	}
 
 	public hasShortcut(command: string): boolean {
@@ -109,35 +84,50 @@ class ShortcutsUtil {
 	 * @param {string} shortcut - The shortcut to localize.
 	 * @returns {string} - The localized text with the shortcut.
 	 */
-	public getShortcut(text: string, command: string): string {
-		let shortcut = this.shortcutMap.get(command);
+	public localizeModifiers(text: string): string {
+		if (typeof unoShortcutsModifierL10N !== 'undefined') {
+			for (const [lang, replacements] of Object.entries(
+				unoShortcutsModifierL10N,
+			)) {
+				if (String.locale.startsWith(lang)) {
+					for (const [eng, loc] of Object.entries(replacements)) {
+						text = text.replace(eng, loc);
+					}
+					break;
+				}
+			}
+		}
+		return text;
+	}
+
+	public getTooltipLabel(text: string, command: string): string {
+		const shortcut = this.getShortcutText(command);
 		if (!shortcut) return text;
 
-		// localize shortcut
-		if (
-			String.locale.startsWith('de') ||
-			String.locale.startsWith('dsb') ||
-			String.locale.startsWith('hsb')
-		) {
-			shortcut = shortcut.replace('Ctrl', 'Strg');
-		}
-		if (String.locale.startsWith('lt')) {
-			shortcut = shortcut.replace('Ctrl', 'Vald');
-		}
-		if (String.locale.startsWith('sl')) {
-			shortcut = shortcut
-				.replace('Ctrl', 'Krmilka')
-				.replace('Alt', 'izmenjalka')
-				.replace('Shift', 'dvigalka');
-		}
+		return _(text).replace('~', '') + ' (' + shortcut + ')';
+	}
 
-		var newText =
+	public getMenuLabel(text: string, command: string): string {
+		const shortcut = this.getShortcutText(command);
+		if (!shortcut) return text;
+
+		return (
 			_(text).replace('~', '') +
-			' (' +
-			app.util.replaceCtrlAltInMac(shortcut) +
-			')';
+			' <span class="shortcut">' +
+			shortcut +
+			'</span>'
+		);
+	}
 
-		return newText;
+	/**
+	 * Return the locale-aware shortcut display string for a UNO command,
+	 * or undefined if none is registered. On Mac, "Ctrl"/"Alt" are replaced
+	 * with the corresponding Mac symbols.
+	 */
+	public getShortcutText(command: string): string | undefined {
+		const shortcut = this.shortcutMap.get(command);
+		if (!shortcut) return undefined;
+		return app.util.replaceCtrlAltInMac(this.localizeModifiers(shortcut));
 	}
 }
 

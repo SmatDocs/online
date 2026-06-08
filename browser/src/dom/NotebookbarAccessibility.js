@@ -82,6 +82,9 @@ var NotebookbarAccessibility = function() {
 	};
 
 	this.onDocumentKeyUp = function(event) {
+		if (document.body.dataset.userinterfacemode !== 'notebookbar')
+			return;
+
 		if (this.initialized) {
 			if (app.map && app.map.jsdialog && app.map.jsdialog.hasDialogOpened()) {
 				if (event.keyCode === 18)
@@ -191,15 +194,19 @@ var NotebookbarAccessibility = function() {
 				}
 				else if (this.state === 1) {
 					itemWasClicked = true;
-					this.setTabItemDescription(element);
 					var selectTarget = element.tagName === 'SELECT' ? element : element.querySelector('select');
 					if (selectTarget) {
+						this.setTabItemDescription(element);
 						selectTarget.focus();
 						selectTarget.showPicker();
 					} else {
 						var clickTarget = element.querySelector('button.unobutton') || element;
+						const doFocusToMap = this.filteredItem && this.filteredItem.focusBack === true;
+						// Blur the offscreen role="tablist" input first so the screen reader doesn't enumerate the notebookbar tabs on focus-out.
+						// The blur handler (onInputBlur) clears aria-description with resetState(). So, no need to clear it again here.
+						this.accessibilityInputElement.blur();
 						clickTarget.click();
-						if (this.filteredItem && this.filteredItem.focusBack === true)
+						if (doFocusToMap)
 							this.focusToMap();
 					}
 				}
@@ -303,7 +310,8 @@ var NotebookbarAccessibility = function() {
 			// Try to set focus on the first button of the tab content.
 			var currentSelectedTabPage = this.getCurrentSelectedTabPage();
 			var firstSelectableElement = JSDialog.FindFocusableElement(currentSelectedTabPage,'next');
-			firstSelectableElement.focus();
+			if (firstSelectableElement)
+				firstSelectableElement.focus();
 		}
 		else if (key === 'ARROWRIGHT') {
 			this.getNextTab('right');

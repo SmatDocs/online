@@ -17,6 +17,7 @@
 #include <config.h>
 
 #include <common/Common.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Protocol.hpp>
 #include <common/Util.hpp>
 
@@ -71,12 +72,7 @@ protected:
 
 using namespace COOLProtocol;
 
-using Poco::Net::HTTPClientSession;
-using Poco::Net::HTTPRequest;
-using Poco::Net::HTTPResponse;
 using Poco::Runnable;
-using Poco::URI;
-using Poco::Util::Application;
 using Poco::Util::OptionSet;
 
 /// Thread class which performs the conversion.
@@ -170,7 +166,7 @@ void Tool::displayHelp()
               << "  --parallelism=threads       Number of simultaneous threads to use\n"
               << "  --server=uri                URI of COOL server\n"
               << "  --no-check-certificate      Disable checking of SSL certificate\n"
-              << "In addition, the options taken by the libreoffice command for its --convert-to\n"
+              << "In addition, the options taken by the soffice command for its --convert-to\n"
               << "functionality can be used (but are ignored if irrelevant to this command)." << std::endl;
 }
 
@@ -193,7 +189,7 @@ void Tool::handleOption(const std::string& optionName,
     else if (optionName == "outdir")
         _destinationDir = value;
     else if (optionName == "parallelism")
-        _numWorkers = std::max(std::stoi(value), 1);
+        _numWorkers = std::max(NumUtil::stoi(value), 1);
     else if (optionName == "server")
         _serverURI = value;
     else if (optionName == "no-check-certificate")
@@ -221,7 +217,7 @@ int Tool::main(const std::vector<std::string>& origArgs)
 
         std::string optionName, value;
 
-        // Accept either one or two dashes, like LibreOffice.
+        // Accept either one or two dashes, like CollaboraOffice.
         if (origArgs[i].length() > 1 && origArgs[i][1] != '-')
             optionName = origArgs[i].substr(1);
         else if (origArgs[i].length() > 1 && origArgs[i][1] == '-')
@@ -231,7 +227,7 @@ int Tool::main(const std::vector<std::string>& origArgs)
 
         std::string::size_type equals = optionName.find('=');
 
-        // Handle LibreOffice-compatible options that don't have their value separated with an equals,
+        // Handle CollaboraOffice-compatible options that don't have their value separated with an equals,
         // but as the next argument.
         if (equals == std::string::npos
             && (optionName == "convert-to"

@@ -75,15 +75,33 @@ class TreeViewControl {
 	_thead: HTMLElement = null;
 	_columns: number;
 	_maxColumnsIncludingState: number = 0;
+	_gridModeCache: boolean | undefined;
 	_hasState: boolean;
 	_hasIcon: boolean;
 	_isNavigator: boolean;
 	_singleClickActivate: boolean;
 	_filterTimer: ReturnType<typeof setTimeout>;
 	_rows: Map<string, HTMLElement>;
+	// Keyboard "active cell" column index within the current row.
+	// Only meaningful in grid mode; the marker class follows row focus
+	// so the user sees one highlighted cell at all times.
+	_activeColumn: number = 0;
 	readonly PAGE_ENTRY_PREFIX = '-$#~';
 	readonly PAGE_ENTRY_SUFFIX = '~#$-';
 	readonly PAGE_DIVIDER_ROW_CLASS = 'page-divider-row';
+
+	// Lazy-evaluated: at construction/build time the container isn't in
+	// the DOM yet, so closest() returns null. Only cache once connected,
+	// otherwise an early access (e.g. during build()) would latch a wrong
+	// `false` for the widget's whole lifetime.
+	get _gridMode(): boolean {
+		if (this._gridModeCache !== undefined) return this._gridModeCache;
+		const isGrid = !!this._container.closest('#ChartDataDialog');
+		// Only cache once connected; a detached early access (e.g. during
+		// build()) must not latch its `false` for the widget's lifetime.
+		if (this._container.isConnected) this._gridModeCache = isGrid;
+		return isGrid;
+	}
 
 	constructor(data: TreeWidgetJSON, builder: JSBuilder) {
 		this._container = window.L.DomUtil.create(
@@ -101,6 +119,17 @@ class TreeViewControl {
 
 	get Container() {
 		return this._container;
+	}
+
+	setActiveColumn(col: number) {
+		this._activeColumn = col;
+		// Persist on the treeview's DOM parent so the value survives a
+		// widget rebuild (e.g. the one triggered by editend after the user
+		// presses Enter to commit a cell). The parent element lives for
+		// the dialog's lifetime but is destroyed on close, so reopens
+		// don't inherit a stale column.
+		const parent = this._container.parentElement;
+		if (parent) (parent as any)._chartDataActiveColumn = col;
 	}
 
 	static countColumns(data: TreeWidgetJSON) {
@@ -320,7 +349,12 @@ class TreeViewControl {
 		return false;
 	}
 
-	fillHeader(header: TreeHeaderJSON, builder: JSBuilder) {
+	fillHeader(
+		header: TreeHeaderJSON,
+		builder: JSBuilder,
+		data?: TreeWidgetJSON,
+		columnIndex?: number,
+	) {
 		if (!header) return;
 
 		const th = window.L.DomUtil.create(
@@ -328,22 +362,84 @@ class TreeViewControl {
 			builder.options.cssClass + ' ui-treeview-header',
 			this._thead,
 		);
-		const span = window.L.DomUtil.create(
-			'span',
-			builder.options.cssClass + ' ui-treeview-header-text',
-			th,
-		);
-
 		th.setAttribute('role', 'columnheader');
-		span.innerText = header.text;
+
+		if (header.headerName !== undefined) {
+			const nameInput = window.L.DomUtil.create(
+				'input',
+				builder.options.cssClass + ' ui-treeview-header-name',
+				th,
+			) as HTMLInputElement;
+			nameInput.type = 'text';
+			nameInput.value = header.headerName;
+			// The header-name box has no visible label, so it needs an
+			// accessible name. Core sends one in headerNameAriaLabel; only
+			// fall back to a generic name if it is missing.
+			const headerNameLabel = header.headerNameAriaLabel || _('Name');
+			nameInput.setAttribute('aria-label', headerNameLabel);
+
+			if (data && columnIndex !== undefined) {
+				const commitEdit = () => {
+					builder.callback(
+						'treeview',
+						'headernamechanged',
+						data,
+						{ column: columnIndex, value: nameInput.value },
+						builder,
+					);
+				};
+				nameInput.addEventListener('change', commitEdit);
+				nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
+					if (e.key === 'Enter') {
+						nameInput.blur();
+					}
+				});
+			}
+		}
+
+		if (header.color) {
+			const colorBar = window.L.DomUtil.create(
+				'div',
+				'ui-treeview-header-color',
+				th,
+			);
+			colorBar.style.backgroundColor = '#' + header.color;
+		}
 
 		if (header.sortable !== false) {
+			const button = window.L.DomUtil.create(
+				'button',
+				builder.options.cssClass + ' ui-treeview-header-button',
+				th,
+			);
+			if (data && columnIndex !== undefined) {
+				button.id = data.id + '-header-' + columnIndex + '-button';
+			}
+			button.textContent = header.text;
+			// A header with no label and no sort indicator (e.g. the
+			// row-number column in the chart data grid) has no visible
+			// action; keep it out of the Tab order so focus skips it.
+			if (!header.text && !header.arrow) button.tabIndex = -1;
+			if (header.arrow) {
+				th.setAttribute(
+					'aria-sort',
+					header.arrow === 'up' ? 'ascending' : 'descending',
+				);
+			}
 			const icon = window.L.DomUtil.create(
 				'span',
 				builder.options.cssClass + ' ui-treeview-header-sort-icon',
-				span,
+				button,
 			);
+			icon.setAttribute('aria-hidden', 'true');
 			if (header.arrow) window.L.DomUtil.addClass(icon, header.arrow);
+		} else {
+			const span = window.L.DomUtil.create(
+				'span',
+				builder.options.cssClass + ' ui-treeview-header-text',
+				th,
+			);
+			span.innerText = header.text;
 		}
 	}
 
@@ -392,13 +488,24 @@ class TreeViewControl {
 		) {
 			window.L.DomUtil.addClass(tr, this.PAGE_DIVIDER_ROW_CLASS);
 		} else {
-			tr.setAttribute('tabindex', '0');
+			tr.setAttribute('tabindex', '-1');
 		}
 
 		let selectionElement;
 		if (this._hasState) {
 			const td = window.L.DomUtil.create('div', '', tr);
-			selectionElement = this.createSelectionElement(td, data, entry, builder);
+			// The tree carries checkbox/radio cells overall, but this
+			// particular row may not be one of them. Keep the placeholder
+			// div so column widths line up across rows, and only render
+			// the actual input when the engine sent toggle info for it.
+			if (entry.state !== undefined || entry.enabled !== undefined) {
+				selectionElement = this.createSelectionElement(
+					td,
+					data,
+					entry,
+					builder,
+				);
+			}
 			if (this._isRealTree) td.setAttribute('aria-level', level);
 		}
 
@@ -489,6 +596,15 @@ class TreeViewControl {
 		}
 	}
 
+	private setupCellTooltip(cell: HTMLElement, map: MapInterface) {
+		app.layoutingService.onDrain(() => {
+			if (cell.scrollWidth > cell.clientWidth) {
+				cell.dataset.cooltip = cell.innerText;
+				window.L.control.attachTooltipEventListener(cell, map);
+			}
+		});
+	}
+
 	createExpandableIconCell(
 		parent: HTMLElement,
 		entry: TreeEntryJSON,
@@ -520,8 +636,9 @@ class TreeViewControl {
 		builder: JSBuilder,
 	) {
 		const text =
-			builder._cleanText(entry.columns[index].text) ||
-			builder._cleanText(entry.text);
+			entry.columns[index].text !== undefined
+				? builder._cleanText(entry.columns[index].text)
+				: builder._cleanText(entry.text);
 
 		const hasRenderer =
 			entry.columns[index].customEntryRenderer ||
@@ -563,6 +680,7 @@ class TreeViewControl {
 				this.PAGE_ENTRY_PREFIX,
 				this.PAGE_ENTRY_SUFFIX,
 			);
+			this.setupCellTooltip(cell, builder.map);
 		} else if (treeViewData.highlightTerm !== undefined) {
 			cell = this.createHighlightedCell(
 				parent,
@@ -575,13 +693,15 @@ class TreeViewControl {
 			const elementType = selectionElement ? 'label' : 'span';
 			cell = window.L.DomUtil.create(
 				elementType,
-				builder.options.cssClass + ` ui-treeview-cell-text-content`,
+				builder.options.cssClass +
+					` ui-treeview-cell-text-content ui-treeview-${entry.row}-${index}`,
 				parent,
 			);
 			if (selectionElement) {
 				cell.setAttribute('for', selectionElement.id);
 			}
 			cell.innerText = text;
+			this.setupCellTooltip(cell, builder.map);
 		}
 
 		// in case of non-persistent entries we want to re-render in case of change
@@ -648,6 +768,7 @@ class TreeViewControl {
 			); // post
 		}
 
+		this.setupCellTooltip(mainSpan, builder.map);
 		return mainSpan;
 	}
 
@@ -700,6 +821,9 @@ class TreeViewControl {
 		link.innerText = entry.columns[index].text || entry.text;
 		link.target = '_blank';
 		link.rel = 'noopener';
+		// WCAG 3.2.5: without altering what sighted users see.
+		const srOnly = window.L.DomUtil.create('span', 'visuallyhidden', link);
+		srOnly.innerText = ' ' + _('(opens in new tab)');
 	}
 
 	fillCells(
@@ -735,6 +859,25 @@ class TreeViewControl {
 		for (const index in entry.columns) {
 			td = window.L.DomUtil.create('div', '', tr);
 			rowElements.push(td);
+			if (
+				this._containerRole === 'grid' ||
+				this._containerRole === 'treegrid'
+			) {
+				// Stable per-cell id so _updateWidgetImpl's id-based focus
+				// restore finds the same cell across a widget rebuild.
+				// tabindex=-1 keeps the cell focusable (the active cell is
+				// elevated to 0 by updateActiveCellMarker) while letting
+				// Tab traversal skip it, per the WAI-ARIA grid pattern.
+				td.id = `${treeViewData.id}-cell-${entry.row}-${index}`;
+				td.tabIndex = -1;
+			}
+			if (
+				parseInt(index) === 0 &&
+				(this._containerRole === 'grid' || this._containerRole === 'treegrid')
+			) {
+				window.L.DomUtil.addClass(td, 'ui-treeview-rowheader');
+				td.setAttribute('role', 'rowheader');
+			}
 
 			span = window.L.DomUtil.create(
 				'span',
@@ -768,7 +911,7 @@ class TreeViewControl {
 			) {
 				this.createLinkCell(text, entry, index, builder);
 			} else if (
-				entry.columns[index].text &&
+				entry.columns[index].text !== undefined &&
 				!this.isSeparator(entry.columns[index])
 			) {
 				this.createTextCell(
@@ -790,7 +933,8 @@ class TreeViewControl {
 					this._containerRole === 'grid' ||
 					this._containerRole === 'treegrid'
 				) {
-					element.setAttribute('role', 'gridcell');
+					if (!element.getAttribute('role'))
+						element.setAttribute('role', 'gridcell');
 				}
 			}
 		}
@@ -835,6 +979,9 @@ class TreeViewControl {
 				selectionElement,
 				expander,
 				clickFunction,
+				doubleClickFunction,
+				builder,
+				treeViewData,
 			);
 
 			this.setupEntryContextMenuEvent(tr, entry, treeViewData, builder);
@@ -917,22 +1064,88 @@ class TreeViewControl {
 		}
 	}
 
+	selectParentEntry(tr: HTMLElement, builder: JSBuilder, data: TreeWidgetJSON) {
+		const expandedContent = tr.parentElement;
+		if (
+			!expandedContent ||
+			!expandedContent.classList.contains('ui-treeview-expanded-content')
+		)
+			return;
+
+		const parentEntry = expandedContent.previousElementSibling as HTMLElement;
+		if (parentEntry && parentEntry.classList.contains('ui-treeview-entry')) {
+			const listElements = Array.from(
+				this._container.querySelectorAll(
+					`.ui-treeview-entry:not(.${this.PAGE_DIVIDER_ROW_CLASS})`,
+				),
+			) as Array<HTMLElement>;
+			const fromIndex = listElements.indexOf(tr);
+			const toIndex = listElements.indexOf(parentEntry);
+			if (toIndex >= 0)
+				this.changeFocusedRow(listElements, fromIndex, toIndex, builder, data);
+		}
+	}
+
+	selectFirstChild(tr: HTMLElement, builder: JSBuilder, data: TreeWidgetJSON) {
+		const expandedContent = tr.nextElementSibling as HTMLElement;
+		if (
+			!expandedContent ||
+			!expandedContent.classList.contains('ui-treeview-expanded-content')
+		)
+			return;
+
+		const firstChild = expandedContent.querySelector(
+			'.ui-treeview-entry',
+		) as HTMLElement;
+
+		if (firstChild) {
+			const listElements = Array.from(
+				this._container.querySelectorAll(
+					`.ui-treeview-entry:not(.${this.PAGE_DIVIDER_ROW_CLASS})`,
+				),
+			) as Array<HTMLElement>;
+			const fromIndex = listElements.indexOf(tr);
+			const toIndex = listElements.indexOf(firstChild);
+			if (toIndex >= 0)
+				this.changeFocusedRow(listElements, fromIndex, toIndex, builder, data);
+		}
+	}
+
 	setupEntryKeyboardEvents(
 		tr: HTMLElement,
 		entry: TreeEntryJSON,
 		selectionElement: HTMLInputElement,
 		expander: HTMLElement,
 		clickFunction: any,
+		doubleClickFunction: any,
+		builder: JSBuilder,
+		data: TreeWidgetJSON,
 	) {
 		if (entry.enabled === false) return;
 
 		tr.addEventListener('keydown', (event) => {
 			let preventDef = false;
 
-			if (event.key === ' ' && expander) {
+			if (this._gridMode && (event.key === 'F2' || event.key === 'Enter')) {
+				this.startEditingActiveCell(tr, entry, builder, data);
+				preventDef = true;
+			} else if (this._gridMode && event.key === ' ') {
+				// Space has no meaning in the data grid; swallow it so it
+				// doesn't fall through to row selection/activation.
+				preventDef = true;
+			} else if (event.key === ' ' && expander) {
 				expander.click();
 				preventDef = true;
-			} else if (event.key === 'Enter' || event.key === ' ') {
+			} else if (event.key === 'Enter') {
+				if (this._singleClickActivate) clickFunction(event);
+				else doubleClickFunction(event);
+
+				if (selectionElement) selectionElement.click();
+				if (expander) {
+					expander.click();
+				}
+				preventDef = true;
+			} else if (event.key === ' ') {
 				clickFunction(event);
 				if (selectionElement) selectionElement.click();
 				if (expander) {
@@ -940,19 +1153,55 @@ class TreeViewControl {
 				}
 				preventDef = true;
 			} else if (event.key === 'ArrowLeft') {
-				// Always collapse if expanded
-				if (expander && !window.L.DomUtil.hasClass(tr, 'collapsed')) {
-					expander.click();
+				if (this._gridMode) {
+					preventDef = this.moveActiveCell(
+						tr,
+						0,
+						-1,
+						false,
+						builder,
+						data,
+						entry,
+					);
+				} else {
+					// Always collapse if expanded
+					if (expander && !window.L.DomUtil.hasClass(tr, 'collapsed')) {
+						expander.click();
+					} else {
+						this.selectParentEntry(tr, builder, data);
+					}
 					preventDef = true;
 				}
 			} else if (event.key === 'ArrowRight') {
-				// Always expand if collapsed
-				if (expander && window.L.DomUtil.hasClass(tr, 'collapsed')) {
-					expander.click();
+				if (this._gridMode) {
+					preventDef = this.moveActiveCell(
+						tr,
+						0,
+						1,
+						false,
+						builder,
+						data,
+						entry,
+					);
+				} else {
+					// Always expand if collapsed
+					if (expander && window.L.DomUtil.hasClass(tr, 'collapsed')) {
+						expander.click();
+					} else if (expander && !window.L.DomUtil.hasClass(tr, 'collapsed')) {
+						this.selectFirstChild(tr, builder, data);
+					}
 					preventDef = true;
 				}
 			} else if (event.key === 'Tab') {
-				if (!window.L.DomUtil.hasClass(tr, 'selected')) this.unselectEntry(tr); // remove tabIndex
+				// WAI-ARIA grid pattern: the grid is a single tab stop, so
+				// Tab / Shift-Tab exit it - leave preventDef false and let
+				// the browser's default focus traversal take over. (Cell-to-
+				// cell navigation is via the arrow keys; while editing, Tab
+				// is handled in the inline-edit input handler and moves
+				// between editable cells, per APG.) Outside grid mode, keep
+				// the original behavior of dropping the row's tab stop.
+				if (!this._gridMode && !window.L.DomUtil.hasClass(tr, 'selected'))
+					this.unselectEntry(tr);
 			}
 
 			if (preventDef) {
@@ -970,9 +1219,10 @@ class TreeViewControl {
 	) {
 		if (entry.enabled === false) return;
 
-		if (window.L.DomUtil.hasClass(span, 'collapsed'))
+		if (window.L.DomUtil.hasClass(span, 'collapsed')) {
 			builder.callback('treeview', 'expand', treeViewData, entry.row, builder);
-		else
+			span.setAttribute('aria-expanded', 'true');
+		} else {
 			builder.callback(
 				'treeview',
 				'collapse',
@@ -980,6 +1230,8 @@ class TreeViewControl {
 				entry.row,
 				builder,
 			);
+			span.setAttribute('aria-expanded', 'false');
+		}
 		$(span).toggleClass('collapsed');
 	}
 
@@ -994,6 +1246,9 @@ class TreeViewControl {
 		if (entry.ondemand && window.L.DomUtil.hasClass(span, 'collapsed'))
 			builder.callback('treeview', 'expand', treeViewData, entry.row, builder);
 		$(span).toggleClass('collapsed');
+		if (window.L.DomUtil.hasClass(span, 'collapsed'))
+			span.setAttribute('aria-expanded', 'false');
+		else span.setAttribute('aria-expanded', 'true');
 	}
 
 	selectEntry(
@@ -1003,13 +1258,20 @@ class TreeViewControl {
 	) {
 		window.L.DomUtil.addClass(span, 'selected');
 		span.setAttribute('aria-selected', 'true');
-		span.tabIndex = 0;
-		if (shouldFocus) span.focus();
+		// In grid mode the tab stop sits on the active cell, not the row.
+		if (!this._gridMode) {
+			span.tabIndex = 0;
+			if (shouldFocus) span.focus();
+		}
 
 		if (checkbox) checkbox.removeAttribute('tabindex');
 	}
 
 	selectEntryByRow(row: number, shouldFocus: boolean = false) {
+		// Don't change selection while inline cell editing is active:
+		// it would blur the input and discard the edit in progress.
+		if (this._container.querySelector('.ui-treeview-inline-edit')) return;
+
 		const rowElement = this._rows.get(String(row));
 		if (!rowElement) {
 			console.warn('TreeView onSelect: row "' + row + '" not found');
@@ -1028,17 +1290,47 @@ class TreeViewControl {
 				this.unselectEntry(item);
 			});
 
+		// Clear stale active-cell markers; the new row gets its marker below.
+		if (this._gridMode) {
+			this._container
+				.querySelectorAll('.ui-treeview-cell-active')
+				.forEach((el: Element) =>
+					el.classList.remove('ui-treeview-cell-active'),
+				);
+		}
+
 		// Select the target row
 		const checkbox = rowElement.querySelector('input') as HTMLInputElement;
 		this.selectEntry(rowElement, checkbox, shouldFocus || hadFocus);
+
+		if (this._gridMode)
+			// Pass 'shouldFocus||hadFocus' through so the active cell is
+			// refocused: unselectEntry above stripped tabindex from the
+			// (possibly currently-focused) cell, dropping focus to <body>.
+			// Without this, an arrow-key round-trip from core would leave
+			// the marker on the right cell but focus nowhere.
+			this.updateActiveCellMarker(
+				rowElement,
+				this._activeColumn,
+				shouldFocus || hadFocus,
+			);
 	}
 
 	unselectEntry(item: HTMLElement) {
 		window.L.DomUtil.removeClass(item, 'selected');
 		item.removeAttribute('aria-selected');
-		item.removeAttribute('tabindex');
+		item.tabIndex = -1;
 		var itemCheckbox = item.querySelector('input');
 		if (itemCheckbox) itemCheckbox.tabIndex = -1;
+		if (this._gridMode) {
+			// Demote the row's cells back to tabindex=-1;
+			// updateActiveCellMarker on the newly selected row will
+			// re-elevate the active cell to 0.
+			this.getRowCells(item).forEach((c) => {
+				c.classList.remove('ui-treeview-cell-active');
+				c.tabIndex = -1;
+			});
+		}
 	}
 
 	createClickFunction(
@@ -1068,7 +1360,7 @@ class TreeViewControl {
 			if (checkbox && (!e || e.target === checkbox))
 				this.changeCheckboxStateOnClick(checkbox, treeViewData, builder, entry);
 
-			const cell: Element = this.getTextCellForElement(e.target as Element);
+			let cell: Element = this.getTextCellForElement(e.target as Element);
 
 			let column: number | null | undefined;
 			let editable: boolean = false;
@@ -1077,16 +1369,68 @@ class TreeViewControl {
 				editable = this.canEdit(entry, column);
 			}
 
-			if (select)
+			// Fallback: determine column from click position when the
+			// target is the row itself (empty cells have zero-size spans).
+			// Only needed in grid mode where empty cells must be clickable.
+			if (column == null && e instanceof MouseEvent && this._gridMode) {
+				const row = parentContainer;
+				const cells = row.querySelectorAll(
+					':scope > [role="gridcell"], :scope > [role="rowheader"]',
+				);
+				for (let i = 0; i < cells.length; i++) {
+					const rect = cells[i].getBoundingClientRect();
+					if (e.clientX >= rect.left && e.clientX < rect.right) {
+						column = i;
+						editable = this.canEdit(entry, column);
+						const spans = cells[i].getElementsByClassName(
+							'ui-treeview-cell-text-content',
+						);
+						if (spans.length === 1) cell = spans[0] as Element;
+						break;
+					}
+				}
+			}
+
+			if (select) {
+				// Only send {row, col} in grid mode;
+				// all other consumers expect a plain row number.
+				const selectData =
+					column != null && this._gridMode
+						? { row: entry.row, col: column }
+						: entry.row;
 				builder.callback(
 					'treeview',
 					'select',
 					treeViewData,
-					entry.row,
+					selectData,
 					builder,
 				);
+			}
 
-			if (!editable && activate)
+			if (this._gridMode && column != null) {
+				// Column 0 (rowheader) is not navigable; clicking it still
+				// selects the row but keeps the previous active column.
+				if (column >= 1) this.setActiveColumn(column);
+				this.updateActiveCellMarker(
+					parentContainer,
+					Math.max(1, this._activeColumn),
+				);
+			}
+
+			// Highlight selected column header
+			if (column != null && this._thead) {
+				this._thead
+					.querySelectorAll('.ui-treeview-header')
+					.forEach((h: Element) => h.classList.remove('selected'));
+				const headers = this._thead.querySelectorAll('.ui-treeview-header');
+				if (headers[column]) headers[column].classList.add('selected');
+			}
+
+			// Inline editing is only supported in grid mode.
+			// All other consumers treat cells as read-only.
+			const inlineEditable = editable && this._gridMode;
+
+			if (!inlineEditable && activate)
 				builder.callback(
 					'treeview',
 					'activate',
@@ -1095,7 +1439,7 @@ class TreeViewControl {
 					builder,
 				);
 
-			if (editable && activate)
+			if (inlineEditable && activate && cell)
 				this.startEditing(
 					builder,
 					cell,
@@ -1151,6 +1495,205 @@ class TreeViewControl {
 		return !!entry.columns[column].editable;
 	}
 
+	getRowCells(tr: HTMLElement): Array<HTMLElement> {
+		return Array.from(
+			tr.querySelectorAll(
+				':scope > [role="gridcell"], :scope > [role="rowheader"]',
+			),
+		) as Array<HTMLElement>;
+	}
+
+	// Apply the active-cell marker class to the column-th cell of the row,
+	// clearing it from the other cells in the same row. The active cell is
+	// made focusable (tabindex) so DOM focus can sit on the cell itself
+	// rather than the whole row. Pass focus=true to move focus there now.
+	// Safe to call with an out-of-range column (clamped to [0, last]).
+	updateActiveCellMarker(tr: HTMLElement, column: number, focus = false) {
+		if (!this._gridMode) return;
+		const cells = this.getRowCells(tr);
+		if (!cells.length) return;
+		// Skip column 0 (rowheader / row number) - non-interactive.
+		const target = Math.max(1, Math.min(column, cells.length - 1));
+		// In grid mode the active cell is the sole tab stop for the
+		// widget. Remove the row's own tabindex so
+		// Tab from outside lands directly on the cell, not on the
+		// (invisible) row first.
+		tr.tabIndex = -1;
+		// Claim the new cell first (tabindex + focus) so a same-row move
+		// transfers focus directly to the new cell. Doing this before
+		// stripping tabindex from the previously focused cell avoids a
+		// transient where no cell is the tab stop and focus would drop
+		// to <body>.
+		const newCell = cells[target];
+		newCell.classList.add('ui-treeview-cell-active');
+		newCell.tabIndex = 0;
+		if (focus) newCell.focus({ preventScroll: false });
+		for (let i = 0; i < cells.length; i++) {
+			if (i === target) continue;
+			cells[i].classList.remove('ui-treeview-cell-active');
+			// Keep cells focusable programmatically (id-based focus
+			// restore in JSDialogBuilder._updateWidgetImpl relies on
+			// being able to focus them by id).
+			cells[i].tabIndex = -1;
+		}
+	}
+
+	// Notify core of the keyboard-driven {row, col} change so that
+	// set_cursor_column() stays in sync (toolbar buttons like
+	// InsertColumn act on the cursor column).
+	notifyActiveCell(
+		builder: JSBuilder,
+		data: TreeWidgetJSON,
+		entry: TreeEntryJSON,
+		column: number,
+	) {
+		if (!this._gridMode) return;
+		(builder as any).callback(
+			'treeview',
+			'select',
+			data,
+			{ row: entry.row, col: column },
+			builder,
+		);
+	}
+
+	// Move the active cell by (rowDelta, colDelta) relative to the row
+	// currently holding focus and the stored _activeColumn. `wrap` controls
+	// what happens when the column delta walks off the row edge: true (Tab)
+	// wraps to the next/prev row, false (Arrow Left/Right) stops at the
+	// edge. Returns true if the move happened (caller should
+	// preventDefault); false at the grid's outer corner so Tab can fall
+	// through to default focus traversal.
+	moveActiveCell(
+		tr: HTMLElement,
+		rowDelta: number,
+		colDelta: number,
+		wrap: boolean,
+		builder: JSBuilder,
+		data: TreeWidgetJSON,
+		entry: TreeEntryJSON,
+	): boolean {
+		if (!this._gridMode) return false;
+		const cellsInRow = this.getRowCells(tr);
+		const colCount = cellsInRow.length;
+		// Column 0 is the rowheader (row number, non-editable, no other
+		// interaction), so navigation starts at column 1.
+		const minCol = 1;
+		if (colCount <= minCol) return false;
+
+		const listElements = Array.from(
+			this._container.querySelectorAll(
+				`.ui-treeview-entry:not(.${this.PAGE_DIVIDER_ROW_CLASS})`,
+			),
+		) as Array<HTMLElement>;
+		const fromIndex = listElements.indexOf(tr);
+		if (fromIndex < 0) return false;
+
+		// Treat any below-min stored column (e.g. initial 0) as minCol for
+		// the delta calculation, so the first Tab/arrow lands on a sensible
+		// cell rather than skipping past it.
+		const currentCol = Math.max(minCol, this._activeColumn);
+		let newCol = currentCol + colDelta;
+		let newRowIndex = fromIndex + rowDelta;
+
+		if (colDelta !== 0 && rowDelta === 0) {
+			if (newCol >= colCount) {
+				if (!wrap) return true; // stop at row edge
+				if (fromIndex >= listElements.length - 1) return false;
+				newCol = minCol;
+				newRowIndex = fromIndex + 1;
+			} else if (newCol < minCol) {
+				if (!wrap) return true; // stop at row edge
+				if (fromIndex <= 0) return false;
+				newCol = colCount - 1;
+				newRowIndex = fromIndex - 1;
+			}
+		}
+
+		if (newRowIndex < 0 || newRowIndex >= listElements.length) return false;
+		if (newCol < minCol || newCol >= colCount) return false;
+
+		this.setActiveColumn(newCol);
+
+		if (newRowIndex !== fromIndex) {
+			this.changeFocusedRow(
+				listElements,
+				fromIndex,
+				newRowIndex,
+				builder,
+				data,
+			);
+			// Restore active-cell marker on the new row at the new column.
+			this.updateActiveCellMarker(listElements[newRowIndex], newCol);
+			// changeFocusedRow already fires a row-only select callback;
+			// follow up with the {row, col} payload for grid mode.
+			const newEntry = this.findEntryWithRow(
+				data.entries,
+				(listElements[newRowIndex] as any)._row,
+			);
+			if (newEntry) this.notifyActiveCell(builder, data, newEntry, newCol);
+		} else {
+			this.updateActiveCellMarker(tr, newCol, true);
+			this.notifyActiveCell(builder, data, entry, newCol);
+		}
+
+		return true;
+	}
+
+	// Start inline editing of the keyboard-active cell of the given row,
+	// if that cell is editable. Used by Enter/F2 in grid mode.
+	startEditingActiveCell(
+		tr: HTMLElement,
+		entry: TreeEntryJSON,
+		builder: JSBuilder,
+		treeViewData: TreeWidgetJSON,
+	): void {
+		if (!this._gridMode) return;
+		if (!this.canEdit(entry, this._activeColumn)) return;
+		const cell = tr.querySelector(
+			`.ui-treeview-${entry.row}-${this._activeColumn}`,
+		) as Element;
+		if (cell)
+			this.startEditing(
+				builder,
+				cell,
+				this._activeColumn,
+				entry,
+				tr,
+				treeViewData,
+			);
+	}
+
+	// Reactive handler for core's 'reedit_cell' action: after a rejected
+	// numeric edit, Tab has already optimistically moved focus to the next
+	// cell; once the user dismisses the warning popup, core asks us to put
+	// the user back on the rejected cell (row, col) in edit mode.
+	reeditCell(
+		row: number,
+		col: number,
+		builder: JSBuilder,
+		data: TreeWidgetJSON,
+	): void {
+		if (!this._gridMode) return;
+
+		// Close any editor the optimistic Tab opened on the next cell.
+		const openInput = this._container.querySelector(
+			'.ui-treeview-inline-edit',
+		) as HTMLInputElement;
+		if (openInput) openInput.blur();
+
+		const rowElement = this._rows.get(String(row));
+		if (!rowElement) return;
+		const entry = this.findEntryWithRow(data.entries, row);
+		if (!entry) return;
+
+		// Select the target row and mark/focus the rejected cell.
+		this.setActiveColumn(col);
+		this.selectEntryByRow(row, true);
+		this.updateActiveCellMarker(rowElement, col, true);
+		this.startEditingActiveCell(rowElement, entry, builder, data);
+	}
+
 	startEditing(
 		builder: JSBuilder,
 		cell: Element,
@@ -1159,18 +1702,54 @@ class TreeViewControl {
 		parentContainer: HTMLElement,
 		treeViewData: TreeWidgetJSON,
 	): void {
+		// Hide existing text but keep it in the layout so column widths don't shift
 		for (const child of Array.from(cell.childNodes)) {
-			child.remove();
+			if (child instanceof HTMLElement) child.style.visibility = 'hidden';
+			else if (child.nodeType === Node.TEXT_NODE) {
+				const wrapper = document.createElement('span');
+				wrapper.style.visibility = 'hidden';
+				wrapper.textContent = child.textContent;
+				child.replaceWith(wrapper);
+			}
 		}
 
 		const rowShouldBeDraggable = parentContainer.draggable; // TODO: does this work with tree views or only tables?
 
-		const input = document.createElement('input');
+		// Use the gridcell div as positioning context so the input
+		// has consistent size regardless of text content
+		const gridCell = (cell as HTMLElement).closest(
+			'[role="gridcell"], [role="rowheader"]',
+		) as HTMLElement;
+		const posParent = gridCell || (cell as HTMLElement);
+		posParent.style.position = 'relative';
 
-		input.style.width = '100%';
-		input.style.boxSizing = 'border-box';
+		const input = document.createElement('input');
+		input.className = 'ui-treeview-inline-edit';
 
 		input.value = entry.columns[column].text;
+
+		// Accessible name for the cell editor: there is no visible <label>,
+		// and the grid does not expose aria-row/colindex, so name the editor
+		// after its column (series name, or role label like
+		// "Categories"/"Y-Values") and the row's category label so it is
+		// self-describing for screen readers.
+		const headerInfo = treeViewData.headers?.[column];
+		const columnLabel =
+			headerInfo?.headerName || headerInfo?.text || _('Cell value');
+		// Identify the row by its first category cell (a column with a header
+		// but no series name), read fresh so it tracks edits. Fall back to the
+		// positional row number when the row has no category text.
+		let rowLabel = _('row %1').replace('%1', String(Number(entry.row) + 1));
+		for (let c = 1; c < entry.columns.length; c++) {
+			if (!treeViewData.headers?.[c]?.headerName && entry.columns[c]?.text) {
+				rowLabel = entry.columns[c].text;
+				break;
+			}
+		}
+		input.setAttribute(
+			'aria-label',
+			_('%1, %2').replace('%1', columnLabel).replace('%2', rowLabel),
+		);
 
 		input.enterKeyHint = 'done';
 
@@ -1180,10 +1759,79 @@ class TreeViewControl {
 			'keydown',
 			(e) => {
 				if (e.code === 'Enter') {
-					input.blur();
+					if (this._gridMode) {
+						// Commit the value (blur fires endEditing which sends
+						// editend to core) and close the editor, returning to
+						// the normal active-cell highlight. Focus is moved
+						// back to the cell now; after the core rebuild lands,
+						// _updateWidgetImpl restores focus to the active cell
+						// of the new DOM (see the deferred focus path there).
+						e.preventDefault();
+						input.blur();
+						this.updateActiveCellMarker(
+							parentContainer,
+							this._activeColumn,
+							true,
+						);
+					} else {
+						input.blur();
+					}
 				} else if (e.code === 'Escape') {
 					cancelledUpdate = true;
 					input.blur();
+					if (this._gridMode) {
+						e.preventDefault();
+						this.updateActiveCellMarker(
+							parentContainer,
+							this._activeColumn,
+							true,
+						);
+					}
+				} else if (
+					e.code === 'Tab' &&
+					this._gridMode &&
+					!e.altKey &&
+					!e.ctrlKey &&
+					!e.metaKey
+				) {
+					// Only plain Tab (next) and Shift+Tab (prev) commit and
+					// move between cells. Alt/Ctrl/Meta+Tab are left to the
+					// browser/OS (e.g. window switching) - don't preventDefault,
+					// don't commit, don't move.
+					e.preventDefault();
+					const direction = e.shiftKey ? -1 : 1;
+					// Commit current edit. blur fires synchronously and
+					// runs endEditing which writes the value back.
+					input.blur();
+					const moved = this.moveActiveCell(
+						parentContainer,
+						0,
+						direction,
+						true,
+						builder,
+						treeViewData,
+						entry,
+					);
+					if (moved) {
+						// moveActiveCell focuses the new active cell; resolve
+						// its row (which may differ from the edited one when
+						// Tab wrapped to the next/previous row) and re-enter
+						// edit mode on it.
+						const focused = document.activeElement as HTMLElement;
+						const newRow = (focused?.closest('.ui-treeview-entry') ||
+							parentContainer) as HTMLElement;
+						const newEntry = this.findEntryWithRow(
+							treeViewData.entries,
+							(newRow as any)._row,
+						);
+						if (newEntry)
+							this.startEditingActiveCell(
+								newRow,
+								newEntry,
+								builder,
+								treeViewData,
+							);
+					}
 				}
 				e.stopImmediatePropagation(); // We need events to type and with some keys that doesn't happen (e.g. space which selects a different cell)
 			},
@@ -1196,6 +1844,13 @@ class TreeViewControl {
 			});
 		}
 		input.addEventListener('blur', () => {
+			// In grid mode, don't commit when the blur is caused by the
+			// whole window losing focus (Alt+Tab, switching apps). Keep
+			// the editor open and untouched so the edit is neither saved
+			// nor lost; it resumes when the user returns. A genuine
+			// in-app focus move (clicking another cell, Tab, etc.) keeps
+			// document focus, so endEditing runs as normal.
+			if (this._gridMode && !document.hasFocus()) return;
 			this.endEditing(
 				builder,
 				cancelledUpdate,
@@ -1204,6 +1859,7 @@ class TreeViewControl {
 				entry,
 				input,
 				parentContainer,
+				posParent,
 				rowShouldBeDraggable,
 				treeViewData,
 			);
@@ -1218,7 +1874,7 @@ class TreeViewControl {
 		// We need to cancel focus events - which are used when we select - or we will blur our input and stop editing
 		// The grab_focus is on the grid we're already in - i.e. we're not changing anything about what is being selected - so there is no need to re-do a selection/etc. once editing is done
 
-		cell.appendChild(input);
+		posParent.appendChild(input);
 		input.focus();
 	}
 
@@ -1230,32 +1886,58 @@ class TreeViewControl {
 		entry: TreeEntryJSON,
 		input: HTMLInputElement,
 		parentContainer: HTMLElement,
+		posParent: HTMLElement,
 		rowShouldBeDraggable: boolean,
 		treeViewData: TreeWidgetJSON,
 	) {
 		parentContainer.draggable = rowShouldBeDraggable;
+		// Restore the container's no-op onFocus that build() installs (and
+		// startEditing re-set), rather than clearing it. Clearing it to
+		// undefined made a later core grab_focus (e.g. from the select sent
+		// on arrow-key navigation) fall through to control.focus() and focus
+		// the whole grid container instead of the active cell.
 		(
 			parentContainer.parentElement as HTMLElement & { onFocus?: () => void }
-		).onFocus = undefined;
+		).onFocus = () => {
+			/* no-op: focus is managed on the rows/cells, not the container */
+		};
 
-		for (const child of Array.from(cell.childNodes)) {
-			child.remove();
-		}
+		posParent.style.position = '';
+		input.remove();
 
-		if (cancelledUpdate) {
-			cell.append(entry.columns[column].text);
-			return;
-		}
+		const newValue = cancelledUpdate ? entry.columns[column].text : input.value;
 
-		cell.append(input.value);
-		// This is changed on core too - but we may as well optimistically set the new value here anyway
-		// If core fails the update, it'll send us back the old value
+		// cell is the ui-treeview-cell-text-content span — replace its
+		// contents with the new value, removing the visibility-hidden
+		// wrapper spans that startEditing created.
+		cell.textContent = newValue;
 
+		if (cancelledUpdate) return;
+
+		this.commitEditValue(builder, treeViewData, entry, column, input.value);
+	}
+
+	// Send the edited cell value to core (set_cursor cell -> set_text).
+	// Shared by endEditing (editor closes) and the grid Enter handler
+	// (editor stays open).
+	commitEditValue(
+		builder: JSBuilder,
+		treeViewData: TreeWidgetJSON,
+		entry: TreeEntryJSON,
+		column: number,
+		value: string,
+	) {
+		// Keep the client-side model in sync. While the editor stays open
+		// (grid Enter / Tab-to-next-cell) the core round-trip that would
+		// refresh this is skipped, so without this, re-entering the cell
+		// via startEditing would show the stale original value.
+		if (entry.columns && entry.columns[column])
+			entry.columns[column].text = value;
 		builder.callback(
 			'treeview',
 			'editend',
 			treeViewData,
-			{ row: entry.row, column, value: input.value },
+			{ row: entry.row, column, value },
 			builder,
 		);
 	}
@@ -1357,9 +2039,19 @@ class TreeViewControl {
 	}
 
 	restoreInitialTabIndexes(listElements: Array<HTMLElement>) {
+		var selectedEntry: HTMLElement = null;
 		listElements.forEach((entry: HTMLElement) => {
-			entry.tabIndex = 0;
+			if (entry.classList.contains('selected')) selectedEntry = entry;
+			entry.tabIndex = -1;
 		});
+		if (this._gridMode) {
+			// Tab stop lives on the active cell; the cell's tabindex was
+			// set by updateActiveCellMarker and is what we want re-entry
+			// focus to land on. Don't put a competing tabindex on the row.
+			return;
+		}
+		if (selectedEntry) selectedEntry.tabIndex = 0;
+		else if (listElements.length > 0) listElements[0].tabIndex = 0;
 	}
 
 	changeFocusedRow(
@@ -1370,15 +2062,37 @@ class TreeViewControl {
 		data: TreeWidgetJSON,
 	) {
 		var nextElement = listElements.at(toIndex);
-		nextElement.tabIndex = 0;
-		nextElement.focus();
-		(builder as any).callback(
-			'treeview',
-			'select',
-			data,
-			(nextElement as any)._row,
-			builder,
-		);
+
+		if (this._gridMode) {
+			// In grid mode the row is not focusable - the active cell is
+			// the tab stop. Clean up the old row's cell marker + tabindex
+			// and then apply marker/focus to the new row's active cell.
+			if (fromIndex >= 0) {
+				const oldRow = listElements.at(fromIndex);
+				this.getRowCells(oldRow).forEach((c) => {
+					c.classList.remove('ui-treeview-cell-active');
+					c.tabIndex = -1;
+				});
+			}
+			this.updateActiveCellMarker(
+				nextElement as HTMLElement,
+				this._activeColumn,
+				true,
+			);
+		} else {
+			nextElement.tabIndex = 0;
+			nextElement.focus();
+		}
+
+		if (data.serverSyncSelection !== false) {
+			(builder as any).callback(
+				'treeview',
+				'select',
+				data,
+				(nextElement as any)._row,
+				builder,
+			);
+		}
 
 		// Update tabindex so the new entry is in the tab order and the
 		// old one is removed. Selected entries keep their tabindex so
@@ -1393,9 +2107,7 @@ class TreeViewControl {
 
 		if (fromIndex >= 0) {
 			var oldElement = listElements.at(fromIndex);
-			if (window.L.DomUtil.hasClass(oldElement, 'selected')) return;
-
-			oldElement.removeAttribute('tabindex');
+			oldElement.tabIndex = -1;
 			var oldInput = Array.from(
 				listElements
 					.at(fromIndex)
@@ -1409,6 +2121,12 @@ class TreeViewControl {
 		var focusedElement = document.activeElement as HTMLElement;
 		// tr - row itself
 		var currIndex = listElements.indexOf(focusedElement);
+		// focus may sit on a cell (grid mode) or any descendant - climb to
+		// the nearest row entry.
+		if (currIndex < 0 && focusedElement) {
+			const row = focusedElement.closest('.ui-treeview-entry') as HTMLElement;
+			if (row) currIndex = listElements.indexOf(row);
+		}
 		// input - child of a row
 		if (currIndex < 0)
 			currIndex = listElements.indexOf(
@@ -1437,6 +2155,60 @@ class TreeViewControl {
 		}
 
 		return currIndex;
+	}
+
+	typeAheadSearch(
+		listElements: Array<HTMLElement>,
+		currIndex: number,
+		char: string,
+		builder: JSBuilder,
+		data: TreeWidgetJSON,
+	) {
+		const lowerChar = char.toLowerCase();
+		const startIndex = currIndex >= 0 ? currIndex + 1 : 0;
+		const total = listElements.length;
+
+		for (let i = 0; i < total; i++) {
+			const index = (startIndex + i) % total;
+			const el = listElements[index];
+			if (el.clientHeight <= 0) continue;
+			const text = el.innerText.trim().toLowerCase();
+			if (text.startsWith(lowerChar)) {
+				this.changeFocusedRow(listElements, currIndex, index, builder, data);
+				return;
+			}
+		}
+	}
+
+	expandSiblings(
+		listElements: Array<HTMLElement>,
+		currIndex: number,
+		data: TreeWidgetJSON,
+		builder: JSBuilder,
+	) {
+		if (currIndex < 0) return;
+		const currentEntry = listElements[currIndex];
+		const level = currentEntry.getAttribute('aria-level');
+		if (!level) return;
+
+		const parent = currentEntry.parentElement;
+		if (!parent) return;
+
+		const siblings = parent.querySelectorAll(
+			'.ui-treeview-entry',
+		) as NodeListOf<HTMLElement>;
+		siblings.forEach((sibling: HTMLElement) => {
+			if (
+				sibling.getAttribute('aria-level') === level &&
+				sibling.classList.contains('collapsed') &&
+				sibling.hasAttribute('aria-expanded')
+			) {
+				const row = (sibling as any)._row;
+				builder.callback('treeview', 'expand', data, row, builder);
+				sibling.classList.remove('collapsed');
+				sibling.setAttribute('aria-expanded', 'true');
+			}
+		});
 	}
 
 	handleKeyEvent(
@@ -1493,6 +2265,47 @@ class TreeViewControl {
 					);
 			}
 
+			preventDef = true;
+		} else if (event.key === 'Home') {
+			var firstIndex = 0;
+			while (
+				firstIndex < treeLength - 1 &&
+				listElements[firstIndex].clientHeight <= 0
+			)
+				firstIndex++;
+			if (firstIndex < treeLength)
+				this.changeFocusedRow(
+					listElements,
+					currIndex,
+					firstIndex,
+					builder,
+					data,
+				);
+			preventDef = true;
+		} else if (event.key === 'End') {
+			var lastIndex = treeLength - 1;
+			while (lastIndex > 0 && listElements[lastIndex].clientHeight <= 0)
+				lastIndex--;
+			if (lastIndex >= 0)
+				this.changeFocusedRow(
+					listElements,
+					currIndex,
+					lastIndex,
+					builder,
+					data,
+				);
+			preventDef = true;
+		} else if (event.key === '*') {
+			this.expandSiblings(listElements, currIndex, data, builder);
+			preventDef = true;
+		} else if (
+			event.key.length === 1 &&
+			event.key.match(/[a-zA-Z]/) &&
+			!event.ctrlKey &&
+			!event.altKey &&
+			!event.metaKey
+		) {
+			this.typeAheadSearch(listElements, currIndex, event.key, builder, data);
 			preventDef = true;
 		} else if (
 			data.fireKeyEvents &&
@@ -1570,6 +2383,10 @@ class TreeViewControl {
 	sortByColumn(icon: HTMLSpanElement, columnIndex: number, up: boolean) {
 		this.clearSorting();
 		window.L.DomUtil.addClass(icon, up ? 'up' : 'down');
+		const headerEl = icon.closest('.ui-treeview-header') as HTMLElement;
+		if (headerEl) {
+			headerEl.setAttribute('aria-sort', up ? 'ascending' : 'descending');
+		}
 
 		var toSort: Array<HTMLDivElement> = [];
 
@@ -1595,6 +2412,10 @@ class TreeViewControl {
 		icons.forEach((icon) => {
 			window.L.DomUtil.removeClass(icon, 'down');
 			window.L.DomUtil.removeClass(icon, 'up');
+		});
+		var headers = this._thead.querySelectorAll('.ui-treeview-header');
+		headers.forEach((header: HTMLElement) => {
+			header.removeAttribute('aria-sort');
 		});
 	}
 
@@ -1632,7 +2453,7 @@ class TreeViewControl {
 		}
 
 		for (const index in headers) {
-			this.fillHeader(headers[index], builder);
+			this.fillHeader(headers[index], builder, data, parseInt(index));
 
 			if (headers[index].sortable === false) continue;
 
@@ -1647,10 +2468,15 @@ class TreeViewControl {
 				};
 			};
 
-			const last = this._thead.lastChild as HTMLElement;
-			last.onclick = clickFunction(
+			const lastHeader = this._thead.lastChild as HTMLElement;
+			const button = lastHeader.querySelector(
+				'.ui-treeview-header-button',
+			) as HTMLElement;
+			button.onclick = clickFunction(
 				parseInt(index),
-				last.querySelector('.ui-treeview-header-sort-icon'),
+				lastHeader.querySelector(
+					'.ui-treeview-header-sort-icon',
+				) as HTMLSpanElement,
 			);
 		}
 	}
@@ -1872,18 +2698,27 @@ class TreeViewControl {
 	) {
 		this._isRealTree = TreeViewControl.isRealTree(data);
 		this._isListbox = TreeViewControl.isListbox(data);
-		this._containerRole =
-			data.role ||
-			(this._isRealTree ? 'treegrid' : this._isListbox ? 'listbox' : 'grid');
 		this._columns = TreeViewControl.countColumns(data);
 		this._hasState = TreeViewControl.hasState(data);
 		this._hasIcon = TreeViewControl.hasIcon(data);
 		this._isNavigator = this.isNavigator(data);
 		this._singleClickActivate = TreeViewControl.isSingleClickActivate(data);
+		this._containerRole =
+			data.role ||
+			(this._isRealTree
+				? this._isNavigator
+					? 'tree'
+					: 'treegrid'
+				: this._isListbox
+					? 'listbox'
+					: 'grid');
 
 		this._tbody = this._container;
 		(this._container as any).onSelect = (position: number) => {
 			this.selectEntryByRow(position, false);
+		};
+		(this._container as any).onReeditCell = (row: number, col: number) => {
+			this.reeditCell(row, col, builder, data);
 		};
 		(this._container as any).filterEntries = this.filterEntries.bind(this);
 		(this._container as any).highlightEntries =
@@ -1922,6 +2757,27 @@ JSDialog.treeView = function (
 	var treeView = new TreeViewControl(data, builder);
 	treeView.build(data, builder, parentContainer);
 	parentContainer.appendChild(treeView._container);
+
+	// Set up the initial active-cell tab stop on the selected row so Tab
+	// from outside lands directly on a cell instead of the (invisible)
+	// row. Deferred so the dialog DOM is fully attached and the _gridMode
+	// getter resolves correctly.
+	app.layoutingService.appendLayoutingTask(() => {
+		if (!treeView._gridMode) return;
+		const selected = treeView._container.querySelector(
+			'.ui-treeview-entry.selected',
+		) as HTMLElement;
+		if (!selected) return;
+		// Restore the persisted active column (set on the parent element
+		// by setActiveColumn) so a widget rebuild keeps the user's
+		// position. Falls back to column 1 (first interactive cell).
+		const parent = treeView._container.parentElement as HTMLElement | null;
+		const persisted = parent && (parent as any)._chartDataActiveColumn;
+		if (typeof persisted === 'number' && persisted >= 1)
+			treeView.setActiveColumn(persisted);
+		else if (treeView._activeColumn < 1) treeView.setActiveColumn(1);
+		treeView.updateActiveCellMarker(selected, treeView._activeColumn);
+	});
 
 	const updateRenders: CustomEntryRenderCallback = (pos: number | string) => {
 		const row = treeView.findEntryWithRow(data.entries, pos);

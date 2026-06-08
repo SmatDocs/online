@@ -11,17 +11,15 @@
 
 #pragma once
 
-#include <CharacterConverter.hpp>
-#include <COOLWSD.hpp>
-#include <HttpRequest.hpp>
-#include <common/Log.hpp>
-#include <Storage.hpp>
 #include <common/Authorization.hpp>
+#include <common/CharacterConverter.hpp>
+#include <common/Log.hpp>
 #include <net/HttpRequest.hpp>
+#include <wsd/COOLWSD.hpp>
+#include <wsd/Storage.hpp>
 
 #include <Poco/JSON/Object.h>
 #include <Poco/URI.h>
-#include <Poco/Util/Application.h>
 
 #include <chrono>
 #include <memory>
@@ -202,7 +200,8 @@ public:
     {
         LOG_INF("WopiStorage ctor with localStorePath: ["
                 << localStorePath << "], jailPath: [" << jailPath << "], uri: ["
-                << COOLWSD::anonymizeUrl(uri.toString()) << "], legacy server: " << _legacyServer);
+                << Anonymizer::anonymizeUrl(uri.toString())
+                << "], legacy server: " << _legacyServer);
     }
 
     /// Signifies if the server is legacy or not, based on the headers
@@ -281,7 +280,7 @@ private:
     std::string getAnonymizedUri(const std::string& pathSuffix = std::string()) const
     {
         Poco::URI uriAnonym(getUri());
-        uriAnonym.setPath(COOLWSD::anonymizeUrl(uriAnonym.getPath()) + pathSuffix);
+        uriAnonym.setPath(Anonymizer::anonymizeUrl(uriAnonym.getPath()) + pathSuffix);
         return uriAnonym.toString();
     }
 

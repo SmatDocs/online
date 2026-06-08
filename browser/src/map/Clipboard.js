@@ -415,11 +415,14 @@ window.L.Clipboard = window.L.Class.extend({
 	_pasteTypedBlob: function(fileType, fileBlob) {
 		var header = 'paste mimetype=' + fileType + '\n';
 		var blob;
-		if (window.ThisIsTheQtApp || window.ThisIsTheWindowsApp) {
-			// To work around a qtwebchannel "Could not convert argument
-			// QJsonValue(object, QJsonObject()) to target type QString ." bug, send the
-			// payload as a base64-encoded string rather than as an ArrayBuffer blob
-			// (and decode it in ChildSession::paste in kit/ChildSession.cpp):
+		if (window.ThisIsAMobileApp) {
+			// The app builds talk to the native side over a string-only bridge that
+			// cannot carry a binary payload (the qtwebchannel "Could not convert
+			// argument QJsonValue(object, QJsonObject()) to target type QString ."
+			// bug on CODA-Q, a "[object" parse error on CODA-W, and the WebView
+			// message handlers being string-typed on the Mac and iOS). So send the
+			// payload as a base64-encoded string rather than as an ArrayBuffer blob,
+			// and decode it in ChildSession::paste in kit/ChildSession.cpp.
 			blob = header + window.btoa(
 				Array.from(new Uint8Array(fileBlob), (b) => String.fromCodePoint(b))
 				.join(''));
@@ -462,7 +465,7 @@ window.L.Clipboard = window.L.Class.extend({
 		var id = this.getMetaPath(0);
 		var idOld = this.getMetaPath(1);
 
-		// for the paste, we always prefer the internal LOK's copy/paste
+		// for the paste, we always prefer the internal COKit's copy/paste
 		if (preferInternal === true &&
 			((id !== '' && meta.indexOf(id) >= 0) || (idOld !== '' && meta.indexOf(idOld) >= 0)))
 		{
@@ -755,6 +758,15 @@ window.L.Clipboard = window.L.Class.extend({
 			document.execCommand(operation) &&
 			serial !== this._clipboardSerial) {
 			window.app.console.log('copied successfully');
+			this._unoCommandForCopyCutPaste = null;
+			return;
+		}
+
+		// execCommand('paste') may fire the paste event synchronously and
+		// return false; in that case paste() has already dispatched a
+		// .uno:Paste, so a second async navigator-clipboard read would
+		// duplicate the content.
+		if (operation == 'paste' && serial !== this._clipboardSerial) {
 			this._unoCommandForCopyCutPaste = null;
 			return;
 		}

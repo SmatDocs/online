@@ -16,7 +16,7 @@
 
 #include <config.h>
 
-#include <ConfigUtil.hpp>
+#include "ConfigUtil.hpp"
 
 #include <common/Util.hpp>
 
@@ -24,7 +24,9 @@
 #include <Poco/Util/XMLConfiguration.h>
 
 #include <cassert>
+#include <fstream>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 
@@ -50,8 +52,12 @@ RuntimeConstant<bool> SslTermination;
 // NOTE: This is sorted, please keep it sorted as it's friendlier to readers,
 //       except for properties, which are sorted before the value, e.g.
 //       "setting[@name]" before "setting", which is more readable.
-static const std::unordered_map<std::string, std::string> DefAppConfig = {
+static const Util::UnorderedStringMap<std::string> DefAppConfig = {
+#if !MOBILEAPP
     { "accessibility.enable", "false" },
+#else
+    { "accessibility.enable", "true" },
+#endif
     { "admin_console.enable", "true" },
     { "admin_console.enable_pam", "false" },
     { "admin_console.logging.admin_action", "true" },
@@ -221,10 +227,9 @@ static const std::unordered_map<std::string, std::string> DefAppConfig = {
     { "per_document.max_concurrency", "4" },
     { "per_document.min_time_between_saves_ms", "500" },
     { "per_document.min_time_between_uploads_ms", "5000" },
-    { "per_document.pdf_resolution_dpi", "96" },
     { "per_document.redlining_as_comments", "false" },
     { "per_view.custom_os_info", "" },
-    { "per_view.idle_timeout_secs", "900" },
+    { "per_view.idle_timeout_secs", "3600" },
     { "per_view.min_saved_message_timeout_secs", "6" },
     { "per_view.out_of_focus_timeout_secs", "3600" },
     { "product_name", APP_NAME },
@@ -278,6 +283,8 @@ static const std::unordered_map<std::string, std::string> DefAppConfig = {
     { "storage.ssl.cipher_list", "" },
     // { "storage.ssl.enable" - deliberately not set; for back-compat
     { "storage.ssl.key_file_path", "" },
+    { "storage.wopi.access_token.default_lifetime_mins", "0" },
+    { "storage.wopi.access_token.refresh_timeout_secs", "60" },
     { "storage.wopi.alias_groups[@mode]", "first" },
     { "storage.wopi.is_legacy_server", "false" },
     { "storage.wopi.locking.refresh", "900" },
@@ -330,9 +337,23 @@ void initialize(const std::string& xml)
     initialize(XmlConfig);
 }
 
+void initializeFromFile(const std::string& filename)
+{
+    std::ifstream ifs(filename);
+    if (!ifs)
+    {
+        throw std::invalid_argument("The config xml file [" + filename +
+                                    "] is invalid or not found");
+    }
+
+    std::ostringstream oss;
+    oss << ifs.rdbuf();
+    initialize(oss.str());
+}
+
 bool isInitialized() { return Config != nullptr; }
 
-const std::unordered_map<std::string, std::string>& getDefaultAppConfig() { return DefAppConfig; }
+const Util::UnorderedStringMap<std::string>& getDefaultAppConfig() { return DefAppConfig; }
 
 /// Recursively extract the sub-keys of the given parent key.
 void extract(const std::string& parentKey, const Poco::Util::AbstractConfiguration& config,

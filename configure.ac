@@ -3,10 +3,14 @@
 
 AC_PREREQ([2.63])
 
-AC_INIT([coolwsd], [26.04.0.1], [https://github.com/CollaboraOnline/online/issues], [coolwsd], [https://collaboraonline.github.io/])
+AC_INIT([coolwsd], [26.04.2.0], [https://github.com/CollaboraOnline/online/issues], [coolwsd], [https://www.collaboraoffice.org/])
 LT_INIT([shared, disable-static, dlopen])
 
 AM_INIT_AUTOMAKE([1.10 foreign subdir-objects tar-pax -Wno-portability])
+
+# Make silent build rules the default; pass --disable-silent-rules or
+# build with "make V=1" to get the verbose command output.
+AM_SILENT_RULES([yes])
 
 # Drop the 'u' from automake's default 'cru' to silence the warning:
 # "ar: `u' modifier ignored since `D' is the default (see `U')"
@@ -212,10 +216,10 @@ AC_ARG_WITH([atspi-driver-path],
                             required to run the Qt app tests.]))
 
 AC_ARG_ENABLE(fuzzers,
-    AS_HELP_STRING([--enable-fuzzers],
-        [Enables building libfuzzer targets for fuzz testing. It is useful to enable this switch
-         only in a separate build tree, since the switch disables the creation of a coolwsd
-         binary. For best results: --with-sanitizer=address,undefined])
+    AS_HELP_STRING([--enable-fuzzers@<:@=ENGINE@:>@],
+        [Build fuzzer targets. ENGINE is 'libfuzzer' (default) or 'afl'.
+         Useful in a separate build tree since it disables coolwsd.
+         For best results: --with-sanitizer=address,undefined])
 )
 
 AC_ARG_ENABLE([androidapp],
@@ -284,12 +288,14 @@ AC_ARG_ENABLE([seccomp],
                               Beware of the security consequences!]))
 AC_ARG_WITH([lokit-path],
             AS_HELP_STRING([--with-lokit-path=<path>],
-                           [Path to the "include" directory with the LibreOfficeKit headers]))
+                           [Path to the "include" directory with the COKit headers.
+                            Overrides the value derived from --with-lo-builddir.]))
 
 AC_ARG_WITH([lo-path],
             AS_HELP_STRING([--with-lo-path=<path>],
                            [For Collabora Online, the path to a working installation directory
                            or instdir of Collabora Office, to be used at run-time.
+                           Overrides the value derived from --with-lo-builddir.
 
                            For CODA-W, a *Windows* format path to the core build instdir, used at build-time.
                            All other configure script arguments that are paths are Unix (WSL) paths.]))
@@ -297,15 +303,19 @@ AC_ARG_WITH([lo-path],
 AC_ARG_WITH([lo-sourcedir],
             AS_HELP_STRING([--with-lo-sourcedir=<path>],
                            [Mandatory, and relevant, only for a Wasm build.
-                            Path to a LibreOffice core source tree.]))
+                            Path to a CollaboraOffice core source tree.]))
 
 AC_ARG_WITH([lo-builddir],
             AS_HELP_STRING([--with-lo-builddir=<path>],
-                           [Mandatory, and relevant, in a tree where building the iOS or Android app, or CODA.
-                            Path to a the build directory of the LibreOffice core source tree you want to use.
+                           [Path to the CollaboraOffice (engine) build tree.
+                            For desktop/server builds, sets --with-lokit-path
+                            (to <path>/include) and --with-lo-path (to <path>/instdir)
+                            unless those are given explicitly.
+                            For mobile/CODA builds, this is the path to the build directory of
+                            the CollaboraOffice core source tree you want to use.
                             In case of macOS, you MUST manually edit the ios/Mobile.xcodeproj/project.pbxproj
                             file and change the references to "../ios-device" to refer to the corresponding
-                            LibreOffice core source directory (which typically would be the same as the build
+                            CollaboraOffice core source directory (which typically would be the same as the build
                             directory you specify with this option).
 
                             For Android, if building for multiple ABIs, you should specify multiple trees in the
@@ -333,12 +343,14 @@ AC_ARG_WITH([poco-includes],
 AC_ARG_WITH([zstd-libs],
             AS_HELP_STRING([--with-zstd-libs=<path>],
                            [Path to the directory containing libzstd.a
-                            libraries. For Android, this has the same format as --with-lo-builddir]))
+                            libraries. For Android, this has the same format as --with-lo-builddir.
+                            Not needed or allowed for Windows, we always use the zstd built in engine.]))
 
 AC_ARG_WITH([zstd-includes],
             AS_HELP_STRING([--with-zstd-includes=<path>],
                            [Path to the "include" directory with the zstd
-                            headers. For Android, this has the same format as --with-lo-builddir]))
+                            headers. For Android, this has the same format as --with-lo-builddir.
+                            Not needed or allowed for Windows, we always use the zstd unpacked in engine.]))
 
 AC_ARG_WITH([poco-libs],
             AS_HELP_STRING([--with-poco-libs=<path>],
@@ -348,22 +360,14 @@ AC_ARG_WITH([poco-libs],
 AC_ARG_WITH([libpng-includes],
             AS_HELP_STRING([--with-libpng-includes=<path>],
                            [Path to the "include" directory with the libpng
-                            headers.  Not used on Android.]))
+                            headers. Not used on Android.
+                            Ignored for Windows, we always use the libpng built in engine.]))
 
 AC_ARG_WITH([libpng-libs],
             AS_HELP_STRING([--with-libpng-libs=<path>],
                            [Path to the "lib" directory with the libpng
-                            libraries.  Not used on Android.]))
-
-AC_ARG_WITH([zlib-includes],
-            AS_HELP_STRING([--with-zlib-includes=<path>],
-                           [Path to the "include" directory with the libpng
-                            headers. Only used on Windows.]))
-
-AC_ARG_WITH([zlib-libs],
-            AS_HELP_STRING([--with-zlib-libs=<path>],
-                           [Path to the "lib" directory with the zlib
-                            libraries. Only used on Windows.]))
+                            libraries. Not used on Android.
+                            Ignored for Windows, we always use the libpng built in engine.]))
 
 AC_ARG_WITH([cppunit-includes],
             AS_HELP_STRING([--with-cppunit-includes=<path>],
@@ -452,23 +456,28 @@ AC_ARG_ENABLE([feature-restriction],
               AS_HELP_STRING([--enable-feature-restriction],
                              [Enable control over which uno-commands/feature to disable completely.]))
 
+AC_ARG_ENABLE([wasm-embind-uno],
+              AS_HELP_STRING([--enable-wasm-embind-uno],
+                             [Enable the Embind-based UNO support. Relevant only for a Wasm
+                              build.]))
+
 AC_ARG_ENABLE([wasm-embindtest],
               AS_HELP_STRING([--enable-wasm-embindtest],
-                             [Run the LibreOffice embindtest as part of running the app. Requires
-                              LibreOffice to be built with --enable-dbgutil. Relevant only for a
-                              Wasm build.]))
+                             [Run the CollaboraOffice embindtest as part of running the app. Requires
+                              --enable-wasm-embind-uno. Relevant only for a Wasm build.]))
 
 AC_ARG_WITH([wasm-zetajs],
             AS_HELP_STRING([--with-wasm-zetajs=<path>],
                            [Include zetajs scripting support in the app. (Together with
                             --enable-wasm-embindtest, also run the zetajs smoketest as part of
-                            running the app.) Relevant only for a Wasm build. Path to a zetajs
-                            source tree.]))
+                            running the app.) Requires --enable-wasm-embind-uno. Relevant only for a
+                            Wasm build. Path to a zetajs source tree.]))
 
 AC_ARG_ENABLE([wasm-zetajs-example],
               AS_HELP_STRING([--enable-wasm-zetajs-example],
                              [Include a zetajs scripting example in the app. Requires
-                              --with-wasm-zetajs. Relevant only for a Wasm build.]))
+                              --enable-wasm-embind-uno and --with-wasm-zetajs. Relevant only for a
+                              Wasm build.]))
 
 AC_ARG_ENABLE([experimental],
               AS_HELP_STRING([--enable-experimental],
@@ -653,7 +662,7 @@ AC_DEFUN([CHK_FILE_VAR], dnl $1:env-var, $2:filename-to-match, $3:cleartext-name
            fi
        done
        if test -n "$found_file"; then
-           AC_MSG_RESULT([$found_file])
+           AC_MSG_RESULT([$[$1][$4]])
        else
            AC_MSG_ERROR([This is not a [$3] [$4] directory, none of ($2) found in $[$1][$4]])
        fi
@@ -706,14 +715,14 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_w
    fi
 
    if test "$host_os" = emscripten; then
-      AC_MSG_CHECKING([for LibreOffice source tree to build against])
+      AC_MSG_CHECKING([for CollaboraOffice source tree to build against])
       if test -z "$with_lo_sourcedir"; then
          AC_MSG_ERROR([You MUST use the --with-lo-sourcedir option when configuring a Wasm build.])
       fi
       LOSOURCEDIR=$(readlink -f "$with_lo_sourcedir")
    fi
 
-   AC_MSG_CHECKING([for LibreOffice build tree to build against])
+   AC_MSG_CHECKING([for CollaboraOffice build tree to build against])
    if test -z "$with_lo_builddir"; then
       AC_MSG_ERROR([You MUST use the --with-lo-builddir option when configuring the mobile or Windows app build tree.])
    fi
@@ -755,7 +764,7 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_w
    if test -f "$LOBUILDDIR/instdir/program/$setuprc"; then
       AC_MSG_RESULT([$LOBUILDDIR])
    else
-      AC_MSG_ERROR([This is not a LibreOffice core build directory: $LOBUILDDIR])
+      AC_MSG_ERROR([This is not a CollaboraOffice core build directory: $LOBUILDDIR])
    fi
 
    CORE_VERSION_HASH=`grep buildid $LOBUILDDIR/instdir/program/$setuprc | sed -e 's/buildid=//' -e 's/............................$//'`
@@ -764,7 +773,7 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_w
       if test -f "$LOBUILDDIR_ARM64_V8A/workdir/LinkTarget/StaticLibrary/liblibpng.a" ; then
          AC_MSG_RESULT([$LOBUILDDIR_ARM64_V8A])
       else
-         AC_MSG_ERROR([This is not a LibreOffice ARM64 core build directory: $LOBUILDDIR_ARM64_V8A])
+         AC_MSG_ERROR([This is not a CollaboraOffice ARM64 core build directory: $LOBUILDDIR_ARM64_V8A])
       fi
    fi
 
@@ -772,7 +781,7 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_w
       if test -f "$LOBUILDDIR_X86/workdir/LinkTarget/StaticLibrary/liblibpng.a" ; then
          AC_MSG_RESULT([$LOBUILDDIR_X86])
       else
-         AC_MSG_ERROR([This is not a LibreOffice x86 core build directory: $LOBUILDDIR_X86])
+         AC_MSG_ERROR([This is not a CollaboraOffice x86 core build directory: $LOBUILDDIR_X86])
       fi
    fi
 
@@ -780,7 +789,7 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_w
       if test -f "$LOBUILDDIR_X86_64/workdir/LinkTarget/StaticLibrary/liblibpng.a" ; then
          AC_MSG_RESULT([$LOBUILDDIR_X86_64])
       else
-         AC_MSG_ERROR([This is not a LibreOffice x86-64 core build directory: $LOBUILDDIR_X86_64])
+         AC_MSG_ERROR([This is not a CollaboraOffice x86-64 core build directory: $LOBUILDDIR_X86_64])
       fi
    fi
 
@@ -852,8 +861,7 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_m
 
    # Sanity checks
    if test "$enable_windowsapp" = "yes"; then
-      CHK_FILE_VAR(POCOLIB,PocoFoundationmd.lib,Poco lib)
-      CHK_FILE_VAR(POCOLIB,PocoFoundationmdd.lib,Poco lib)
+      CHK_FILE_VAR(POCOLIB,PocoFoundationmd.lib PocoFoundationmdd.lib,Poco lib)
    else
       CHK_FILE_VAR(POCOLIB,libPocoFoundation.a libPocoFoundation.so libPocoFoundation.dylib,Poco lib)
       CHK_FILE_VAR(POCOLIB,libPocoFoundation.a,Poco lib,_ARM64_V8A)
@@ -869,78 +877,75 @@ if test \( "$enable_iosapp" = "yes" -a `uname -s` = "Darwin" \) -o \( "$enable_m
        POCODEBUG=d
    fi
 
-   AC_MSG_CHECKING([for zstd include directory to build against])
-   if test -z "$with_zstd_includes"; then
-      AC_MSG_ERROR([You MUST use the --with-zstd-includes option when configuring the mobile or Windows app build tree.])
-   fi
-
-   if test -z "$with_zstd_libs"; then
-      AC_MSG_ERROR([You MUST use the --with-zstd-libs option when configuring the mobile or Windows app build tree.])
-   fi
-
-   ZSTDINCLUDE="$with_zstd_includes"
-   if test "$enable_androidapp" = "yes" ; then
-      if echo "$ZSTDINCLUDE" | grep -qs ':' ; then
-         ZSTDINCLUDE=`echo $with_zstd_includes | cut -d: -f1`
-         ZSTDINCLUDE_ARM64_V8A=`echo $with_zstd_includes | cut -d: -f2`
-         ZSTDINCLUDE_X86=`echo $with_zstd_includes | cut -d: -f3`
-         ZSTDINCLUDE_X86_64=`echo $with_zstd_includes | cut -d: -f4`
+   if test "$enable_windowsapp" = "yes"; then
+      # We know that zstd has been unpacked and built in engine; no need to look for it.
+      if test -n "$with_zstd_includes"; then
+         AC_MSG_WARN([Ignoring --with-zstd-includes when configuring the Windows app.])
       fi
-
-      if test -z "$ZSTDINCLUDE_ARM64_V8A" ; then
-         ZSTDINCLUDE_ARM64_V8A="$ZSTDINCLUDE"
+      if test -n "$with_zstd_libs"; then
+         AC_MSG_WARN([Ignoring --with-zstd-libs when configuring the Windows app.])
       fi
-      if test -z "$ZSTDINCLUDE_X86" ; then
-         ZSTDINCLUDE_X86="$ZSTDINCLUDE"
-      fi
-      if test -z "$ZSTDINCLUDE_X86_64" ; then
-         ZSTDINCLUDE_X86_64="$ZSTDINCLUDE"
-      fi
-   fi
-
-   # Sanity checks
-   CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include)
-   CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include,_ARM64_V8A)
-   CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include,_X86)
-   CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include,_X86_64)
-
-   if test "$enable_windowsapp" = "yes" ; then
-      ZSTDINCLUDE_WINDOWS=`cd "$ZSTDINCLUDE" && cmd.exe /c cd | tr '\\\\' '/' | tr -d '\r'`
-   fi
-
-   AC_MSG_CHECKING([for zstd lib directory to build against])
-
-   ZSTDLIB="$with_zstd_libs"
-   if test "$enable_androidapp" = "yes" ; then
-      if echo "$ZSTDLIB" | grep -qs ':' ; then
-         ZSTDLIB=`echo $with_zstd_libs | cut -d: -f1`
-         ZSTDLIB_ARM64_V8A=`echo $with_zstd_libs | cut -d: -f2`
-         ZSTDLIB_X86=`echo $with_zstd_libs | cut -d: -f3`
-         ZSTDLIB_X86_64=`echo $with_zstd_libs | cut -d: -f4`
-      fi
-
-      if test -z "$ZSTDLIB_ARM64_V8A" ; then
-         ZSTDLIB_ARM64_V8A="$ZSTDLIB"
-      fi
-      if test -z "$ZSTDLIB_X86" ; then
-         ZSTDLIB_X86="$ZSTDLIB"
-      fi
-      if test -z "$ZSTDLIB_X86_64" ; then
-         ZSTDLIB_X86_64="$ZSTDLIB"
-      fi
-   fi
-
-   if test "$enable_windowsapp"; then
-      CHK_FILE_VAR(ZSTDLIB,libzstd_static.lib,Zstd lib)
    else
+      AC_MSG_CHECKING([for zstd include directory to build against])
+      if test -z "$with_zstd_includes"; then
+         AC_MSG_ERROR([You MUST use the --with-zstd-includes option when configuring the mobile app build tree.])
+      fi
+
+      if test -z "$with_zstd_libs"; then
+         AC_MSG_ERROR([You MUST use the --with-zstd-libs option when configuring the mobile app build tree.])
+      fi
+      ZSTDINCLUDE="$with_zstd_includes"
+      if test "$enable_androidapp" = "yes" ; then
+         if echo "$ZSTDINCLUDE" | grep -qs ':' ; then
+            ZSTDINCLUDE=`echo $with_zstd_includes | cut -d: -f1`
+            ZSTDINCLUDE_ARM64_V8A=`echo $with_zstd_includes | cut -d: -f2`
+            ZSTDINCLUDE_X86=`echo $with_zstd_includes | cut -d: -f3`
+            ZSTDINCLUDE_X86_64=`echo $with_zstd_includes | cut -d: -f4`
+         fi
+
+         if test -z "$ZSTDINCLUDE_ARM64_V8A" ; then
+            ZSTDINCLUDE_ARM64_V8A="$ZSTDINCLUDE"
+         fi
+         if test -z "$ZSTDINCLUDE_X86" ; then
+            ZSTDINCLUDE_X86="$ZSTDINCLUDE"
+         fi
+         if test -z "$ZSTDINCLUDE_X86_64" ; then
+            ZSTDINCLUDE_X86_64="$ZSTDINCLUDE"
+         fi
+      fi
+
+      # Sanity checks
+      CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include)
+      CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include,_ARM64_V8A)
+      CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include,_X86)
+      CHK_FILE_VAR(ZSTDINCLUDE,zstd.h,Zstd include,_X86_64)
+
+      AC_MSG_CHECKING([for zstd lib directory to build against])
+
+      ZSTDLIB="$with_zstd_libs"
+      if test "$enable_androidapp" = "yes" ; then
+         if echo "$ZSTDLIB" | grep -qs ':' ; then
+            ZSTDLIB=`echo $with_zstd_libs | cut -d: -f1`
+            ZSTDLIB_ARM64_V8A=`echo $with_zstd_libs | cut -d: -f2`
+            ZSTDLIB_X86=`echo $with_zstd_libs | cut -d: -f3`
+            ZSTDLIB_X86_64=`echo $with_zstd_libs | cut -d: -f4`
+         fi
+
+         if test -z "$ZSTDLIB_ARM64_V8A" ; then
+            ZSTDLIB_ARM64_V8A="$ZSTDLIB"
+         fi
+         if test -z "$ZSTDLIB_X86" ; then
+            ZSTDLIB_X86="$ZSTDLIB"
+         fi
+         if test -z "$ZSTDLIB_X86_64" ; then
+            ZSTDLIB_X86_64="$ZSTDLIB"
+         fi
+      fi
+
       CHK_FILE_VAR(ZSTDLIB,libzstd.a,Zstd lib)
       CHK_FILE_VAR(ZSTDLIB,libzstd.a,Zstd lib,_ARM64_V8A)
       CHK_FILE_VAR(ZSTDLIB,libzstd.a,Zstd lib,_X86)
       CHK_FILE_VAR(ZSTDLIB,libzstd.a,Zstd lib,_X86_64)
-   fi
-
-   if test "$enable_windowsapp" = "yes" ; then
-     ZSTDLIB_WINDOWS=`cd "$ZSTDLIB" && cmd.exe /c cd | tr '\\\\' '/' | tr -d '\r'`
    fi
 fi
 
@@ -967,50 +972,50 @@ AC_SUBST(ZSTDINCLUDE)
 AC_SUBST(ZSTDINCLUDE_ARM64_V8A)
 AC_SUBST(ZSTDINCLUDE_X86)
 AC_SUBST(ZSTDINCLUDE_X86_64)
-AC_SUBST(ZSTDINCLUDE_WINDOWS)
 AC_SUBST(ZSTDLIB)
 AC_SUBST(ZSTDLIB_ARM64_V8A)
 AC_SUBST(ZSTDLIB_X86)
 AC_SUBST(ZSTDLIB_X86_64)
-AC_SUBST(ZSTDLIB_WINDOWS)
 AC_SUBST([CORE_VERSION_HASH])
 
-AC_DEFINE_UNQUOTED([CORE_VERSION_HASH],[["$CORE_VERSION_HASH"]],[LibreOffice core git hash if present])
+AC_DEFINE_UNQUOTED([CORE_VERSION_HASH],[["$CORE_VERSION_HASH"]],[CollaboraOffice core git hash if present])
 
-LIBPNG_INCLUDES="$with_libpng_includes"
-LIBPNG_LIBS="$with_libpng_libs"
-LIBPNG_STATIC_LIB=""
+if test "$enable_windowsapp" = "yes"; then
+   # We know that libpng has been unpacked and built in engine; no need to look for it.
+   if test -n "$with_libpng_includes"; then
+      AC_MSG_WARN([Ignoring --with-libpng-includes when configuring the Windows app.])
+   fi
+   if test -n "$with_libpng_libs"; then
+      AC_MSG_WARN([Ignoring --with-libpng-libs when configuring the Windows app.])
+   fi
+else
+   LIBPNG_INCLUDES="$with_libpng_includes"
+   LIBPNG_LIBS="$with_libpng_libs"
+   LIBPNG_STATIC_LIB=""
+fi
 
 if test "$enable_macosapp" = "yes"; then
    AC_MSG_CHECKING([for libpng include directory to build against])
    CHK_FILE_VAR(LIBPNG_INCLUDES,png.h,png.h include)
    AC_MSG_CHECKING([for static libpng lib to build against])
-   CHK_FILE_VAR(LIBPNG_LIBS,libpng.a liblibpng.a,libpng,,LIBPNG_STATIC_LIB) dnl LibreOffice wrongly builds libpng as liblibpng.a
-fi
-
-if test "$enable_windowsapp" = "yes" ; then
-   LIBPNG_INCLUDES_WINDOWS=`cd "$LIBPNG_INCLUDES" && cmd.exe /c cd | tr '\\\\' '/' | tr -d '\r'`
-   LIBPNG_LIBS_WINDOWS=`cd "$LIBPNG_LIBS" && cmd.exe /c cd | tr '\\\\' '/' | tr -d '\r'`
+   CHK_FILE_VAR(LIBPNG_LIBS,libpng.a liblibpng.a,libpng,,LIBPNG_STATIC_LIB) dnl CollaboraOffice wrongly builds libpng as liblibpng.a
 fi
 
 AC_SUBST(LIBPNG_INCLUDES)
-AC_SUBST(LIBPNG_INCLUDES_WINDOWS)
 AC_SUBST(LIBPNG_LIBS)
-AC_SUBST(LIBPNG_LIBS_WINDOWS)
 AC_SUBST(LIBPNG_STATIC_LIB)
 
-ZLIB_INCLUDES="$with_zlib_includes"
-ZLIB_LIBS="$with_zlib_libs"
-
-if test "$enable_windowsapp" = "yes" ; then
-   ZLIB_INCLUDES_WINDOWS=`cd "$ZLIB_INCLUDES" && cmd.exe /c cd | tr '\\\\' '/' | tr -d '\r'`
-   ZLIB_LIBS_WINDOWS=`cd "$ZLIB_LIBS" && cmd.exe /c cd | tr '\\\\' '/' | tr -d '\r'`
-fi
-
-AC_SUBST(ZLIB_INCLUDES_WINDOWS)
-AC_SUBST(ZLIB_LIBS_WINDOWS)
-
 if test "$enable_iosapp" != yes -a "$enable_windowsapp" != yes -a "$enable_androidapp" != yes; then
+   if test -z "$with_lo_builddir"; then
+      with_lo_builddir="engine"
+   fi
+   if test -z "$with_lokit_path"; then
+      with_lokit_path="$with_lo_builddir/include"
+   fi
+   if test -z "$with_lo_path"; then
+      with_lo_path="$with_lo_builddir/instdir"
+   fi
+
    LOKIT_PATH=`readlink -f $with_lokit_path`
 fi
 
@@ -1081,7 +1086,7 @@ else
 fi
 AC_SUBST(VENDOR)
 
-INFO_URL='https://collaboraonline.github.io/'
+INFO_URL='https://www.collaboraoffice.org/'
 if test -n "$with_info_url" -a "$with_info_url" != "no"; then
     INFO_URL="$with_info_url"
 fi
@@ -1284,7 +1289,15 @@ AS_IF([test "$ENABLE_QTAPP" != true],
 CFLAGS="$CFLAGS -Wall -Wextra"
 
 AC_MSG_CHECKING([whether to use extra compiler hardening flags])
+enable_hardening=yes
 if test "$enable_hardening_flags" = no -o "$host_os" = "emscripten" -o "x$with_sanitizer" != "x"; then
+    enable_hardening=no
+fi
+case "$enable_fuzzers" in
+    no|"") ;;
+    *) enable_hardening=no ;;
+esac
+if test "$enable_hardening" = no; then
     AC_MSG_RESULT([no])
  else
     AC_MSG_RESULT([yes])
@@ -1301,10 +1314,10 @@ if test "$enable_hardening_flags" = no -o "$host_os" = "emscripten" -o "x$with_s
 
     AC_MSG_CHECKING([whether $CC supports -D_FORTIFY_SOURCE=2])
     save_CFLAGS=$CFLAGS
-    CFLAGS="$CFLAGS -Werror -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2"
+    CFLAGS="$CFLAGS -Werror -Wp,-U_FORTIFY_SOURCE -Wp,-D_FORTIFY_SOURCE=2"
     AC_LINK_IFELSE(
         [AC_LANG_PROGRAM([[#include <string.h>]], [[return 0;]])],
-        [AC_MSG_RESULT([yes]); HARDENING_CFLAGS="$HARDENING_CFLAGS -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2"],
+        [AC_MSG_RESULT([yes]); HARDENING_CFLAGS="$HARDENING_CFLAGS -Wp,-U_FORTIFY_SOURCE -Wp,-D_FORTIFY_SOURCE=2"],
         [AC_MSG_RESULT([no])])
     CFLAGS=$save_CFLAGS
 
@@ -1376,24 +1389,111 @@ AC_DEFINE_UNQUOTED([CODE_COVERAGE],[$CODE_COVERAGE],[Define to 1 if this is a co
 AM_CONDITIONAL([ENABLE_CODE_COVERAGE], [test "$CODE_COVERAGE" = "1"])
 
 # Fuzzing.
-AC_MSG_CHECKING([whether to build fuzzers])
-if test "$enable_fuzzers" = "yes"; then
-    AC_MSG_RESULT([yes])
-    AC_MSG_CHECKING([whether sanitizers are enabled])
-    if test "x$with_sanitizer" != "x"; then
-    AC_MSG_RESULT([yes ($with_sanitizer)])
-    with_sanitizer="$with_sanitizer,fuzzer-no-link"
-    else
-    AC_MSG_RESULT([no])
-    with_sanitizer="fuzzer-no-link"
-    fi
-    LIBFUZZER=1
-else
-    AC_MSG_RESULT([no])
-    LIBFUZZER=0
+AC_MSG_CHECKING([fuzzer engine])
+case "$enable_fuzzers" in
+    yes|libfuzzer)
+        FUZZER_ENGINE=libfuzzer
+        AC_MSG_RESULT([libfuzzer])
+        if test "x$with_sanitizer" != "x"; then
+            with_sanitizer="$with_sanitizer,fuzzer-no-link"
+        else
+            with_sanitizer="fuzzer-no-link"
+        fi
+        LIBFUZZER=1
+        CXXFLAGS="$CXXFLAGS -O3"
+        ;;
+    afl)
+        FUZZER_ENGINE=afl
+        AC_MSG_RESULT([afl])
+        AFL_CXX=""
+        for afl_compiler in afl-clang-lto++ afl-clang-fast++ afl-c++ ; do
+            if command -v $afl_compiler >/dev/null 2>&1; then
+                AFL_CXX=$afl_compiler
+                break
+            fi
+        done
+        if test -z "$AFL_CXX"; then
+            AC_MSG_ERROR([AFL++ compiler not found in PATH (tried afl-clang-lto++, afl-clang-fast++, afl-c++)])
+        fi
+        AFL_CC=$(echo "$AFL_CXX" | sed 's/++$//')
+        AC_MSG_NOTICE([using AFL++ compiler: CXX=$AFL_CXX CC=$AFL_CC])
+        if test "x$with_sanitizer" != "x"; then
+            with_sanitizer="$with_sanitizer,fuzzer-no-link"
+        else
+            with_sanitizer="fuzzer-no-link"
+        fi
+        # The _san variant must use afl-clang-fast++, find it explicitly
+        AFL_CLANG_FAST_CXX=""
+        AFL_CLANG_FAST_CC=""
+        for afl_san_compiler in afl-clang-fast++ ; do
+            if command -v $afl_san_compiler >/dev/null 2>&1; then
+                AFL_CLANG_FAST_CXX=$afl_san_compiler
+                AFL_CLANG_FAST_CC=$(echo "$afl_san_compiler" | sed 's/++$//')
+                break
+            fi
+        done
+        if test -z "$AFL_CLANG_FAST_CXX"; then
+            AC_MSG_ERROR([afl-clang-fast++ not found (required for sanitizer variant)])
+        fi
+        AC_MSG_NOTICE([AFL++ san compiler: $AFL_CLANG_FAST_CXX])
+        # AFL++ needs libAFLDriver.a to provide main() for LLVMFuzzerTestOneInput harnesses
+        AFL_DRIVER_LIB=""
+        for dir in $(dirname $(command -v $AFL_CXX))/../lib/afl /usr/local/lib/afl /usr/lib/afl ; do
+            if test -f "$dir/libAFLDriver.a"; then
+                AFL_DRIVER_LIB="$dir/libAFLDriver.a"
+                break
+            fi
+        done
+        if test -z "$AFL_DRIVER_LIB"; then
+            AC_MSG_ERROR([libAFLDriver.a not found (needed to link LLVMFuzzerTestOneInput harnesses)])
+        fi
+        AC_MSG_NOTICE([AFL++ driver: $AFL_DRIVER_LIB])
+        LIBFUZZER=1
+        CXXFLAGS="$CXXFLAGS -O3"
+        ;;
+    no|"")
+        FUZZER_ENGINE=""
+        AFL_DRIVER_LIB=""
+        AC_MSG_RESULT([none])
+        LIBFUZZER=0
+        ;;
+    *)
+        AC_MSG_ERROR([unknown fuzzer engine '$enable_fuzzers' (use 'libfuzzer' or 'afl')])
+        ;;
+esac
+if test "$LIBFUZZER" = "1"; then
+    # We require LTO for both libFuzzer and AFL. Unfortunately, with ThinLTO,
+    # via either ld.bfd's LLVMgold plugin or lld's native ThinLTO, crash on
+    # this codebase under clang/lld 18, but full -flto via lld links cleanly.
+    # -Wl,--no-gc-sections works around a clang/lld LTO+ASan bug where
+    # .text.asan.module_dtor.* sections are GC'd while still referenced from
+    # .fini_array, breaking the link.
+    # Verify the toolchain supports the link recipe up-front. The flags are
+    # NOT added to global LDFLAGS, rather they are exported as @FUZZER_LDFLAGS@
+    # for fuzzer/Makefile.am to apply per-target, so test/ binaries built under
+    # --enable-fuzzers don't pay the LTO link cost (we want them for sanity checks).
+    AC_MSG_CHECKING([for working -flto -fuse-ld=lld -Wl,--no-gc-sections (required by fuzzer build)])
+    fuzzer_check_saved_LDFLAGS=$LDFLAGS
+    LDFLAGS="$LDFLAGS -flto -fuse-ld=lld -Wl,--no-gc-sections"
+    AC_LANG_PUSH([C++])
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([], [])],
+        [AC_MSG_RESULT([yes])
+         FUZZER_LDFLAGS="-flto -fuse-ld=lld -Wl,--no-gc-sections"],
+        [AC_MSG_RESULT([no])
+         AC_MSG_ERROR([the fuzzer build requires a C++ toolchain that links with '-flto -fuse-ld=lld -Wl,--no-gc-sections'; install lld (e.g. apt install lld) and a clang/gcc that supports -flto, or omit --enable-fuzzers])])
+    AC_LANG_POP([C++])
+    LDFLAGS=$fuzzer_check_saved_LDFLAGS
 fi
-AC_DEFINE_UNQUOTED([LIBFUZZER],[$LIBFUZZER],[Define to 1 if this is a libfuzzer build.])
-AM_CONDITIONAL([ENABLE_LIBFUZZER], [test "$LIBFUZZER" = "1"])
+AC_DEFINE_UNQUOTED([LIBFUZZER],[$LIBFUZZER],[Define to 1 if this is a fuzzer build.])
+AM_CONDITIONAL([ENABLE_FUZZERS], [test "$LIBFUZZER" = "1"])
+AM_CONDITIONAL([ENABLE_AFL], [test "$FUZZER_ENGINE" = "afl"])
+AC_SUBST([FUZZER_ENGINE])
+AC_SUBST([FUZZER_LDFLAGS])
+AC_SUBST([AFL_DRIVER_LIB])
+AC_SUBST([AFL_CXX])
+AC_SUBST([AFL_CC])
+AC_SUBST([AFL_CLANG_FAST_CXX])
+AC_SUBST([AFL_CLANG_FAST_CC])
 
 # Sanitizers.
 CXXFLAGS_CXXSTD=
@@ -1401,10 +1501,16 @@ AC_MSG_CHECKING([whether to turn sanitizers on])
 if test "x$with_sanitizer" != "x"; then
     AC_MSG_RESULT([yes ($with_sanitizer)])
     LIBSAN=-static-libasan
+    if test "x$enable_fuzzers" != "x"; then
+        # With the fuzzers, keep the -O3 set in the engine branch.
+        OPT_FLAGS=""
+    else
+        OPT_FLAGS="-O1 -fno-omit-frame-pointer"
+    fi
     for flag in -static-libasan -static-libsan ; do
         AC_MSG_CHECKING([whether to use $flag])
         save_CXXFLAGS=$CXXFLAGS
-        CXXFLAGS="$CXXFLAGS -O1 -fno-omit-frame-pointer -fsanitize=$with_sanitizer -frtti $flag"
+        CXXFLAGS="$CXXFLAGS $OPT_FLAGS -fsanitize=$with_sanitizer -frtti $flag"
         AC_LANG_PUSH([C++])
         AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
             ]])],[CXXFLAGS_CXXSTD=$flag])
@@ -1418,14 +1524,14 @@ if test "x$with_sanitizer" != "x"; then
             AC_MSG_RESULT([no])
         fi
     done
-    SANITIZER_FLAGS="-O1 -fno-omit-frame-pointer -fsanitize=$with_sanitizer $LIBSAN"
+    SANITIZER_FLAGS="$OPT_FLAGS -fsanitize=$with_sanitizer $LIBSAN"
     CXXFLAGS="$CXXFLAGS -frtti $SANITIZER_FLAGS"
     CFLAGS="$CFLAGS $SANITIZER_FLAGS"
 else
     AC_MSG_RESULT([no])
 fi
 ENABLE_RUNTIME_OPTIMIZATIONS=
-for i in $CC; do
+for i in $CXX $CXXFLAGS; do
     case $i in
     -fsanitize=*)
         ENABLE_RUNTIME_OPTIMIZATIONS=no
@@ -1490,14 +1596,14 @@ AS_IF([test -n "$LOKIT_PATH"],
 lokit_msg="$LOKIT_PATH"
 
 AS_IF([test "$ENABLE_IOSAPP" != "true" -a "$ENABLE_ANDROIDAPP" != "true"],
-      [AC_MSG_CHECKING([for LibreOffice path])
+      [AC_MSG_CHECKING([for CollaboraOffice path])
       if test -n "$with_lo_path"; then
           # strip trailing '/' from LO_PATH, 'ln -s' with such path will otherwise fail
           if test "$ENABLE_WINDOWSAPP" != "true"; then
               LO_PATH=`readlink -f ${with_lo_path%/}`
           else
               # LO_PATH is the path used at run-time to find the
-              # LibreOffice shared libraries. When running configure
+              # CollaboraOffice shared libraries. When running configure
               # for CODA-W, LO_PATH will be used only at compilation
               # time. Thus it should be a Windows path and not a WSL
               # one. Additionally, because it is used by the Visual
@@ -1505,33 +1611,48 @@ AS_IF([test "$ENABLE_IOSAPP" != "true" -a "$ENABLE_ANDROIDAPP" != "true"],
               # backslashes as path separators.
               LO_PATH="$with_lo_path"
           fi
-          AC_MSG_RESULT([found])
+          AC_MSG_RESULT([given])
       else
-          AC_MSG_RESULT([not found])
-          AS_IF([test "$enable_fuzzers" != "yes"],
-                [AC_MSG_ERROR([LibreOffice path must be configured: --with-lo-path])])
+          AC_MSG_RESULT([not given])
+          AS_IF([test "$LIBFUZZER" != "1"],
+                [AC_MSG_ERROR([CollaboraOffice path must be configured: --with-lo-path])])
       fi
       ])
 
-JAIL_PATH=not-set
 SYSTEMPLATE_PATH=not-set
 have_lo_path=false
-AC_MSG_CHECKING([whether to run tests against a LibreOffice])
-version_file="$with_lo_path/program/versionrc"
-version_file_macos="$with_lo_path/Contents/Resources/versionrc"
-if test -f $version_file; then
-    JAILS_PATH="\${abs_top_builddir}/jails"
-    CACHE_PATH="\${abs_top_builddir}/cache"
-    SYSTEMPLATE_PATH="\${abs_top_builddir}/systemplate"
-    have_lo_path=true
-    lo_msg="test against $LO_PATH"
-    AC_MSG_RESULT([yes])
-elif test `uname -s` = Darwin -a -f "$version_file_macos"; then
-    JAILS_PATH="\${abs_top_builddir}/jails"
-    SYSTEMPLATE_PATH="\${abs_top_builddir}/systemplate"
-    have_lo_path=true
-    lo_msg="test against $LO_PATH"
-    AC_MSG_RESULT([yes])
+AC_MSG_CHECKING([whether to run tests against a CollaboraOffice])
+if test -n "$with_lo_path"; then
+    if test `uname -s` = Darwin; then
+        version_file="$with_lo_path/Contents/Resources/versionrc"
+    elif test "$ENABLE_WINDOWSAPP" = "true"; then
+        # --with-lo-path is a Windows path (e.g. L:\...) used at run-time;
+        # check via the WSL/Cygwin form of the same instdir under LOBUILDDIR.
+        # On Windows the file is version.ini, not versionrc.
+        version_file="$LOBUILDDIR/instdir/program/version.ini"
+    else
+        version_file="$with_lo_path/program/versionrc"
+    fi
+    if test -f $version_file; then
+        JAILS_PATH="\${abs_top_builddir}/jails"
+        SYSTEMPLATE_PATH="\${abs_top_builddir}/systemplate"
+        if test `uname -s` != Darwin; then
+            CACHE_PATH="\${abs_top_builddir}/cache"
+        fi
+        have_lo_path=true
+        lo_msg="test against $LO_PATH"
+        AC_MSG_RESULT([yes])
+    elif test "$ENABLE_DEBUG" = "true"; then
+        # In a debug build --with-lo-path is expected to point at a real
+        # build-time installation that "make run" can launch.  In a
+        # production/packaging build it is the run-time install path
+        # (e.g. /opt/collaboraoffice/) baked into coolwsd, which does
+        # not need to exist at configure time.
+        AC_MSG_ERROR([bad --with-lo-path; file does not exist: $version_file])
+    else
+        lo_msg="no integration tests"
+        AC_MSG_RESULT([no])
+    fi
 else
     lo_msg="no integration tests"
     AC_MSG_RESULT([no])
@@ -1545,7 +1666,7 @@ if test "$enable_macosapp" = "yes" ; then
 fi
 
 AC_SUBST(LO_PATH)
-AC_DEFINE_UNQUOTED([LO_PATH],["$LO_PATH"],[Path to LibreOffice installation])
+AC_DEFINE_UNQUOTED([LO_PATH],["$LO_PATH"],[Path to CollaboraOffice installation])
 AC_SUBST(JAILS_PATH)
 AC_SUBST(CACHE_PATH)
 AC_SUBST(SYSTEMPLATE_PATH)
@@ -1624,9 +1745,7 @@ AS_IF([test "$ENABLE_WINDOWSAPP" != "true"],
 dnl config for qtapp frontend for cool
 AS_IF([test "$ENABLE_QTAPP" = true],
       [
-       PKG_CHECK_MODULES([QT6],
-             [Qt6Core Qt6Widgets Qt6Gui Qt6WebEngineCore Qt6WebChannel Qt6WebEngineWidgets Qt6DBus Qt6PrintSupport],,
-             [AC_MSG_ERROR([Qt6 not found. Set QT6_CFLAGS and QT6_LIBS if your distro lacks .pc files.])])
+       PKG_CHECK_MODULES([QT6], [Qt6Core Qt6Widgets Qt6Gui Qt6WebEngineCore Qt6WebChannel Qt6WebEngineWidgets Qt6DBus Qt6PrintSupport])
 
        dnl Locate qtpaths6 for Qt6 tool discovery
        AC_PATH_PROG([QTPATHS6], [qtpaths6], [no],
@@ -1653,7 +1772,7 @@ AS_IF([test "$ENABLE_QTAPP" = true],
              AC_MSG_RESULT([$LRELEASE])
        else
              AC_MSG_RESULT([no])
-             AC_MSG_ERROR([lrelease not found in $QT_BIN_DIR])
+             AC_MSG_ERROR([lrelease not found in $QT_BIN_DIR, please install qt6-tools-linguist or so.])
        fi
        AC_SUBST(LRELEASE)
 
@@ -1792,9 +1911,9 @@ AS_IF([test "$ENABLE_SSL" = "true"],
       [LIBS="$LIBS -lssl -lcrypto"])
 
 AS_IF([test "$ENABLE_IOSAPP" != "true" -a "$ENABLE_WINDOWSAPP" != "true" -a "$ENABLE_ANDROIDAPP" != "true" -a "$ENABLE_MACOSAPP" != "true" -a "$host_os" != "emscripten"],
-      [AC_CHECK_HEADERS([LibreOfficeKit/LibreOfficeKit.h],
+      [AC_CHECK_HEADERS([COKit/COKit.h],
                         [],
-                        [AC_MSG_ERROR([header LibreOfficeKit/LibreOfficeKit.h not found, perhaps you want to use --with-lokit-path])])
+                        [AC_MSG_ERROR([header COKit/COKit.h not found, perhaps you want to use --with-lokit-path])])
        AC_CHECK_HEADERS([Poco/Net/WebSocket.h],
                         [],
                         [AC_MSG_ERROR([header Poco/Net/WebSocket.h not found, perhaps you want to use --with-poco-includes])])
@@ -2206,23 +2325,46 @@ fi
 AC_SUBST(FEATURE_RESTRICTION_CONFIGURATION)
 AM_SUBST_NOTMAKE(FEATURE_RESTRICTION_CONFIGURATION)
 
-ENABLE_WASM_EMBINDTEST=
+ENABLE_WASM_EMBIND_UNO=
 if test "$host_os" = emscripten; then
-    AC_MSG_CHECKING([whether to run the LibreOffice embindtest])
-    if test "$enable_wasm_embindtest" = yes; then
+    AC_MSG_CHECKING([whether to enable the Embind-based UNO support])
+    if test "$enable_wasm_embind_uno" = yes; then
         AC_MSG_RESULT([yes])
-        AC_MSG_CHECKING([whether the LibreOffice installation includes embindtest])
-        if test ! -f "$LOBUILDDIR"/instdir/program/soffice.js.linkdeps; then
-            AC_MSG_ERROR([cannot find $LOBUILDDIR/instdir/program/soffice.js.linkdeps])
-        elif ! LC_ALL=POSIX grep -E -q -e '(^|[[[:space:]]])-lembindtestlo($|[[[:space:]]])' \
-                "$LOBUILDDIR"/instdir/program/soffice.js.linkdeps
-        then
+        AC_MSG_CHECKING([whether the CollaboraOffice installation includes the Embind-base UNO support])
+        if test ! -f "$LOBUILDDIR"/workdir/CustomTarget/static/unoembind/bindings_uno.js; then
             AC_MSG_ERROR(
-                [cannot find -lembindtestlo in $LOBUILDDIR/instdir/program/soffice.js.linkdeps])
+                [cannot find $LOBUILDDIR/workdir/CustomTarget/static/unoembind/bindings_uno.js])
         else
             AC_MSG_RESULT([yes])
         fi
-        ENABLE_WASM_EMBINDTEST=true
+        ENABLE_WASM_EMBIND_UNO=true
+    else
+        AC_MSG_RESULT([no])
+    fi
+fi
+AM_CONDITIONAL([ENABLE_WASM_EMBIND_UNO], [test "$ENABLE_WASM_EMBIND_UNO" = true])
+
+ENABLE_WASM_EMBINDTEST=
+if test "$host_os" = emscripten; then
+    AC_MSG_CHECKING([whether to run the CollaboraOffice embindtest])
+    if test "$enable_wasm_embindtest" = yes; then
+        if test "$ENABLE_WASM_EMBIND_UNO" != true; then
+            AC_MSG_ERROR([requires --enable-wasm-embind-uno])
+        else
+            AC_MSG_RESULT([yes])
+            AC_MSG_CHECKING([whether the CollaboraOffice installation includes embindtest])
+            if test ! -f "$LOBUILDDIR"/instdir/program/soffice.js.linkdeps; then
+                AC_MSG_ERROR([cannot find $LOBUILDDIR/instdir/program/soffice.js.linkdeps])
+            elif ! LC_ALL=POSIX grep -E -q -e '(^|[[[:space:]]])-ltestunolo($|[[[:space:]]])' \
+                    "$LOBUILDDIR"/instdir/program/soffice.js.linkdeps
+            then
+                AC_MSG_ERROR(
+                    [cannot find -ltestunolo in $LOBUILDDIR/instdir/program/soffice.js.linkdeps])
+            else
+                AC_MSG_RESULT([yes])
+            fi
+            ENABLE_WASM_EMBINDTEST=true
+        fi
     else
         AC_MSG_RESULT([no])
     fi
@@ -2235,9 +2377,13 @@ WITH_WASM_ZETAJS=
 if test "$host_os" = emscripten; then
     AC_MSG_CHECKING([whether to include zetajs scripting support])
     if test -n "$with_wasm_zetajs"; then
-        AC_MSG_RESULT([yes])
-        ENABLE_WASM_ZETAJS=true
-        WITH_WASM_ZETAJS=$with_wasm_zetajs
+        if test "$ENABLE_WASM_EMBIND_UNO" != true; then
+            AC_MSG_ERROR([requires --enable-wasm-embind-uno])
+        else
+            AC_MSG_RESULT([yes])
+            ENABLE_WASM_ZETAJS=true
+            WITH_WASM_ZETAJS=$with_wasm_zetajs
+        fi
     else
         AC_MSG_RESULT([no])
     fi
@@ -2250,8 +2396,8 @@ ENABLE_WASM_ZETAJS_EXAMPLE=
 if test "$host_os" = emscripten; then
     AC_MSG_CHECKING([whether to include a zetajs scripting example])
     if test "$enable_wasm_zetajs_example" = yes; then
-        if test "$ENABLE_WASM_ZETAJS" != true; then
-            AC_MSG_ERROR([requires --with-wasm-zetajs])
+        if test "$ENABLE_WASM_EMBIND_UNO" != true || test "$ENABLE_WASM_ZETAJS" != true; then
+            AC_MSG_ERROR([requires --enable-wasm-embind-uno and --with-wasm-zetajs])
         else
             AC_MSG_RESULT([yes])
         fi
@@ -2265,6 +2411,7 @@ AM_CONDITIONAL([ENABLE_WASM_ZETAJS_EXAMPLE], [test "$ENABLE_WASM_ZETAJS_EXAMPLE"
 
 AC_CONFIG_FILES([Makefile
                  cypress_test/Makefile
+                 fuzzer/Makefile
                  macos/Makefile
                  qt/Makefile
                  qt/run-from-build
@@ -2332,6 +2479,26 @@ AC_CONFIG_FILES([test/run_unit.sh],[chmod +x test/run_unit.sh])
 AC_CONFIG_FILES([test/run_unit_standalone.sh],[chmod +x test/run_unit_standalone.sh])
 AC_CONFIG_FILES([jsstress],[chmod +x jsstress])
 
+dnl !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+dnl Set plugins.so in CPPFLAGS as the last thing - not to interfere with other checks
+dnl (i.e., don't run configure-tests with the plugins enabled).  Must still precede
+dnl AC_OUTPUT, as anything mutating CPPFLAGS after AC_OUTPUT does not end up in the
+dnl generated Makefile's CPPFLAGS substitution.
+dnl !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+# need this after the other stuff that uses the compiler because we don't want to run configure-tests with the plugins enabled
+AS_IF([test -n "$with_compiler_plugins"],
+      [CPPFLAGS="$CPPFLAGS -Xclang -load -Xclang ${with_compiler_plugins}/compilerplugins/obj/plugin.so -Xclang -add-plugin -Xclang loplugin -Xclang -plugin-arg-loplugin -Xclang --cool-base-path=\${abs_top_srcdir}"])
+
+# Clang plugin.
+AC_MSG_CHECKING([whether to build a clang plugin])
+if test "$enable_coplugin" = "yes"; then
+    AC_MSG_RESULT([yes])
+    CPPFLAGS="$CPPFLAGS -Xclang -load -Xclang \${abs_top_srcdir}/clang/plugin.so -Xclang -add-plugin -Xclang coplugin"
+else
+    AC_MSG_RESULT([no])
+fi
+
 AC_OUTPUT
 
 AC_LANG_POP
@@ -2341,7 +2508,7 @@ AS_IF([test "$ENABLE_IOSAPP" = "true"],
        if test `uname -s` = "Darwin"; then
           # Sadly I can't figure out any better way to avoid having to
           # edit the Xcode project file manually. Create symlinks to the
-          # LibreOffice core source and build trees, and to the Poco
+          # CollaboraOffice core source and build trees, and to the Poco
           # installation.
 
           AC_MSG_NOTICE([creating symbolic links for the Xcode project to use])
@@ -2407,23 +2574,6 @@ AS_IF([test "$ENABLE_IOSAPP" = "true"],
       ],
       [
       ])
-
-dnl !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-dnl Set plugins.so in CPPFLAGS as the last thing - not to interfere with other checks
-dnl !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-# need this after the other stuff that uses the compiler because we don't want to run configure-tests with the plugins enabled
-AS_IF([test -n "$with_compiler_plugins"],
-      [CPPFLAGS="$CPPFLAGS -Xclang -load -Xclang ${with_compiler_plugins}/compilerplugins/obj/plugin.so -Xclang -add-plugin -Xclang loplugin -Xclang -plugin-arg-loplugin -Xclang --cool-base-path=\${abs_top_srcdir}"])
-
-# Clang plugin.
-AC_MSG_CHECKING([whether to build a clang plugin])
-if test "$enable_coplugin" = "yes"; then
-    AC_MSG_RESULT([yes])
-    CPPFLAGS="$CPPFLAGS -Xclang -load -Xclang \${abs_top_srcdir}/clang/plugin.so -Xclang -add-plugin -Xclang coplugin"
-else
-    AC_MSG_RESULT([no])
-fi
 
 echo "
 Configuration:

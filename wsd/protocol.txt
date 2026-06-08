@@ -193,11 +193,6 @@ ping
 
     requests a 'pong' server message.
 
-renderfont font=<font> char=<characters>
-
-    requests the rendering of the given font.
-    The font parameter is URL encoded
-    The char parameter is URL encoded
 
 resetselection
 
@@ -475,12 +470,13 @@ getslide hash=<slideHash> part=<slidePart> width=<canvasWidth> height=<canvasHei
 
     <devicePixelRatio>: The device pixel ratio, typically window.devicePixelRatio, which adjusts the rendering quality for HiDPI displays.
 
-resetaccesstoken <token=<accessToken>>
+resetaccesstoken <token=<accessToken>> [<expiryEpoch>]
 
     This command ensures that the client uses the updated access token for further requests.
     Resets the access token for authentication or session management.
 
     - <token>: The new access token that replaces the previous one.
+    - <expiryEpoch>: The time from Unix/Javascript epoch when the access token will expire. Optional. 0 means unknown/missing.
 
 renamefile <filename=<newFilename>>
 
@@ -513,6 +509,11 @@ getpresentationinfo
     This adds support for getting the presentation info from core.
 
     This change uses the new GetPresentationInfo() funciton that was added to the LOKit API.
+
+getslidesections
+
+    Returns the slide sections for an Impress presentation as a JSON array.
+    Response: slidesections: [{name, id, startIndex, slideCount}, ...]
 
 removetextcontext id=<windowId> before=<before_position> after=<after_position>
 
@@ -554,8 +555,8 @@ lokitversion <JSON string>
     JSON string contains version information in format:
     {ProductName: <>, ProductVersion: <>, ProductExtension: <>, BuildId: <>}
 
-    Eg: {"ProductName": "LibreOffice",
-         "ProductVersion": "5.3",
+    Eg: {"ProductName": "Collabora Office",
+         "ProductVersion": "26.04",
          "ProductExtension": ".0.0.alpha0",
          "BuildId": "<full 40 char git hash>"}
 
@@ -605,7 +606,7 @@ error: cmd=<command> kind=<kind> [code=<error_code>] [params=1,2,3,...,N]
     <kind> is some single-word classification
 
     <code> (when provided) further specifies the error as forwarded from
-    LibreOffice
+    Collabora Office
 
 close: <reason>
 
@@ -750,7 +751,7 @@ invalidatecursor: <payload>
 
     The communication between the parent process (the one keeping open the
     Websocket connections to the clients) and a child process (handling
-    one document through LibreOfficeKit) uses the same protocol, with
+    one document through COKit) uses the same protocol, with
     the following additions and changes:
 
 unocommandresult: <payload>
@@ -992,6 +993,11 @@ procmemstats: pid=<pid> pss=<pss in kb> dirty=<private dirty in kb>
 
     Memory information sent periodically to parent process by each of
     the kit processes.
+
+loadtiming: <key>=<us> [<key>=<us> ...]
+
+    Kit-side debug-overlay load checkpoints; each value is microseconds
+    since the steady_clock epoch. Consumed by wsd, not forwarded.
 
 clipboardcontent: file=<file>
 
@@ -1320,7 +1326,7 @@ lokitversion <JSON string>
     JSON string contains version information in format:
     {ProductName: <>, ProductVersion: <>, ProductExtension: <>, BuildId: <>}
 
-    Eg: {"ProductName": "LibreOffice",
-         "ProductVersion": "5.3",
+    Eg: {"ProductName": "Collabora Office",
+         "ProductVersion": "26.04",
          "ProductExtension": ".0.0.alpha0",
          "BuildId": "<full 40 char git hash>"}

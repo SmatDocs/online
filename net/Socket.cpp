@@ -43,17 +43,18 @@
 #include <openssl/x509v3.h>
 #endif
 
+#include <cctype>
 #include <cerrno>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
 #include <cstring>
-#include <cctype>
 #include <iomanip>
 #include <memory>
 #include <ostream>
 #include <ratio>
 #include <sstream>
-#include <cstdio>
+#include <stdexcept>
 #include <string>
 
 #include <sys/stat.h>
@@ -87,11 +88,6 @@
 constexpr std::chrono::microseconds SocketPoll::DefaultPollTimeoutMicroS;
 constexpr std::chrono::microseconds WebSocketHandler::InitialPingDelayMicroS;
 
-namespace ThreadChecks
-{
-    std::atomic<bool> Inhibit(false);
-}
-
 #if !MOBILEAPP
 
 std::unique_ptr<Watchdog> SocketPoll::PollWatchdog;
@@ -106,8 +102,8 @@ std::unique_ptr<Watchdog> SocketPoll::PollWatchdog;
 
 std::atomic<size_t> StreamSocket::ExternalConnectionCount = 0;
 
-net::DefaultValues net::Defaults = { .inactivityTimeout = std::chrono::seconds(3600),
-                                     .maxExtConnections = 200000 /* arbitrary value to be resolved */ };
+net::DefaultValues net::Defaults = { .inactivityTimeout = net::DefaultInactivityTimeout,
+                                     .maxExtConnections = net::DefaultMaxExtConnections };
 
 constexpr std::string_view Socket::toString(Type t)
 {
@@ -208,9 +204,11 @@ bool StreamSocket::socketpair(const std::chrono::steady_clock::time_point creati
     child = std::make_shared<StreamSocket>("save-child", pair[0], Socket::Type::Unix, true, HostType::Other, ReadType::NormalRead, creationTime);
     child->setNoShutdown();
     child->setClientAddress("save-child");
+    child->resetThreadOwner(); // The parent will set the owner when it inserts into its poller.
     parent = std::make_shared<StreamSocket>("save-kit-parent", pair[1], Socket::Type::Unix, true, HostType::Other, ReadType::NormalRead, creationTime);
     parent->setNoShutdown();
     parent->setClientAddress("save-parent");
+    parent->resetThreadOwner(); // The child will set the owner when it inserts into its poller.
 
     return true;
 }
@@ -263,7 +261,7 @@ bool SslStreamSocket::verifyCertificate()
         const std::string issuerName = X509_NAME_to_utf8(X509_get_issuer_name(x509));
         const std::string subjectName = X509_NAME_to_utf8(X509_get_subject_name(x509));
         std::string serialNumber;
-        BIGNUM* bigNumber = ASN1_INTEGER_to_BN(X509_get_serialNumber(const_cast<X509*>(x509)), 0);
+        BIGNUM* bigNumber = ASN1_INTEGER_to_BN(X509_get_serialNumber(x509), 0);
         if (bigNumber)
         {
             char* Sn = BN_bn2hex(bigNumber);
@@ -323,16 +321,14 @@ namespace {
     }
 }
 
-
 SocketPoll::SocketPoll(std::string threadName)
     : _name(std::move(threadName))
     , _pollStartIndex(0)
-    , _owner(std::this_thread::get_id())
+    , _owner(ProcUtil::getThreadId())
     , _threadStarted(0)
 #if !MOBILEAPP
     , _watchdogTime(Watchdog::getDisableStamp())
 #endif
-    , _ownerThreadId(Util::getThreadId())
     , _stop(false)
     , _threadFinished(false)
     , _runOnClientThread(false)
@@ -354,7 +350,7 @@ SocketPoll::SocketPoll(std::string threadName)
 
 #if !MOBILEAPP
     if (PollWatchdog)
-        PollWatchdog->addTime(&_watchdogTime, &_ownerThreadId);
+        PollWatchdog->addTime(&_watchdogTime, &_owner);
 #endif
 }
 
@@ -376,13 +372,12 @@ void SocketPoll::checkAndReThread()
 {
     if (ThreadChecks::Inhibit)
         return; // in late shutdown
-    const std::thread::id us = std::this_thread::get_id();
+    const ProcUtil::ThreadId us = ProcUtil::getThreadId();
     if (_owner == us)
         return; // all well
     LOG_DBG("Unusual - SocketPoll used from a new thread");
 
     _owner = us;
-    _ownerThreadId = Util::getThreadId();
     for (const auto& it : _pollSockets)
         SocketThreadOwnerChange::setThreadOwner(*it, us);
     // _newSockets are adapted as they are inserted.
@@ -484,11 +479,9 @@ void SocketPoll::pollingThreadEntry()
 {
     try
     {
-        Util::setThreadName(_name);
-        _owner = std::this_thread::get_id();
-        _ownerThreadId = Util::getThreadId();
-        LOG_INF("Starting polling thread [" << _name << "] with thread affinity set to "
-                                            << Log::to_string(_owner) << '.');
+        ProcUtil::setThreadName(_name);
+        _owner = ProcUtil::getThreadId();
+        LOG_INF("Starting polling thread [" << _name << "] with thread affinity set to " << _owner);
 
         // Invoke the virtual implementation.
         pollingThread();
@@ -621,7 +614,7 @@ int SocketPoll::poll(int64_t timeoutMaxMicroS, bool justPoll)
 
                 // Update thread ownership.
                 for (auto& i : _newSockets)
-                    SocketThreadOwnerChange::setThreadOwner(*i, std::this_thread::get_id());
+                    SocketThreadOwnerChange::setThreadOwner(*i, ProcUtil::getThreadId());
 
                 // Copy the new sockets over and clear.
                 _pollSockets.insert(_pollSockets.end(), _newSockets.begin(), _newSockets.end());
@@ -1074,6 +1067,8 @@ void SocketDisposition::execute()
     ASSERT_CORRECT_SOCKET_THREAD(_socket);
     if (_socketMove)
     {
+        assert(_disposition == Type::TRANSFER);
+
         // Drop pretentions of ownership before _socketMove.
         SocketThreadOwnerChange::resetThreadOwner(*_socket);
 
@@ -1105,6 +1100,10 @@ void SocketDisposition::execute()
                                     << "] is not alive after adding transfer callback");
 
         _toPoll = nullptr;
+    }
+    else
+    {
+        assert(_disposition != Type::TRANSFER);
     }
 }
 
@@ -1559,7 +1558,7 @@ UnxSocketPath LocalServerSocket::bind()
     return std::string();
 }
 
-bool LocalServerSocket::linkTo([[maybe_unused]] std::string toPath)
+bool LocalServerSocket::linkTo([[maybe_unused]] const std::string& toPath)
 {
 #ifndef HAVE_ABSTRACT_UNIX_SOCKETS
     _linkName = toPath + "/" + _id.getName();
@@ -1748,29 +1747,45 @@ bool StreamSocket::checkChunks(const Poco::Net::HTTPRequest& request, size_t hea
     auto itBody = _inBuffer.begin() + headerSize;
 
     // keep the header
-    map._spans.emplace_back(0, itBody - _inBuffer.begin());
+    map._spans.emplace_back(0, headerSize);
 
     int chunk = 0;
     while (itBody != _inBuffer.end())
     {
-        auto chunkStart = itBody;
+        const auto chunkStart = itBody;
 
         // skip whitespace
         for (; itBody != _inBuffer.end() && isascii(*itBody) && isspace(*itBody); ++itBody)
             ; // skip.
 
-        // each chunk is preceeded by its length in hex.
+        // each chunk is preceded by its length in hex.
         size_t chunkLen = 0;
+        bool haveHexDigits = false;
         for (; itBody != _inBuffer.end(); ++itBody)
         {
             int digit = HexUtil::hexDigitFromChar(*itBody);
             if (digit >= 0)
+            {
+                haveHexDigits = true;
                 chunkLen = chunkLen * 16 + digit;
+                if (chunkLen > http::MaxChunkLen)
+                {
+                    LOG_ERR("Invalid chunk length (" << chunkLen << ") exceeds limit of "
+                                                     << http::MaxChunkLen / 1024 / 1024 << " MB");
+                    return false;
+                }
+            }
             else
                 break;
         }
 
         LOG_CHUNK("parseHeader: Chunk of length " << chunkLen);
+
+        if (chunkLen == 0 && !haveHexDigits)
+        {
+            LOG_ERR("Invalid chunk with no length");
+            return false;
+        }
 
         for (; itBody != _inBuffer.end() && *itBody != '\n'; ++itBody)
             ; // skip to end of line
@@ -1779,8 +1794,8 @@ bool StreamSocket::checkChunks(const Poco::Net::HTTPRequest& request, size_t hea
             itBody++; /* \n */;
 
         // skip the chunk.
-        auto chunkOffset = itBody - _inBuffer.begin();
-        auto chunkAvailable = _inBuffer.size() - chunkOffset;
+        const auto chunkOffset = itBody - _inBuffer.begin();
+        const auto chunkAvailable = _inBuffer.size() - chunkOffset;
 
         if (chunkLen == 0) // we're complete.
         {
@@ -1788,7 +1803,7 @@ bool StreamSocket::checkChunks(const Poco::Net::HTTPRequest& request, size_t hea
             return true;
         }
 
-        if (chunkLen > chunkAvailable + 2)
+        if (chunkLen + 2 > chunkAvailable)
         {
             LOG_DBG("parseHeader: Not enough content yet in chunk " << chunk <<
                     " starting at offset " << (chunkStart - _inBuffer.begin()) <<
@@ -1830,20 +1845,34 @@ bool StreamSocket::parseHeader(const std::string_view clientName, size_t headerS
     map._messageSize = map._headerSize;
 
     const std::streamsize contentLength = request.getContentLength();
-    const std::streamsize available = bufferSize;
 
     LOG_INF("parseHeader: " << clientName << " HTTP Request: " << request << ", sz[header "
-                            << map._headerSize << "], offset " << headerSize);
+                            << map._headerSize << "], offset " << headerSize
+                            << ", contentLength: " << contentLength);
 
     if (contentLength != Poco::Net::HTTPMessage::UNKNOWN_CONTENT_LENGTH)
     {
-        if (available < contentLength)
+        // The only valid -ve value is -1 for "unknown content length."
+        if (contentLength < 0 || contentLength > http::MaxBodyLen)
+        {
+            LOG_WRN("parseHeader: Invalid content length ("
+                    << contentLength << "), limit: " << http::MaxBodyLen / 1024 / 1024 << " MB");
+            throw std::out_of_range("Invalid content length: " + std::to_string(contentLength));
+        }
+
+        // Note: The bufferSize (i.e. the data received in the socket) may be
+        // far less than the contentLength, and we may never get all the data.
+        if (bufferSize < contentLength + headerSize)
         {
             LOG_DBG("parseHeader: Not enough content yet: ContentLength: "
-                    << contentLength << ", available: " << available << ", delay "
-                    << delayMs.count() << "ms");
+                    << contentLength << " (+ headerSize: " << headerSize << " = "
+                    << contentLength + headerSize << "), available: " << bufferSize
+                    << " bytes (missing " << (contentLength + headerSize - bufferSize)
+                    << " bytes), delay " << delayMs.count() << "ms");
             return false;
         }
+
+        // messageSize includes both the header and the content sizes.
         map._messageSize += contentLength;
     }
 
@@ -1861,10 +1890,13 @@ bool StreamSocket::compactChunks(MessageMap& map)
 
     char *first = _inBuffer.data();
     char *dest = first;
-    for (const auto &span : map._spans)
+    for (const auto& [offset, length] : map._spans)
     {
-        std::memmove(dest, &_inBuffer[span.first], span.second);
-        dest += span.second;
+        assert(length > 0);
+        assert(offset < _inBuffer.size());
+        assert(offset + length <= _inBuffer.size());
+        std::memmove(dest, &_inBuffer[offset], length);
+        dest += length;
     }
 
     // Erase the duplicate bits.
@@ -1880,9 +1912,12 @@ bool StreamSocket::compactChunks(MessageMap& map)
     map._messageSize -= gap;
 
 #if ENABLE_DEBUG
-    std::ostringstream oss(Util::makeDumpStateStream());
-    dumpState(oss);
-    LOG_TRC("Socket state: " << oss.str());
+    LOG_TRC("Socket state: " <<
+            [this](auto& oss)
+            {
+                oss.setf(std::ios_base::boolalpha);
+                dumpState(oss);
+            });
 #endif
 
     return true;

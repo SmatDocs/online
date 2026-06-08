@@ -21,8 +21,6 @@
 #include <COOLWSD.hpp>
 #include <Kit.hpp>
 
-void setKitInProcess() { Util::setKitInProcess(true); }
-
 int createForkit(const std::string& forKitPath, const StringVector& args)
 {
     // create forkit in a thread
@@ -38,7 +36,7 @@ int createForkit(const std::string& forKitPath, const StringVector& args)
     }
 
     std::thread([argc, argv] {
-        Util::setThreadName("forkit");
+        ProcUtil::setThreadName("forkit");
         forkit_main(argc, argv);
     })
         .detach();

@@ -107,6 +107,21 @@ window.L.WriterTileLayer = window.L.CanvasTileLayer.extend({
 		}
 	},
 
+	_setNewSize: function (/*cool.SimplePoint*/ size) {
+		app.activeDocument.fileSize = size;
+		app.activeDocument.activeLayout.viewSize = size.clone();
+		this._updateMaxBounds(true);
+	},
+
+	_releaseReconnectFileSize: function () {
+		this._reconnectFileSize = null;
+		this._reconnectFileSizeTimer = null;
+		var last = this._reconnectLatestStatus;
+		this._reconnectLatestStatus = null;
+		if (last && (last.x !== app.activeDocument.fileSize.x || last.y !== app.activeDocument.fileSize.y))
+			this._setNewSize(last);
+	},
+
 	_onStatusMsg: function (textMsg) {
 		const statusJSON = JSON.parse(textMsg.replace('status:', '').replace('statusupdate:', ''));
 
@@ -116,8 +131,10 @@ window.L.WriterTileLayer = window.L.CanvasTileLayer.extend({
 			// of the first paragraph of the document so we want to ignore that
 			// to eliminate document jumping while reconnecting
 			this.persistCursorPositionInWriter = true;
-			this._postMouseEvent('buttondown', this.lastCursorPos.center[0], this.lastCursorPos.center[1], 1, 1, 0);
-			this._postMouseEvent('buttonup', this.lastCursorPos.center[0], this.lastCursorPos.center[1], 1, 1, 0);
+			if (this.lastCursorPos) {
+				// Save position to restore when we have the full layout of the document back
+				this._savedCursorPos = this.lastCursorPos.clone();
+			}
 		}
 		if (!statusJSON.width || !statusJSON.height || this._documentInfo === textMsg)
 			return;
@@ -125,7 +142,24 @@ window.L.WriterTileLayer = window.L.CanvasTileLayer.extend({
 		if (statusJSON.readonly && !this._documentInfo)
 			this._map.setPermission('readonly');
 
-		var sizeChanged = statusJSON.width !== app.activeDocument.fileSize.x || statusJSON.height !== app.activeDocument.fileSize.y;
+		// Suppress shrinking sizes during reconnect's incremental reload
+		// so setMaxBounds doesn't pan the view; timer covers real shrinks.
+		if (app.socket._reconnecting && !this._reconnectFileSize && app.activeDocument.fileSize.y > 0)
+			this._reconnectFileSize = app.activeDocument.fileSize.clone();
+		if (this._reconnectFileSize) {
+			if (this._reconnectFileSizeTimer)
+				clearTimeout(this._reconnectFileSizeTimer);
+			if (statusJSON.width >= this._reconnectFileSize.x && statusJSON.height >= this._reconnectFileSize.y) {
+				this._reconnectFileSize = null;
+				this._reconnectFileSizeTimer = null;
+			} else {
+				const RECONNECT_FILE_SIZE_RELEASE_MS = 5000;
+				this._reconnectLatestStatus = new cool.SimplePoint(statusJSON.width, statusJSON.height);
+				this._reconnectFileSizeTimer = setTimeout(this._releaseReconnectFileSize.bind(this), RECONNECT_FILE_SIZE_RELEASE_MS);
+			}
+		}
+		var sizeChanged = !this._reconnectFileSize &&
+			(statusJSON.width !== app.activeDocument.fileSize.x || statusJSON.height !== app.activeDocument.fileSize.y);
 
 		if (statusJSON.viewid !== undefined) {
 			this._viewId = statusJSON.viewid;
@@ -145,11 +179,8 @@ window.L.WriterTileLayer = window.L.CanvasTileLayer.extend({
 		console.assert(this._viewId >= 0, 'Incorrect viewId received: ' + this._viewId);
 
 		if (sizeChanged) {
-			app.activeDocument.fileSize = new cool.SimplePoint(statusJSON.width, statusJSON.height);
-			app.activeDocument.activeLayout.viewSize = app.activeDocument.fileSize.clone();
-
 			this._docType = statusJSON.type;
-			this._updateMaxBounds(true);
+			this._setNewSize(new cool.SimplePoint(statusJSON.width, statusJSON.height));
 		}
 
 		this._documentInfo = textMsg;
@@ -178,5 +209,11 @@ window.L.WriterTileLayer = window.L.CanvasTileLayer.extend({
 			docType: this._docType
 		});
 		TileManager.resetPreFetching(true);
+
+		if (this._savedCursorPos && this._savedCursorPos.center[0] <= statusJSON.width && this._savedCursorPos.center[1] <= statusJSON.height) {
+			this._postMouseEvent('buttondown', this._savedCursorPos.center[0], this._savedCursorPos.center[1], 1, 1, 0);
+			this._postMouseEvent('buttonup', this._savedCursorPos.center[0], this._savedCursorPos.center[1], 1, 1, 0);
+			this._savedCursorPos = null;
+		}
 	},
 });

@@ -58,8 +58,15 @@
 	},
 	impress: {
 		partList: null, // Info for parts.
+		sections: null as Array<{
+			name: string;
+			id?: string;
+			startIndex: number;
+			slideCount: number;
+		}> | null,
 		hasOverviewPage: false, //Whether the file has an overview page
 		notesMode: false, // Opposite of "NormalMultiPaneGUI".
+		savedViewMode: null as string | null, // Remembered view mode ('normal'|'notes'|'master') for this document, sent by the server on load.
 		twipsCorrection: 0.567, // There is a constant ratio between tiletwips and impress page twips. For now, this seems safe to use.
 	},
 	writer: {
@@ -293,7 +300,7 @@
 
 	serverAudit: null, // contains list of warnings / errors detected on the server instance
 
-	events: null, // See app/DocEvents.ts for details.
+	events: new DocEvents(),
 
 	showNavigator: false, // ShowNavigator class instance is assigned to this.
 
@@ -303,10 +310,6 @@
 	serverInfo: {
 		coolwsdVersion: '',
 		coolwsdHash: '',
-		lokitVersionName: '',
-		lokitVersionNumber: '',
-		lokitVersionSuffix: '',
-		lokitHash: '',
 		serverId: '',
 		osInfo: '',
 		wsdOptions: '',

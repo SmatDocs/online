@@ -52,14 +52,15 @@
 #include <common/JsonUtil.hpp>
 #include <common/Log.hpp>
 #include <common/MobileApp.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Protocol.hpp>
 #include <common/RegexUtil.hpp>
+#include <common/Seccomp.hpp>
 #include <common/Session.hpp>
 #include <common/SigUtil.hpp>
 #include <common/Unit.hpp>
 #include <common/Util.hpp>
 #include <net/AsyncDNS.hpp>
-#include <net/DelaySocket.hpp>
 #include <net/ServerSocket.hpp>
 #include <wsd/COOLWSDServer.hpp>
 #include <wsd/ClientRequestDispatcher.hpp>
@@ -97,6 +98,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -150,6 +152,8 @@ std::map<std::string, std::chrono::steady_clock::time_point> LastForkRequestTime
 using SubForKitMap = std::map<std::string, std::shared_ptr<ForKitProcess>>;
 SubForKitMap SubForKitProcs;
 std::map<std::string, std::chrono::steady_clock::time_point> LastSubForKitBrokerExitTimes;
+std::set<std::string> OutstandingSubForKitSpawns;
+std::map<std::string, std::chrono::steady_clock::time_point> LastSubForKitSpawnRequestTimes;
 Poco::AutoPtr<Poco::Util::XMLConfiguration> KitXmlConfig;
 std::string LoggableConfigEntries;
 
@@ -160,8 +164,6 @@ int PrisonerServerSocketFD;
 
 #else // MOBILEAPP
 
-/// Funky latency simulation basic delay (ms)
-std::size_t SimulatedLatencyMs = 0;
 std::shared_ptr<http::Session> FetchHttpSession;
 
 #if ENABLE_DEBUG
@@ -414,6 +416,8 @@ SubForKitMap::iterator dropSubForKit(SubForKitMap::iterator it)
 
     LastSubForKitBrokerExitTimes.erase(configId);
     OutstandingForks.erase(configId);
+    OutstandingSubForKitSpawns.erase(configId);
+    LastSubForKitSpawnRequestTimes.erase(configId);
     it = SubForKitProcs.erase(it);
     UNITWSD_CALL(killSubForKit(configId));
 
@@ -545,7 +549,7 @@ void COOLWSD::cleanupDocBrokers()
 /// Forks as many children as requested.
 static void forkChildren(const std::string& configId, const int number)
 {
-    if (Util::isKitInProcess())
+    if constexpr (Util::isKitInProcess())
         return;
 
     LOG_TRC("Request forkit to spawn " << number << " new child(ren)");
@@ -571,7 +575,7 @@ static bool queueMessageToForKit(const std::string& message);
 
 bool COOLWSD::ensureSubForKit(const std::string& configId)
 {
-    if (Util::isKitInProcess())
+    if constexpr (Util::isKitInProcess())
         return false;
 
     LOG_TRC("Request forkit to spawn subForKit " << configId);
@@ -583,7 +587,25 @@ bool COOLWSD::ensureSubForKit(const std::string& configId)
         return false;
     }
 
+    const auto now = std::chrono::steady_clock::now();
+    if (OutstandingSubForKitSpawns.contains(configId))
+    {
+        const auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - LastSubForKitSpawnRequestTimes[configId]);
+        if (durationMs < ChildSpawnTimeoutMs.load())
+        {
+            LOG_TRC("subForKit " << configId << " spawn pending for " << durationMs
+                                 << ", waiting");
+            return false;
+        }
+        LOG_WRN("subForKit " << configId << " not responsive for " << durationMs
+                             << " while spawning. Resetting.");
+    }
+
     COOLWSD::checkDiskSpaceAndWarnClients(false);
+
+    OutstandingSubForKitSpawns.insert(configId);
+    LastSubForKitSpawnRequestTimes[configId] = now;
 
     const std::string answerMessage = "addforkit " + configId + '\n';
     LOG_DBG("MasterToForKit: " << answerMessage.substr(0, answerMessage.length() - 1));
@@ -593,7 +615,7 @@ bool COOLWSD::ensureSubForKit(const std::string& configId)
 /// Cleans up dead children.
 static void cleanupChildren()
 {
-    if (Util::isKitInProcess())
+    if constexpr (Util::isKitInProcess())
         return;
 
     Util::assertIsLocked(NewChildrenMutex);
@@ -798,7 +820,7 @@ bool COOLWSD::SingleKit = false;
 bool COOLWSD::ForceCaching = false;
 #endif
 COOLWSD::WASMActivationState COOLWSD::WASMState = COOLWSD::WASMActivationState::Disabled;
-std::unordered_map<std::string, std::chrono::steady_clock::time_point> COOLWSD::Uri2WasmModeMap;
+Util::UnorderedStringMap<std::chrono::steady_clock::time_point> COOLWSD::Uri2WasmModeMap;
 #endif
 std::string COOLWSD::SysTemplate;
 std::string COOLWSD::LoTemplate = LO_PATH;
@@ -880,7 +902,7 @@ public:
                              const std::weak_ptr<ForKitProcess>& proc,
                              bool queueIfUnavailable = false)
     {
-        if (std::this_thread::get_id() == getThreadOwner())
+        if (ProcUtil::getThreadId() == getThreadOwner())
         {
             // Speed up sending the message if the request comes from owner thread
             doSendMessage(msg, proc, queueIfUnavailable);
@@ -972,7 +994,7 @@ std::shared_ptr<ChildProcess> getNewChild_Blocks(const std::shared_ptr<SocketPol
 
     std::thread([&]
                 {
-                    Util::setThreadName("lokit_main_" + Util::encodeId(mobileAppDocId, 3));
+                    ProcUtil::setThreadName("lokit_main_" + HexUtil::encodeId(mobileAppDocId, 3));
 
                     // Ugly to have that static global PrisonerServerSocketFD, Otoh we know
                     // there is just one COOLWSD object. (Even in real Online.)
@@ -1304,6 +1326,15 @@ void COOLWSD::setupChildRoot(const bool UseMountNamespaces)
     JailUtil::disableBindMounting(); // Default to assume failure
     JailUtil::disableMountNamespaces();
 
+    if constexpr (!Util::isMobileApp())
+    {
+        // Now create a temp directory inside our private child-root.
+        const std::string tmpDir = ChildRoot + "systmp";
+        FileUtil::createDirectories(tmpDir);
+        LOG_INF("Setting system temporary directory path: " << tmpDir);
+        FileUtil::setSysTempDirectoryPath(tmpDir); // Only implemented and meaningful on *ix.
+    }
+
 #if ENABLE_CHILDROOTS
     Log::preFork();
 
@@ -1407,8 +1438,7 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
     // Initialize the config subsystem.
     LayeredConfiguration& conf = config();
 
-    const std::unordered_map<std::string, std::string>& defAppConfig =
-        ConfigUtil::getDefaultAppConfig();
+    const auto& defAppConfig = ConfigUtil::getDefaultAppConfig();
 
     // Set default values, in case they are missing from the config file.
     Poco::AutoPtr<ConfigUtil::AppConfigMap> defConfig(new ConfigUtil::AppConfigMap(defAppConfig));
@@ -1460,7 +1490,7 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
     // Experimental features.
     EnableExperimental = ConfigUtil::getConfigValue<bool>(conf, "experimental_features", false);
 
-    EnableAccessibility = ConfigUtil::getConfigValue<bool>(conf, "accessibility.enable", false);
+    EnableAccessibility = ConfigUtil::getConfigValue<bool>(conf, "accessibility.enable", Util::isMobileApp());
 
     // Setup user interface mode
     UserInterface = ConfigUtil::getConfigValue<std::string>(conf, "user_interface.mode", "default");
@@ -1490,11 +1520,12 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
     setenv("COOL_LOGLEVEL", LogLevel.c_str(), true);
     setenv("COOL_LOGDISABLED_AREAS", LogDisabledAreas.c_str(), true);
 
-#if !ENABLE_DEBUG
-    const std::string salLog =
-        ConfigUtil::getConfigValue<std::string>(conf, "logging.lokit_sal_log", "-INFO-WARN");
-    setenv("SAL_LOG", salLog.c_str(), 0);
-#endif
+    if constexpr (!Util::isDebugEnabled())
+    {
+        const std::string salLog =
+            ConfigUtil::getConfigValue<std::string>(conf, "logging.lokit_sal_log", "-INFO-WARN");
+        setenv("SAL_LOG", salLog.c_str(), 0);
+    }
 
 #if WASMAPP
     // In WASM, we want to log to the Log Console.
@@ -1653,10 +1684,14 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
             {
                 fprintf(TraceEventFile, "[\n");
                 // Output a metadata event that tells that this is the WSD process
-                fprintf(TraceEventFile, "{\"name\":\"process_name\",\"ph\":\"M\",\"args\":{\"name\":\"WSD\"},\"pid\":%ld,\"tid\":%ld},\n",
-                        Util::getProcessId(), Util::getThreadId());
-                fprintf(TraceEventFile, "{\"name\":\"thread_name\",\"ph\":\"M\",\"args\":{\"name\":\"Main\"},\"pid\":%ld,\"tid\":%ld},\n",
-                        Util::getProcessId(), Util::getThreadId());
+                fprintf(TraceEventFile,
+                        "{\"name\":\"process_name\",\"ph\":\"M\",\"args\":{\"name\":\"WSD\"},"
+                        "\"pid\":%ld,\"tid\":%ld},\n",
+                        ProcUtil::getProcessId(), ProcUtil::getThreadId());
+                fprintf(TraceEventFile,
+                        "{\"name\":\"thread_name\",\"ph\":\"M\",\"args\":{\"name\":\"Main\"},"
+                        "\"pid\":%ld,\"tid\":%ld},\n",
+                        ProcUtil::getProcessId(), ProcUtil::getThreadId());
             }
         }
     }
@@ -1806,7 +1841,7 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
             << (ConfigUtil::isSSLTermination() ? "enabled." : "disabled."));
 
     std::string allowedLanguages(config().getString("allowed_languages"));
-    setenv("LOK_ALLOWLIST_LANGUAGES", allowedLanguages.c_str(), 1);
+    setenv("KIT_ALLOWLIST_LANGUAGES", allowedLanguages.c_str(), 1);
 
 #endif // !MOBILEAPP
 
@@ -1818,26 +1853,8 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
     //setenv("LOK_DEBUG_TILES", "1", 0);
 #endif
 
-    int pdfResolution =
-        ConfigUtil::getConfigValue<int>(conf, "per_document.pdf_resolution_dpi", 96);
-    if (pdfResolution > 0)
-    {
-        constexpr int MaxPdfResolutionDpi = 384;
-        if (pdfResolution > MaxPdfResolutionDpi)
-        {
-            // Avoid excessive memory consumption.
-            LOG_WRN("The PDF resolution specified in per_document.pdf_resolution_dpi ("
-                    << pdfResolution << ") is larger than the maximum (" << MaxPdfResolutionDpi
-                    << "). Using " << MaxPdfResolutionDpi << " instead.");
-
-            pdfResolution = MaxPdfResolutionDpi;
-        }
-
-        const std::string pdfResolutionStr = std::to_string(pdfResolution);
-        LOG_DBG("Setting envar PDFIMPORT_RESOLUTION_DPI="
-                << pdfResolutionStr << " per config per_document.pdf_resolution_dpi");
-        ::setenv("PDFIMPORT_RESOLUTION_DPI", pdfResolutionStr.c_str(), 1);
-    }
+    if (ConfigUtil::hasProperty("per_document.pdf_resolution_dpi"))
+        LOG_WRN("NOTE: Deprecated config option per_document.pdf_resolution_dpi is no longer supported");
 
     SysTemplate = ConfigUtil::getPathFromConfig("sys_template_path");
     if (SysTemplate.empty())
@@ -1874,7 +1891,8 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
         CleanupChildRoot = ChildRoot;
 
         // Encode the process id into the path for parallel re-use of jails/
-        ChildRoot += std::to_string(Util::getProcessId()) + '-' + Util::rng::getHexString(8) + '/';
+        ChildRoot +=
+            std::to_string(ProcUtil::getProcessId()) + '-' + Util::rng::getHexString(8) + '/';
 
         LOG_DBG("Normalizing childroot: " << ChildRoot);
         ChildRoot = Poco::Path(ChildRoot).makeDirectory().makeAbsolute().toString();
@@ -2098,7 +2116,7 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
         ConfigUtil::getConfigValue("indirection_endpoint.geolocation_setup.enable", false);
 
 #if ENABLE_DEBUG
-    if (Util::isKitInProcess())
+    if constexpr (Util::isKitInProcess())
         SingleKit = true;
 #endif
 #endif
@@ -2130,11 +2148,11 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
 
 #if !MOBILEAPP
     const std::string helpUrl = ConfigUtil::getConfigValue<std::string>(conf, "help_url", HELP_URL);
-    setenv("LOK_HELP_URL", helpUrl.c_str(), 1);
+    setenv("KIT_HELP_URL", helpUrl.c_str(), 1);
 #else
     // On mobile UI there should be no tunnelled dialogs. But if there are some, by mistake,
     // at least they should not have a non-working Help button.
-    setenv("LOK_HELP_URL", "", 1);
+    setenv("KIT_HELP_URL", "", 1);
 #endif
 
     if constexpr (ConfigUtil::isSupportKeyEnabled())
@@ -2254,6 +2272,9 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
 
     LOG_TRC("Initialize StorageConnectionManager");
     StorageConnectionManager::initialize();
+
+    LOG_TRC("Initialize Admin");
+    Admin::initialize();
 #endif
 
     PrisonerPoll = std::make_unique<PrisonPoll>();
@@ -2270,9 +2291,9 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
     // bogus doubled results
     if (FILE* fp = fopen("/proc/self/smaps_rollup", "r"))
     {
-        std::size_t memoryDirty1 = Util::getPssAndDirtyFromSMaps(fp).second;
-        (void)Util::getPssAndDirtyFromSMaps(fp); // interleave another rewind+read to margin
-        std::size_t memoryDirty2 = Util::getPssAndDirtyFromSMaps(fp).second;
+        std::size_t memoryDirty1 = ProcUtil::getPssAndDirtyFromSMaps(fp).second;
+        (void)ProcUtil::getPssAndDirtyFromSMaps(fp); // interleave another rewind+read to margin
+        std::size_t memoryDirty2 = ProcUtil::getPssAndDirtyFromSMaps(fp).second;
         LOG_TRC("Comparing smaps_rollup read and rewind+read: " << memoryDirty1 << " vs " << memoryDirty2);
         if (memoryDirty2 >= memoryDirty1 * 2)
         {
@@ -2296,6 +2317,14 @@ void COOLWSD::innerInitialize(Poco::Util::Application& self)
         ConfigUtil::getConfigValue<int>("per_document.limit_file_size_mb", 0));
     docProcSettings.setLimitNumberOpenFiles(
         ConfigUtil::getConfigValue<int>("per_document.limit_num_open_files", 0));
+
+    if (const int nofile = docProcSettings.getLimitNumberOpenFiles();
+        nofile > 0 && nofile < Rlimit::MinRequiredOpenFiles)
+    {
+        LOG_WRN("per_document.limit_num_open_files is "
+                << nofile << ", below the " << Rlimit::MinRequiredOpenFiles
+                << " files the kit needs at steady state. Loading documents may fail altogether");
+    }
 
     DocCleanupSettings &docCleanupSettings = docProcSettings.getCleanupSettings();
     docCleanupSettings.setEnable(
@@ -2348,19 +2377,19 @@ void COOLWSD::setLokitEnvironmentVariables(const Poco::Util::LayeredConfiguratio
                 LOG_ERR("Invalid regular expression for allowed host: \"" << lokAllowedHosts[i] << "\"");
         }
 
-        setenv("LOK_HOST_ALLOWLIST", allowedRegex.c_str(), true);
+        setenv("KIT_HOST_ALLOWLIST", allowedRegex.c_str(), true);
 
 #if !MOBILEAPP
         if (!ConfigUtil::getConfigValue<bool>(conf, "ssl.ssl_verification", true))
         {
             // also disable host verification for allowed hosts
-            ::setenv("LOK_HOST_ALLOWLIST_EXEMPT_VERIFY_HOST", "1", true);
+            ::setenv("KIT_HOST_ALLOWLIST_EXEMPT_VERIFY_HOST", "1", true);
         }
 #endif
     }
 
 #if !MOBILEAPP
-    setenv("LOK_ALLOWED_EXTREF_PATHS", "", true);
+    setenv("KIT_ALLOWED_EXTREF_PATHS", "", true);
 #endif
 }
 
@@ -2459,7 +2488,7 @@ void COOLWSD::defineOptions(Poco::Util::OptionSet& optionSet)
                         .repeatable(false)
                         .argument("path"));
 
-    optionSet.addOption(Option("lo-template-path", "", "Override the LOK core installation directory path.")
+    optionSet.addOption(Option("lo-template-path", "", "Override the COKit core installation directory path.")
                         .required(false)
                         .repeatable(false)
                         .argument("path"));
@@ -2494,7 +2523,7 @@ void COOLWSD::defineOptions(Poco::Util::OptionSet& optionSet)
                                 .repeatable(false)
                                 .argument("seconds"));
 
-        optionSet.addOption(Option("singlekit", "", "Spawn one libreoffice kit.")
+        optionSet.addOption(Option("singlekit", "", "Spawn one CollaboraOffice kit.")
                                 .required(false)
                                 .repeatable(false));
 
@@ -2527,7 +2556,7 @@ void COOLWSD::handleOption(const std::string& optionName,
     else if (optionName == "cleanup")
         CleanupOnly = true; // Flag for later as we need the config.
     else if (optionName == "port")
-        ClientPortNumber = std::stoi(value);
+        ClientPortNumber = NumUtil::stoi(value);
 #if ENABLE_DEBUG
     else if (optionName == "find-free-port")
         FindFreePort = true;
@@ -2563,7 +2592,7 @@ void COOLWSD::handleOption(const std::string& optionName,
         SigUtil::setUnattended();
     }
     else if (optionName == "careerspan")
-        careerSpanMs = std::chrono::seconds(std::stoi(value)); // Convert second to ms
+        careerSpanMs = std::chrono::seconds(NumUtil::stoi(value)); // Convert second to ms
     else if (optionName == "singlekit")
     {
         SingleKit = true;
@@ -2571,10 +2600,6 @@ void COOLWSD::handleOption(const std::string& optionName,
     }
     else if (optionName == "forcecaching")
         ForceCaching = true;
-
-    static const char* latencyMs = std::getenv("COOL_DELAY_SOCKET_MS");
-    if (latencyMs)
-        SimulatedLatencyMs = std::stoi(latencyMs);
 #endif
 
 #else
@@ -2658,7 +2683,7 @@ bool COOLWSD::checkAndRestoreForKit()
         }
     }
 
-    if (Util::isKitInProcess())
+    if constexpr (Util::isKitInProcess())
         return true;
 
     int status;
@@ -2688,6 +2713,8 @@ bool COOLWSD::checkAndRestoreForKit()
                     LOG_DBG("dropping subforkit " << it->first);
                     it = dropSubForKit(it);
                 }
+                OutstandingSubForKitSpawns.clear();
+                LastSubForKitSpawnRequestTimes.clear();
 
                 // Spawn a new forkit and try to dust it off and resume.
                 if (!SigUtil::getShutdownRequestFlag() && !createForKit())
@@ -2945,7 +2972,7 @@ bool COOLWSD::createForKit()
     // Always reap first, in case we haven't done so yet.
     if (ForKitProcId != -1)
     {
-        if (Util::isKitInProcess())
+        if constexpr (Util::isKitInProcess())
             return true;
         int status;
         waitpid(ForKitProcId, &status, WUNTRACED | WNOHANG);
@@ -3146,7 +3173,7 @@ private:
             std::string configId;
             std::map<std::string, std::string> admsProps;
 #if !MOBILEAPP
-            LOG_TRC("Child connection with URI [" << COOLWSD::anonymizeUrl(request.getUrl())
+            LOG_TRC("Child connection with URI [" << Anonymizer::anonymizeUrl(request.getUrl())
                                                   << ']');
             Poco::URI requestURI(request.getUrl());
             if (requestURI.getPath() == FORKIT_URI)
@@ -3176,14 +3203,24 @@ private:
                 else
                 {
                     LOG_INF("subforkit [" << configId << "], seen as created.");
-                    SubForKitProcs[configId] = std::make_shared<ForKitProcess>(pid, socket, request);
+                    auto [it, inserted] = SubForKitProcs.try_emplace(configId,
+                        std::make_shared<ForKitProcess>(pid, socket, request));
+                    if (!inserted)
+                    {
+                        LOG_ERR("subforkit [" << configId << "] arrived (pid " << pid
+                                << ") but slot already filled by pid " << it->second->getPid()
+                                << "; dropping duplicate");
+                        return;
+                    }
+                    OutstandingSubForKitSpawns.erase(configId);
+                    LastSubForKitSpawnRequestTimes.erase(configId);
                     LOG_ASSERT_MSG(socket->getInBuffer().empty(), "Unexpected data in prisoner socket");
                     socket->getInBuffer().clear();
                     // created subforkit for a reason, create spare early
                     std::unique_lock<std::mutex> lock(NewChildrenMutex);
                     rebalanceChildren(configId, COOLWSD::NumPreSpawnedChildren);
 
-                    UNITWSD_CALL(newSubForKit(SubForKitProcs[configId], configId));
+                    UNITWSD_CALL(newSubForKit(it->second, configId));
                 }
 
                 return;
@@ -3224,15 +3261,15 @@ private:
 
             if (pid <= 0)
             {
-                LOG_ERR("Invalid PID in child URI [" << COOLWSD::anonymizeUrl(request.getUrl())
+                LOG_ERR("Invalid PID in child URI [" << Anonymizer::anonymizeUrl(request.getUrl())
                                                      << ']');
                 return;
             }
 
             if (jailId.empty())
             {
-                LOG_ERR("Invalid JailId in child URI [" << COOLWSD::anonymizeUrl(request.getUrl())
-                                                        << ']');
+                LOG_ERR("Invalid JailId in child URI ["
+                        << Anonymizer::anonymizeUrl(request.getUrl()) << ']');
                 return;
             }
 
@@ -3300,13 +3337,13 @@ private:
         }
         else if (child && child->getPid() > 0)
         {
-            const std::string abbreviatedMessage = COOLWSD::AnonymizeUserData ? "..." : message->abbr();
+            const std::string abbreviatedMessage = Anonymizer::enabled() ? "..." : message->abbr();
             LOG_WRN("Child " << child->getPid() << " has no DocBroker to handle message: ["
                              << abbreviatedMessage << ']');
         }
         else
         {
-            const std::string abbreviatedMessage = COOLWSD::AnonymizeUserData ? "..." : message->abbr();
+            const std::string abbreviatedMessage = Anonymizer::enabled() ? "..." : message->abbr();
             LOG_ERR("Cannot handle message with unassociated Kit (PID " << _pid << "): ["
                                                                         << abbreviatedMessage);
         }
@@ -3325,19 +3362,8 @@ class PlainSocketFactory final : public SocketFactory
 {
     std::shared_ptr<Socket> create(const int physicalFd, Socket::Type type) override
     {
-        int fd = physicalFd;
-#if !MOBILEAPP
-        if (SimulatedLatencyMs > 0)
-        {
-            int delayfd = Delay::create(SimulatedLatencyMs, physicalFd);
-            if (delayfd == -1)
-                LOG_ERR("DelaySocket creation failed, using physicalFd " << physicalFd << " instead.");
-            else
-                fd = delayfd;
-        }
-#endif
         return StreamSocket::create<StreamSocket>(
-            std::string(), fd, type, false, HostType::Other,
+            std::string(), physicalFd, type, false, HostType::Other,
             std::make_shared<ClientRequestDispatcher>());
     }
 };
@@ -3347,20 +3373,8 @@ class SslSocketFactory final : public SocketFactory
 {
     std::shared_ptr<Socket> create(const int physicalFd, Socket::Type type) override
     {
-        int fd = physicalFd;
-
-#if !MOBILEAPP
-        if (SimulatedLatencyMs > 0)
-        {
-            int delayFd = Delay::create(SimulatedLatencyMs, physicalFd);
-            if (delayFd == -1)
-                LOG_ERR("Delay creation failed, fallback to original fd");
-            else
-                fd = delayFd;
-        }
-#endif
-
-        return StreamSocket::create<SslStreamSocket>(std::string(), fd, type, false, HostType::Other,
+        return StreamSocket::create<SslStreamSocket>(std::string(), physicalFd, type, false,
+                                                     HostType::Other,
                                                      std::make_shared<ClientRequestDispatcher>());
     }
 };
@@ -3444,8 +3458,8 @@ void COOLWSDServer::dumpState(std::ostream& os) const
     THREAD_UNSAFE_DUMP_BEGIN
     os << "COOLWSDServer: " << version << " - " << hash << " state dumping"
 #if !MOBILEAPP
-       << "\n  Kit version: " << COOLWSD::LOKitVersion << "\n  Ports: server "
-       << ClientPortNumber << " prisoner " << MasterLocation
+       << "\n  Kit version: " << COOLWSD::LOKitVersion << "\n  Ports: server " << ClientPortNumber
+       << " prisoner " << MasterLocation
        << "\n  SSL: " << (ConfigUtil::isSslEnabled() ? "https" : "http")
        << "\n  SSL-Termination: " << (ConfigUtil::isSSLTermination() ? "yes" : "no")
        << "\n  Security " << (COOLWSD::NoCapsForKit ? "no" : "") << " chroot, "
@@ -3453,9 +3467,10 @@ void COOLWSDServer::dumpState(std::ostream& os) const
        << "\n  Admin: " << (COOLWSD::AdminEnabled ? "enabled" : "disabled")
        << "\n  RouteToken: " << COOLWSD::RouteToken
 #endif
-       << "\n  Uptime (seconds): " <<
-        std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::steady_clock::now() - COOLWSD::StartTime).count()
+       << "\n  Uptime (seconds): "
+       << std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() -
+                                                           COOLWSD::StartTime)
+              .count()
        << "\n  TerminationFlag: " << SigUtil::getTerminationFlag()
        << "\n  isShuttingDown: " << SigUtil::getShutdownRequestFlag()
        << "\n  NewChildren: " << NewChildren.size() << " (" << NewChildren.capacity() << ')'
@@ -3468,25 +3483,22 @@ void COOLWSDServer::dumpState(std::ostream& os) const
        << "\n  vs. MaxDocuments: " << COOLWSD::MaxDocuments
        << "\n  NumConnections: " << COOLWSD::NumConnections
        << "\n  vs. MaxConnections: " << COOLWSD::MaxConnections
-       << "\n  SysTemplate: " << COOLWSD::SysTemplate
-       << "\n  LoTemplate: " << COOLWSD::LoTemplate
+       << "\n  SysTemplate: " << COOLWSD::SysTemplate << "\n  LoTemplate: " << COOLWSD::LoTemplate
        << "\n  ChildRoot: " << COOLWSD::ChildRoot
        << "\n  FileServerRoot: " << COOLWSD::FileServerRoot
        << "\n  ServiceRoot: " << COOLWSD::ServiceRoot
        << "\n  LOKitVersion: " << COOLWSD::LOKitVersion
        << "\n  HostIdentifier: " << Util::getProcessIdentifier()
-       << "\n  ConfigFile: " << COOLWSD::ConfigFile
-       << "\n  ConfigDir: " << COOLWSD::ConfigDir
+       << "\n  ConfigFile: " << COOLWSD::ConfigFile << "\n  ConfigDir: " << COOLWSD::ConfigDir
        << "\n  LogLevel: " << COOLWSD::LogLevel
        << "\n  LogDisabledAreas: " << COOLWSD::LogDisabledAreas
-       << "\n  AnonymizeUserData: " << (COOLWSD::AnonymizeUserData ? "yes" : "no")
+       << "\n  AnonymizeUserData: " << (Anonymizer::enabled() ? "yes" : "no")
        << "\n  CheckCoolUser: " << (COOLWSD::CheckCoolUser ? "yes" : "no")
        << "\n  IsProxyPrefixEnabled: " << (COOLWSD::IsProxyPrefixEnabled ? "yes" : "no")
        << "\n  OverrideWatermark: " << COOLWSD::OverrideWatermark
        << "\n  UserInterface: " << COOLWSD::UserInterface
-       << "\n  Total PSS: " << Util::getProcessTreePss(Util::getProcessId()) << " KB"
-       << "\n  Config: " << LoggableConfigEntries
-        ;
+       << "\n  Total PSS: " << ProcUtil::getProcessTreePss(ProcUtil::getProcessId()) << " KB"
+       << "\n  Config: " << LoggableConfigEntries;
     THREAD_UNSAFE_DUMP_END
 
     std::string smap;
@@ -3518,10 +3530,6 @@ void COOLWSDServer::dumpState(std::ostream& os) const
 
 #if !MOBILEAPP
     _admin.dumpMetrics(); // Dump the state from the Admin poll thread.
-
-    // If we have any delaying work going on.
-    os << '\n';
-    Delay::dumpState(os);
 
     // If we have any DNS work going on.
     os << '\n';
@@ -3780,11 +3788,9 @@ void COOLWSD::innerMain()
     FileServerRoot = Poco::Path(FileServerRoot).absolute().toString();
     LOG_DBG("FileServerRoot: " << FileServerRoot);
 
-    LOG_DBG("Initializing DelaySocket with " << SimulatedLatencyMs << "ms.");
-    Delay delay(SimulatedLatencyMs);
-
     const auto fetchUpdateCheck = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::hours(std::max(ConfigUtil::getConfigValue<int>("fetch_update_check", 10), 0)));
+
 #endif
 
     ClientRequestDispatcher::InitStaticFileContentCache();
@@ -3805,7 +3811,7 @@ void COOLWSD::innerMain()
 // No need to "have at least one child" beforehand on mobile
 #if !MOBILEAPP
 
-    if (!Util::isKitInProcess())
+    if constexpr (!Util::isKitInProcess())
     {
         // Make sure we have at least one child before moving forward.
         std::unique_lock<std::mutex> lock(NewChildrenMutex);
@@ -4152,7 +4158,7 @@ void COOLWSD::innerMain()
     }
 
 #if !MOBILEAPP
-    if (!Util::isKitInProcess())
+    if constexpr (!Util::isKitInProcess())
     {
         // Terminate child processes
         LOG_INF("Requesting forkit process " << ForKitProcId << " to terminate.");
@@ -4196,10 +4202,8 @@ void COOLWSD::innerMain()
 
     SigUtil::addActivity("terminated unused children");
 
-    ClientRequestDispatcher::uninitialize();
-
 #if !MOBILEAPP
-    if (!Util::isKitInProcess())
+    if constexpr (!Util::isKitInProcess())
     {
         SigUtil::addActivity("waiting for forkit to exit");
 
@@ -4211,7 +4215,8 @@ void COOLWSD::innerMain()
         ForKitProc.reset();
     }
 
-    JailUtil::cleanupJails(CleanupChildRoot);
+    // In unit-tests remove only our jails, otherwise cleanup all jails.
+    JailUtil::cleanupJails(UnitWSD::isUnitTesting() ? ChildRoot : CleanupChildRoot);
 #endif // !MOBILEAPP
 
     if constexpr (Util::isMobileApp())
@@ -4258,11 +4263,15 @@ int COOLWSD::cleanup(int returnValue)
 
         COOLWSDServer::WebServerPoll.reset();
 
+        ClientRequestDispatcher::uninitialize();
+
 #if !MOBILEAPP
         SavedClipboards.reset();
 
         FileRequestHandler.reset();
         JWTAuth::cleanup();
+
+        Admin::uninitialize();
 
         Util::forcedExit(returnValue);
 
@@ -4430,14 +4439,14 @@ static void forwardSignal(int signum);
 void dump_state()
 {
     std::ostringstream oss(Util::makeDumpStateStream());
-    oss << "Start WSD " << Util::getProcessId() << " Dump State:\n";
+    oss << "Start WSD " << ProcUtil::getProcessId() << " Dump State:\n";
 
     if (COOLWSDServer::Instance)
         COOLWSDServer::Instance->dumpState(oss);
 
-    oss << "\nMalloc info [" << Util::getProcessId() << "]: \n\t"
+    oss << "\nMalloc info [" << ProcUtil::getProcessId() << "]: \n\t"
         << Util::replace(Util::getMallocInfo(), "\n", "\n\t") << '\n';
-    oss << "\nEnd WSD " << Util::getProcessId() << " Dump State.\n";
+    oss << "\nEnd WSD " << ProcUtil::getProcessId() << " Dump State.\n";
 
     const std::string msg = oss.str();
     fprintf(stderr, "%s", msg.c_str()); // Log in the journal.
@@ -4470,7 +4479,7 @@ void forwardSigUsr2()
 #if !MOBILEAPP
     LOG_TRC("forwardSigUsr2");
 
-    if (Util::isKitInProcess())
+    if constexpr (Util::isKitInProcess())
         return;
 
     Util::assertIsLocked(DocBrokersMutex);
@@ -4522,7 +4531,6 @@ int main(int argc, char** argv)
 {
     SigUtil::setUserSignals();
     SigUtil::setFatalSignals("wsd " + Util::getCoolVersion() + ' ' + Util::getCoolVersionHash());
-    setKitInProcess();
 
     try
     {

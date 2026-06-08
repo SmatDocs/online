@@ -268,7 +268,7 @@ public:
         return false;
     }
 
-    std::string getURI() const
+    const std::string& getURI() const
     {
         return _uriString;
     }
@@ -276,11 +276,11 @@ public:
     {
         return _isProxy;
     }
-    const std::string getProxyPrefix() const
+    const std::string& getProxyPrefix() const
     {
         return _proxyPrefix;
     }
-    const std::string getHostUntrusted() const
+    const std::string& getHostUntrusted() const
     {
         return _hostUntrusted;
     }
@@ -370,14 +370,15 @@ public:
     [[nodiscard]] std::string toString() const
     {
         std::ostringstream oss;
-        oss << _uriString << ' ' << nameShort(_method)
-            << (_isProxy?"Proxy":"")
-            << (_isWebSocket?"WebSocket":"");
+        oss << nameShort(_method) << ' ' << _uriString << ' ' << (_isProxy ? "Proxy" : "")
+            << (_isWebSocket ? "WebSocket" : "");
         oss << ", host: " << _hostUntrusted;
-        oss << ", path: " << _pathSegs.size();
+        oss << ", " << _pathSegs.size() << " path segments: ";
         for (std::size_t i = 0; i < _pathSegs.size(); ++i)
-            oss << "\n[" << i << "] '" << _pathSegs[i] << '\'';
-        oss << "\nfull URI: " << _uriString;
+        {
+            oss << '[' << i << "] '" << _pathSegs[i] << "', ";
+        }
+
         return oss.str();
     }
 };

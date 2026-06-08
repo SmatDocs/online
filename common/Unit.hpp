@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <common/Log.hpp>
 #include <common/StateEnum.hpp>
 #include <common/Util.hpp>
 #include <net/Socket.hpp>
@@ -22,7 +23,7 @@
 
 #include <test/testlog.hpp>
 
-#include <LibreOfficeKit/LibreOfficeKitInit.h>
+#include <COKit/COKitInit.h>
 
 class UnitBase;
 class UnitWSD;
@@ -108,18 +109,19 @@ protected:
     STATE_ENUM(TestResult, Failed, Ok, TimedOut);
 
     /// Encourages the process to exit with this value (unless hooked)
-    virtual void exitTest(TestResult result, const std::string& reason = std::string());
+    virtual void exitTest(TestResult result, const std::string& reason = std::string(),
+                          LOG_CAPTURE_CALLER_DECLARATION);
 
     /// Fail the test with the given reason.
-    void failTest(const std::string& reason)
+    void failTest(const std::string& reason, LOG_CAPTURE_CALLER_DECLARATION)
     {
-        exitTest(TestResult::Failed, reason);
+        exitTest(TestResult::Failed, reason, LOG_PASS_PARENT_CALLER);
     }
 
     /// Pass the test with the given optional reason.
-    void passTest(const std::string& reason = std::string())
+    void passTest(const std::string& reason = std::string(), LOG_CAPTURE_CALLER_DECLARATION)
     {
-        exitTest(TestResult::Ok, reason);
+        exitTest(TestResult::Ok, reason, LOG_PASS_PARENT_CALLER);
     }
 
     /// Called when a test has ended, to clean up.
@@ -215,13 +217,6 @@ public:
                              const std::shared_ptr<StreamSocket>& /*socket*/)
     {
         return {};
-    }
-
-    virtual std::string getProxyRatingServer() const
-    {
-        // return a blank proxy rating server by default so there is no
-        // external network traffic during tests.
-        return std::string();
     }
 
     /// Called when the document has been loaded,
@@ -402,7 +397,7 @@ class UnitWSD : public UnitBase
 {
     UnitWSDInterface *_wsd;
     bool _hasKitHooks;
-    std::atomic_bool _hasDocBroker;
+    std::atomic_int _docBrokerCounter;
 
 public:
     explicit UnitWSD(const std::string& testname);
@@ -703,10 +698,10 @@ public:
     /// After the kit process created a ChildSession
     virtual void postKitSessionCreated(Session* /*session*/) {}
 
-    /// Allow a custom LibreOfficeKit wrapper
-    virtual LibreOfficeKit *lok_init(const char * /* instdir */,
+    /// Allow a custom COKit wrapper
+    virtual COKit *cok_init(const char * /* instdir */,
                                      const char * /* userdir */,
-                                     LokHookFunction2 /* fn */)
+                                     CokHookFunction2 /* fn */)
     {
         return nullptr;
     }

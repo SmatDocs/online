@@ -16,29 +16,39 @@
 
 #pragma once
 
-#include <Session.hpp>
-#include <Storage.hpp>
-#include <SenderQueue.hpp>
-#include <ServerURL.hpp>
-#include <DocumentBroker.hpp>
+#include <common/Rectangle.hpp>
+#include <common/Session.hpp>
+#include <common/Uri.hpp>
+#include <common/Util.hpp>
+#include <wsd/DocumentBroker.hpp>
+#include <wsd/SenderQueue.hpp>
+#include <wsd/ServerURL.hpp>
+#include <wsd/Storage.hpp>
 
+#include <Poco/JSON/Array.h>
 #include <Poco/JSON/Object.h>
 #include <Poco/SharedPtr.h>
 #include <Poco/URI.h>
 
-#include <Rectangle.hpp>
 #include <deque>
-#include <utility>
-#include <common/Util.hpp>
-
 #include <optional>
+#include <utility>
 
 class DocumentBroker;
-namespace http { class Session; }
+// wsd/AIChatSession.cpp is only compiled into builds that have an HTTP
+// transport for the AI proxy: COOL (!MOBILEAPP) and CODA-Q (QTAPP). The other
+// MOBILEAPP variants (iOS/Android/macOS/cowasm, and CODA-W until its Visual
+// Studio project picks it up) build without it.
+#if !MOBILEAPP || defined(QTAPP)
+class AIChatSession;
+#endif
 
 /// Represents a session to a COOL client, in the WSD process.
 class ClientSession final : public Session
 {
+#if !MOBILEAPP || defined(QTAPP)
+    friend class AIChatSession;
+#endif
 public:
     ClientSession(const std::shared_ptr<ProtocolHandlerInterface>& ws, const std::string& id,
                   const std::shared_ptr<DocumentBroker>& docBroker, const Poco::URI& uriPublic,
@@ -193,8 +203,36 @@ public:
         _auth.expire();
     }
 
+    /// Start waiting for a token refresh from the host.
+    void startTokenRefresh(const std::chrono::seconds timeout = std::chrono::seconds(30))
+    {
+        LOG_DBG("Session [" << getId() << "] starting token refresh wait (attempt #"
+                            << (_tokenRefreshAttempts + 1) << ')');
+        ++_tokenRefreshAttempts;
+        _auth.startTokenRefresh(timeout);
+    }
+
+    /// Returns the number of consecutive refresh attempts since the last successful upload.
+    int tokenRefreshAttempts() const { return _tokenRefreshAttempts; }
+
+    /// Reset the consecutive token-refresh attempt counter. Call on successful upload.
+    void resetTokenRefreshAttempts() { _tokenRefreshAttempts = 0; }
+
+    /// Returns true iff this session is waiting for a token refresh.
+    bool isRefreshingToken() const { return _auth.isRefreshingToken(); }
+
+    /// Returns true if the token refresh wait has timed out.
+    bool isTokenRefreshTimedOut(
+        const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now()) const
+    {
+        return _auth.isTokenRefreshTimedOut(now);
+    }
+
     /// Set WOPI fileinfo object
     void setWopiFileInfo(std::unique_ptr<WopiStorage::WOPIFileInfo> wopiFileInfo) { _wopiFileInfo = std::move(wopiFileInfo); }
+
+    /// True if the WOPI host asked for AI UI / features to be disabled for this document.
+    bool isDisableAISettings() const;
 
     /// Get requested tiles waiting for sending to the client
     std::deque<TileDesc>& getRequestedTiles() { return _requestedTiles; }
@@ -205,8 +243,11 @@ public:
     size_t getTilesOnFlyUpperLimit() const;
     void removeOutdatedTilesOnFly(std::chrono::steady_clock::time_point now);
     void onTileProcessed(TileWireId wireId);
+    /// Remove a tile from the on-fly tracking (no logging if absent).
+    /// Returns true if the wireId was found and removed.
+    bool removeTileOnFly(TileWireId wireId);
 
-    Util::Rectangle getVisibleArea() const { return _clientVisibleArea; }
+    const Util::Rectangle& getVisibleArea() const { return _clientVisibleArea; }
     /// Visible area can have negative value as position, but we have tiles only in the positive range
     Util::Rectangle getNormalizedVisibleArea() const;
 
@@ -321,6 +362,38 @@ public:
 
     void uploadViewSettingsToWopiHost();
 
+    /// Resolve AI credentials with precedence:
+    ///   viewSettings[aiProviderAPIKey|Model|URL]
+    ///   -> userPrivateInfoObj[AIProviderAPIKey|Model|URL]
+    ///   -> coolwsd.xml ai.api_key / ai.model / ai.api_url
+    /// Applies the resolved values to this session. If viewSettings is non-null
+    /// and a field is filled from userPrivateInfoObj, viewSettings is mutated
+    /// (and viewSettingsMutated set to true) so callers can persist the
+    /// migration. outModel receives the resolved model name when aiConfigured,
+    /// otherwise an empty string. outRating receives the ethical AI rating
+    /// (A/B/C/U).
+    /// Returns aiConfigured: ai.enabled AND all three fields non-empty.
+    bool resolveAndApplyAICredentials(
+        Poco::JSON::Object::Ptr& viewSettings,
+        const Poco::JSON::Object::Ptr& userPrivateInfoObj,
+        bool disableAISettings,
+        bool& viewSettingsMutated,
+        std::string& outModel,
+        std::string& outRating);
+
+    /// Resolve AI image-generation credentials with the same precedence as
+    /// resolveAndApplyAICredentials:
+    ///   viewSettings[aiImageProviderAPIKey|URL|aiImageModel|aiImageSize]
+    ///   -> userPrivateInfoObj[AIImageProviderAPIKey|URL|AIImageModel|AIImageSize]
+    ///   -> coolwsd.xml ai.image_api_key / ai.image_api_url / ai.image_model / ai.image_size
+    /// Applies the resolved values to this session. If viewSettings is non-null
+    /// and a field is filled from userPrivateInfoObj, viewSettings is mutated
+    /// (and viewSettingsMutated set to true) so callers can persist the
+    /// migration.
+    void resolveAndApplyAIImageCredentials(Poco::JSON::Object::Ptr& viewSettings,
+                                           const Poco::JSON::Object::Ptr& userPrivateInfoObj,
+                                           bool& viewSettingsMutated);
+
     /// Override parsedDocOption values we get from browser setting json
     /// Because when client sends `load url` it doesn't have information about browser setting json
     void overrideDocOption();
@@ -339,7 +412,7 @@ private:
     void onDisconnect() override;
 
     /// Does SocketHandler: have messages to send ?
-    bool hasQueuedMessages() const override;
+    bool hasQueuedMessages() const override { return !_senderQueue.empty(); }
 
     /// SocketHandler: send those messages
     void writeQueuedMessages(std::size_t capacity) override;
@@ -348,21 +421,13 @@ private:
 
     bool handleSignatureAction(const StringVector& tokens);
 
-    bool handleAIAction(const StringVector& tokens);
-
-    bool handleAIChatAction(const std::string& firstLine);
-    bool handleAIChatCancel(const std::string& firstLine);
     bool handleUpdateViewSettings(const std::string& firstLine);
-    void sendAIChatResult(bool success, const std::string& text,
-                          const std::string& requestId);
 
-    bool handleAIImageGeneration(const std::string& prompt,
-                                  const std::string& requestId);
-
-    /// Map an HTTP status code from an AI API response to a user-facing error string.
-    static std::string mapAIHttpStatusToError(http::StatusCode statusCode,
-                                              const std::string& reasonPhrase,
-                                              const std::string& context = "");
+    /// Persist the last-used Impress view mode (Normal/Notes) for the current
+    /// document, keyed by docKey, inside the per-user viewsetting.json. The
+    /// per-user dimension is implicit in where that file lives; we only add the
+    /// per-document key here.
+    bool handleUpdateViewMode(const StringVector& tokens);
 
     bool loadDocument(const char* buffer, int length, const StringVector& tokens,
                       const std::shared_ptr<DocumentBroker>& docBroker);
@@ -375,8 +440,6 @@ private:
     bool sendCombinedTiles(const char* buffer, int length, const StringVector& tokens,
                            const std::shared_ptr<DocumentBroker>& docBroker);
 
-    bool sendFontRendering(const char* buffer, int length, const StringVector& tokens,
-                           const std::shared_ptr<DocumentBroker>& docBroker);
     bool handleGetSlideRequest(const StringVector& tokens,
                                const std::shared_ptr<DocumentBroker>& docBroker);
 
@@ -433,6 +496,10 @@ private:
 
     /// Authorization data - either access_token or access_header.
     Authorization _auth;
+
+    /// Number of consecutive token-refresh attempts triggered by upload 401s
+    /// since the last successful upload. Bounds the refresh-on-unauthorize retry loop.
+    int _tokenRefreshAttempts;
 
     /// Rotating clipboard remote access identifiers - protected by GlobalSessionMapMutex
     std::string _clipboardKeys[2];
@@ -535,8 +602,10 @@ private:
 
     Poco::SharedPtr<Poco::JSON::Object> _viewSettingsJSON;
 
-    /// Active AI chat HTTP session for cancellation support
-    std::shared_ptr<http::Session> _activeAIChatSession;
+#if !MOBILEAPP || defined(QTAPP)
+    /// AI chat orchestrator - multi-round LLM tool loop.
+    std::unique_ptr<AIChatSession> _aiChat;
+#endif
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */
