@@ -480,6 +480,11 @@ apply_slot_file_caps() {
   coolforkit_bin="$SLOT_ROOT/coolforkit-caps"
   coolmount_bin="$SLOT_ROOT/coolmount"
   setcap_bin="$(command -v setcap || true)"
+  if [[ -z "$setcap_bin" && -x /usr/sbin/setcap ]]; then
+    setcap_bin="/usr/sbin/setcap"
+  elif [[ -z "$setcap_bin" && -x /sbin/setcap ]]; then
+    setcap_bin="/sbin/setcap"
+  fi
 
   if [[ -z "$setcap_bin" ]]; then
     echo "[prod] setcap not found; cannot prepare slot $slot file capabilities" >&2
