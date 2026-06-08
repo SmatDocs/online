@@ -393,10 +393,15 @@ sync_slot_runtime_files() {
   local slot="$1"
   set_slot_context "$slot"
 
-  # Copy runtime files into non-blue worktrees (blue IS the repo root).
+  # Keep the checked-out target slot as the source of truth. Older blue slots can
+  # otherwise overwrite updated tracked runtime files during a rolling deploy.
   if [[ "$SLOT_ROOT" != "$REPO_ROOT" ]]; then
-    cp -f "$REPO_ROOT/start-coolwsd.sh" "$SLOT_ROOT/start-coolwsd.sh"
-    cp -f "$REPO_ROOT/coolwsd_prod.xml" "$SLOT_ROOT/coolwsd_prod.xml"
+    local runtime_file=""
+    for runtime_file in start-coolwsd.sh coolwsd_prod.xml; do
+      if [[ ! -f "$SLOT_ROOT/$runtime_file" && -f "$REPO_ROOT/$runtime_file" ]]; then
+        cp -f "$REPO_ROOT/$runtime_file" "$SLOT_ROOT/$runtime_file"
+      fi
+    done
   fi
 
   # Ensure coolkitconfig.xcu is available in the config dir so release builds
