@@ -90,7 +90,7 @@ jobs:
           key: ${{ secrets.COLLABORA_PRODUCTION_SSH_KEY }}
           port: ${{ secrets.COLLABORA_PRODUCTION_SSH_PORT || 22 }}
           command_timeout: 60m
-          script_stop: true
+          script_stop: false
           envs: PRODUCTION_BLUE_HEALTH_URL,PRODUCTION_GREEN_HEALTH_URL,DEPLOY_EVENT_NAME,DEPLOY_PRODUCTION_ACTION,DEPLOY_PRODUCTION_REF
           script: |
             cat > /tmp/collabora-production-deploy.sh <<'REMOTE_SCRIPT'
