@@ -347,7 +347,8 @@ run_configure_for_slot() {
     if slot_uses_monorepo_engine "$SLOT_ROOT"; then
       export COCOREPATH="$SLOT_ROOT/engine"
     fi
-    if [[ ! -x "./configure" ]]; then
+    if [[ ! -x "./configure" ]] ||
+      { slot_uses_monorepo_engine "$SLOT_ROOT" && grep -q "LibreOfficeKit/LibreOfficeKit.h" "./configure" 2>/dev/null; }; then
       echo "[prod] Generating configure script in $SLOT_ROOT"
       ./autogen.sh
     fi
