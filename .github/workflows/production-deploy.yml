@@ -119,7 +119,7 @@ jobs:
             SCRIPT_REF="origin/prod"
             if [ -n "$REF" ]; then
               case "$MODE" in
-                rollback_blue|rollback_green|rollback_both) ;;
+                rollback_blue|rollback_green|rollback_both) true ;;
                 *)
                   USE_DEPLOY_REF=1
                   if git rev-parse --verify --quiet "${REF}^{commit}" >/dev/null; then
