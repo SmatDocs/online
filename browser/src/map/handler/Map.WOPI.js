@@ -429,6 +429,83 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			return;
 		}
 
+		var postPresentationState = function(state, reason) {
+			this._map.fire('postMessage', {
+				msgId: 'Presentation_State',
+				args: {
+					State: state,
+					Reason: reason || null
+				}
+			});
+		}.bind(this);
+
+		var dismissAlreadyPresentingModal = function() {
+			if (this._map.uiManager && typeof this._map.uiManager.closeModal === 'function') {
+				var dialogId = typeof this._map.uiManager.generateModalId === 'function'
+					? this._map.uiManager.generateModalId('already-presenting-modal')
+					: 'already-presenting-modal';
+				this._map.uiManager.closeModal(dialogId);
+			}
+			var response = document.getElementById('already-presenting-modal-response');
+			if (response)
+				response.click();
+		}.bind(this);
+
+		var hasActivePresentation = function() {
+			var presenter = app.map && app.map.slideShowPresenter;
+			if (presenter) {
+				if (typeof presenter._checkAlreadyPresenting === 'function' && presenter._checkAlreadyPresenting())
+					return true;
+				if (presenter._slideShowCanvas)
+					return true;
+			}
+			var legacySlideShow = this._map.slideShow;
+			if (legacySlideShow) {
+				if (legacySlideShow._slideShow)
+					return true;
+				if (legacySlideShow._slideShowWindowProxy && !legacySlideShow._slideShowWindowProxy.closed)
+					return true;
+			}
+			return false;
+		}.bind(this);
+
+		var endActivePresentation = function(reason) {
+			dismissAlreadyPresentingModal();
+			var ended = false;
+			var presenter = app.map && app.map.slideShowPresenter;
+			if (presenter && typeof presenter.endPresentation === 'function') {
+				presenter.endPresentation(true);
+				ended = true;
+			}
+			var legacySlideShow = this._map.slideShow;
+			if (legacySlideShow) {
+				if (legacySlideShow._slideShowWindowProxy && !legacySlideShow._slideShowWindowProxy.closed) {
+					legacySlideShow._slideShowWindowProxy.close();
+					legacySlideShow._slideShowWindowProxy = null;
+					legacySlideShow._slideShow = null;
+					ended = true;
+				}
+				else if (legacySlideShow._slideShow && typeof legacySlideShow._stopFullScreen === 'function') {
+					legacySlideShow._stopFullScreen();
+					ended = true;
+				}
+			}
+			postPresentationState('editing', reason || 'end_presentation');
+			return ended;
+		}.bind(this);
+
+		var startPresentationFromSlide = function(slideNumber, reason) {
+			var presentationArgs = {};
+			if (typeof slideNumber !== 'undefined')
+				presentationArgs.startSlideNumber = slideNumber;
+			postPresentationState('entering', reason || 'start_presentation');
+			if (window.canvasSlideshowEnabled) {
+				this._map.fire('newfullscreen', presentationArgs);
+			} else {
+				this._map.fire('fullscreen', presentationArgs);
+			}
+		}.bind(this);
+
 		// Exception: UI modification can be done before WOPIPostmessageReady was fulfilled
 		if (msg.MessageId === 'Show_Button' || msg.MessageId === 'Hide_Button' || msg.MessageId === 'Remove_Button') {
 			if (!msg.Values) {
@@ -715,40 +792,38 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			app.util.toggleFullScreen();
 		}
 		else if (msg.MessageId === 'Action_EndPresentation' && this._map.getDocType() === 'presentation') {
-			var presenter = app.map && app.map.slideShowPresenter;
-			if (presenter && typeof presenter.endPresentation === 'function') {
-				presenter.endPresentation(true);
-			}
-			var legacySlideShow = this._map.slideShow;
-			if (legacySlideShow && legacySlideShow._slideShow && typeof legacySlideShow._stopFullScreen === 'function') {
-				legacySlideShow._stopFullScreen();
-			}
+			postPresentationState('exiting', msg.Values && msg.Values.reason || 'action_end_presentation');
+			endActivePresentation(msg.Values && msg.Values.reason || 'action_end_presentation');
 		}
 		else if (msg.MessageId === 'Action_PresentationCurrentSlide' && this._map.getDocType() === 'presentation') {
-			if (app.dispatcher && app.dispatcher.dispatch) {
-				app.dispatcher.dispatch('presentation-currentslide');
+			var currentSlideNumber = this._map.getCurrentPartNumber();
+			var currentSlideReason = msg.Values && msg.Values.Source || 'action_presentation_current_slide';
+			if (hasActivePresentation()) {
+				endActivePresentation('restart_current_slide');
+				setTimeout(function() {
+					startPresentationFromSlide(currentSlideNumber, currentSlideReason);
+				}, 350);
 			} else {
-				this._map.fire('fullscreen', { startSlideNumber: this._map.getCurrentPartNumber() });
+				startPresentationFromSlide(currentSlideNumber, currentSlideReason);
 			}
 		}
 		else if (msg.MessageId === 'Action_FullscreenPresentation' && this._map.getDocType() === 'presentation') {
+			var slideNumber;
 			if (msg.Values) {
-				var slideNumber;
 				if (typeof msg.Values.StartSlideNumber != 'undefined') {
 					slideNumber = msg.Values.StartSlideNumber;
 				} else if (msg.Values.CurrentSlide) {
 					slideNumber = this._map.getCurrentPartNumber();
 				}
-				var presentationArgs = { startSlideNumber: slideNumber };
-				if (window.canvasSlideshowEnabled) {
-					this._map.fire('newfullscreen', presentationArgs);
-				} else {
-					this._map.fire('fullscreen', presentationArgs);
-				}
-			} else if (window.canvasSlideshowEnabled) {
-				this._map.fire('newfullscreen');
+			}
+			var fullscreenReason = msg.Values && msg.Values.Source || 'action_fullscreen_presentation';
+			if (hasActivePresentation()) {
+				endActivePresentation('restart_fullscreen_presentation');
+				setTimeout(function() {
+					startPresentationFromSlide(slideNumber, fullscreenReason);
+				}, 350);
 			} else {
-				this._map.fire('fullscreen');
+				startPresentationFromSlide(slideNumber, fullscreenReason);
 			}
 		}
 		else if (msg.MessageId === 'Action_Print') {

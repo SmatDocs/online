@@ -136,10 +136,21 @@ window.L.Map.SlideShow = window.L.Handler.extend({
 	_stopFullScreen: function () {
 		window.L.DomUtil.remove(this._slideShow);
 		this._slideShow = null;
+		this._postPresentationState('editing', 'legacy_stop_fullscreen');
 		// #7102 on exit from fullscreen we don't get a 'focus' event
 		// in Chrome so a later second attempt at launching a presentation
 		// fails
 		this._map.focus();
+	},
+
+	_postPresentationState: function(state, reason) {
+		this._map.fire('postMessage', {
+			msgId: 'Presentation_State',
+			args: {
+				State: state,
+				Reason: reason || null
+			}
+		});
 	},
 
 	_onSlideDownloadReady: function (e) {
@@ -235,6 +246,7 @@ window.L.Map.SlideShow = window.L.Handler.extend({
 		var separator = (this._slideURL.indexOf('?') === -1) ? '?' : '&';
 		this._slideShow.src = this._slideURL + separator + 'StartSlideNumber=' + this._startSlideNumber;
 		this._slideShow.contentWindow.focus();
+		this._postPresentationState('presenting', 'legacy_start_fullscreen');
 	},
 
 	_handleSlideWindowLoaded: function() {

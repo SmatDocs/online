@@ -44,6 +44,7 @@ class Anonymizer
 #if ENABLE_SSL
         , _highStrength(highStrength)
 #endif
+        , _prefix(0)
     {
     }
 
