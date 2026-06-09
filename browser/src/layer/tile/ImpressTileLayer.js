@@ -54,11 +54,12 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		// Before this instance is created, app.file.readOnly and app.file.editComments variables are set.
 		// If document is on read only mode, we will draw all parts at once.
 		// Let's call default view the "part based view" and new view the "file based view".
-		// On small-screen devices and tablets, Permission.js sets the UI in read-only mode
-		// until the user taps #mobile-edit-button. Start in fileBasedView so the user gets
-		// endless slide scrolling while viewing.
+		// On small-screen devices and tablets, keep the stacked file-based
+		// layout only for true read-only viewing. Writable mobile documents
+		// should open directly in editable, part-based slide view.
 		var mobileViewing =
-			window.mode.isSmallScreenDevice() || window.mode.isTablet();
+			(window.mode.isSmallScreenDevice() || window.mode.isTablet()) &&
+			(app.file.readOnly || app.file.permission !== 'edit');
 		if (app.file.readOnly || mobileViewing) app.file.fileBasedView = true;
 
 		this._partHeightTwips = 0; // Single part's height.
