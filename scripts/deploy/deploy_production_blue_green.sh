@@ -27,7 +27,6 @@ set -euo pipefail
 # - PRODUCTION_SWITCH_TO_BLUE_CMD / PRODUCTION_SWITCH_TO_GREEN_CMD
 # - PRODUCTION_SHUTDOWN_OLD_SLOT=true|false
 # - PRODUCTION_ENGINE_ASSETS_URL
-# - PRODUCTION_LO_PYTHON_SCRIPTS_SOURCE
 # - PRODUCTION_BLUE_HEALTH_URL / PRODUCTION_GREEN_HEALTH_URL
 # - PRODUCTION_HEALTH_MAX_ATTEMPTS / PRODUCTION_HEALTH_SLEEP_SECONDS / PRODUCTION_HEALTH_CONSECUTIVE_SUCCESS
 
@@ -80,16 +79,8 @@ HEALTH_CONSECUTIVE_SUCCESS="${PRODUCTION_HEALTH_CONSECUTIVE_SUCCESS:-2}"
 MAKE_JOBS="${PRODUCTION_MAKE_JOBS:-$(nproc)}"
 DEFAULT_DEPLOY_REF="${PRODUCTION_DEPLOY_REF:-prod}"
 ENGINE_ASSETS_URL="${PRODUCTION_ENGINE_ASSETS_URL:-https://github.com/CollaboraOnline/online/releases/download/for-code-assets/engine-main-assets.tar.gz}"
-LO_PYTHON_SCRIPTS_SOURCE="$(resolve_path "${PRODUCTION_LO_PYTHON_SCRIPTS_SOURCE:-scripts/deploy/lo-python-scripts}")"
 BLUE_HEALTH_URL="${PRODUCTION_BLUE_HEALTH_URL:-http://127.0.0.1:${BLUE_PORT}/hosting/discovery}"
 GREEN_HEALTH_URL="${PRODUCTION_GREEN_HEALTH_URL:-http://127.0.0.1:${GREEN_PORT}/hosting/discovery}"
-LO_PYTHON_SCRIPT_NAMES=(
-  ApplyExcelActionPlan.py
-  ApplySlidesV2ActionPlan.py
-  EnsureSdocBookmarks.py
-  PreviewActionPlan.py
-  ResolvePreviewDiff.py
-)
 
 slot_ref_path() {
   local slot="$1"
@@ -423,34 +414,6 @@ sync_slot_runtime_files() {
   fi
 }
 
-sync_slot_python_scripts() {
-  local slot="$1"
-  local script_name=""
-  local target_dir=""
-
-  set_slot_context "$slot"
-
-  if [[ ! -d "$LO_PYTHON_SCRIPTS_SOURCE" ]]; then
-    echo "[prod] Missing LO Python script source: $LO_PYTHON_SCRIPTS_SOURCE" >&2
-    exit 1
-  fi
-
-  target_dir="$SLOT_ROOT/engine/instdir/share/Scripts/python"
-  if [[ ! -d "$target_dir" ]]; then
-    echo "[prod] Missing LO Python script target for $slot: $target_dir" >&2
-    exit 1
-  fi
-
-  echo "[prod] Syncing custom LO Python scripts to $target_dir"
-  for script_name in "${LO_PYTHON_SCRIPT_NAMES[@]}"; do
-    if [[ ! -f "$LO_PYTHON_SCRIPTS_SOURCE/$script_name" ]]; then
-      echo "[prod] Missing custom LO Python script: $LO_PYTHON_SCRIPTS_SOURCE/$script_name" >&2
-      exit 1
-    fi
-    install -m 0644 "$LO_PYTHON_SCRIPTS_SOURCE/$script_name" "$target_dir/$script_name"
-  done
-}
-
 build_slot() {
   local slot="$1"
   set_slot_context "$slot"
@@ -569,7 +532,6 @@ deploy_slot() {
   sync_slot_runtime_files "$slot"
   configure_slot "$slot"
   build_slot "$slot"
-  sync_slot_python_scripts "$slot"
   apply_slot_file_caps "$slot"
   start_slot "$slot"
 
