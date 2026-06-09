@@ -791,6 +791,23 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		else if (msg.MessageId === 'Action_Fullscreen') {
 			app.util.toggleFullScreen();
 		}
+		else if (msg.MessageId === 'Action_SetPart' && this._map.getDocType() === 'presentation') {
+			if (!msg.Values) {
+				window.app.console.error('Property "Values" not set');
+				return;
+			}
+			var targetPart;
+			if (typeof msg.Values.Part !== 'undefined') {
+				targetPart = parseInt(msg.Values.Part);
+			} else if (typeof msg.Values.SlideIndex !== 'undefined') {
+				targetPart = parseInt(msg.Values.SlideIndex) - 1;
+			}
+			if (isNaN(targetPart) || targetPart < 0) {
+				window.app.console.error('Invalid Action_SetPart target: ' + targetPart);
+				return;
+			}
+			this._map.setPart(targetPart, false, true);
+		}
 		else if (msg.MessageId === 'Action_EndPresentation' && this._map.getDocType() === 'presentation') {
 			postPresentationState('exiting', msg.Values && msg.Values.reason || 'action_end_presentation');
 			endActivePresentation(msg.Values && msg.Values.reason || 'action_end_presentation');
