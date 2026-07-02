@@ -3681,6 +3681,11 @@ void DocumentBroker::refreshLock()
         LOG_ERR("No write-able session with valid authorization to refresh lock with");
         _lockCtx->bumpTimer();
     }
+    else if (session->isReadOnly())
+    {
+        LOG_ERR("No non-readonly session to refresh lock with");
+        _lockCtx->bumpTimer();
+    }
     else
     {
         const std::string savingSessionId = session->getId();
@@ -3691,6 +3696,7 @@ void DocumentBroker::refreshLock()
         {
             LOG_ERR("Failed to refresh lock of docKey [" << _docKey << "] with session ["
                                                          << savingSessionId << "]: " << error);
+            _lockCtx->bumpTimer();
         }
     }
 }
