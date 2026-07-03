@@ -110,6 +110,7 @@ ClientSession::ClientSession(const std::shared_ptr<ProtocolHandlerInterface>& ws
     , _docBroker(docBroker)
     , _lastStateTime(std::chrono::steady_clock::now())
     , _clientVisibleArea(0, 0, 0, 0)
+    , _needsVisibleAreaRepaint(false)
     , _keyEvents(1)
     , _performanceCounterEpoch(0)
     , _splitX(0)
@@ -1086,7 +1087,12 @@ bool ClientSession::_handleInput(const char *buffer, int length)
         }
 
         _clientVisibleArea = Util::Rectangle(x, y, width, height);
-        return forwardToChild(std::string(buffer, length), docBroker);
+
+        const bool forwarded = forwardToChild(std::string(buffer, length), docBroker);
+        if (_needsVisibleAreaRepaint)
+            requestVisibleAreaRepaint(docBroker, "client visible area became usable");
+
+        return forwarded;
     }
     else if (tokens.equals(0, "setclientpart"))
     {
@@ -1163,7 +1169,12 @@ bool ClientSession::_handleInput(const char *buffer, int length)
         _tileHeightPixel = tilePixelHeight;
         _tileWidthTwips = tileTwipWidth;
         _tileHeightTwips = tileTwipHeight;
-        return forwardToChild(std::string(buffer, length), docBroker);
+
+        const bool forwarded = forwardToChild(std::string(buffer, length), docBroker);
+        if (_needsVisibleAreaRepaint)
+            requestVisibleAreaRepaint(docBroker, "client zoom became usable");
+
+        return forwarded;
     }
     else if (tokens.equals(0, "tileprocessed"))
     {
@@ -4005,6 +4016,7 @@ void ClientSession::handleTileInvalidation(const std::string& message,
        _tileWidthTwips == 0 || _tileHeightTwips == 0 ||
        (_clientSelectedPart == -1 && !_isTextDocument))
     {
+        _needsVisibleAreaRepaint = true;
         LOG_TRC("No visible area received yet - skip invalidation");
         return;
     }
@@ -4107,6 +4119,84 @@ void ClientSession::handleTileInvalidation(const std::string& message,
         tileCombined.setCanonicalViewId(canonicalViewId);
         docBroker->handleTileCombinedRequest(tileCombined, false, client_from_this());
     }
+}
+
+bool ClientSession::requestVisibleAreaRepaint(const std::shared_ptr<DocumentBroker>& docBroker,
+                                              const char* reason)
+{
+    if (!_clientVisibleArea.hasSurface() ||
+        _tileWidthPixel == 0 || _tileHeightPixel == 0 ||
+        _tileWidthTwips == 0 || _tileHeightTwips == 0 ||
+        (_clientSelectedPart == -1 && !_isTextDocument))
+    {
+        LOG_TRC("Deferring visible area repaint; view is still not renderable");
+        return false;
+    }
+
+    constexpr SplitPaneName panes[4] = {
+        TOPLEFT_PANE,
+        TOPRIGHT_PANE,
+        BOTTOMLEFT_PANE,
+        BOTTOMRIGHT_PANE
+    };
+
+    const CanonicalViewId canonicalViewId = getCanonicalViewId();
+    const int part = _isTextDocument ? 0 : _clientSelectedPart;
+    const int mode = _clientSelectedMode;
+
+    std::vector<TileDesc> tiles;
+    for (int paneIdx = 0; paneIdx < 4; ++paneIdx)
+    {
+        if (!isSplitPane(panes[paneIdx]))
+            continue;
+
+        const Util::Rectangle normalizedVisArea = getNormalizedVisiblePaneArea(panes[paneIdx]);
+        if (!normalizedVisArea.hasSurface())
+            continue;
+
+        const int lastVertTile = std::ceil(normalizedVisArea.getBottom() / static_cast<double>(_tileHeightTwips));
+        const int lastHoriTile = std::ceil(normalizedVisArea.getRight() / static_cast<double>(_tileWidthTwips));
+
+        for (int i = normalizedVisArea.getTop() / _tileHeightTwips; i <= lastVertTile; ++i)
+        {
+            for (int j = normalizedVisArea.getLeft() / _tileWidthTwips; j <= lastHoriTile; ++j)
+            {
+                TileDesc desc(canonicalViewId, part, mode,
+                              _tileWidthPixel, _tileHeightPixel,
+                              j * _tileWidthTwips, i * _tileHeightTwips,
+                              _tileWidthTwips, _tileHeightTwips, -1, 0, -1);
+                desc.setOldWireId(0);
+                desc.setWireId(0);
+
+                bool dup = false;
+                for (const auto& tile : tiles)
+                {
+                    if (tile == desc)
+                    {
+                        dup = true;
+                        break;
+                    }
+                }
+
+                if (!dup)
+                    tiles.push_back(desc);
+            }
+        }
+    }
+
+    if (tiles.empty())
+    {
+        LOG_TRC("Deferring visible area repaint; no visible tiles could be built");
+        return false;
+    }
+
+    _needsVisibleAreaRepaint = false;
+
+    TileCombined tileCombined = TileCombined::create(tiles);
+    tileCombined.setCanonicalViewId(canonicalViewId);
+    LOG_INF("Requesting " << tiles.size() << " fresh visible tiles after deferred invalidation: " << reason);
+    docBroker->handleTileCombinedRequest(tileCombined, true, client_from_this());
+    return true;
 }
 
 bool ClientSession::isSplitPane(const SplitPaneName paneName) const

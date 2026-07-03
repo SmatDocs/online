@@ -432,6 +432,29 @@ build_slot() {
   fi
 }
 
+sync_slot_fonts() {
+  local slot="$1"
+  local font_src=""
+  local font_dst=""
+
+  set_slot_context "$slot"
+  font_src="$SLOT_ROOT/engine/instdir/share/fonts/truetype"
+  font_dst="$SLOT_ROOT/systemplate/usr/share/fonts/truetype/smartdocs-ms-fonts"
+
+  if [[ ! -d "$font_src" ]]; then
+    echo "[prod] Font source missing for slot $slot: $font_src"
+    return
+  fi
+
+  echo "[prod] Syncing engine fonts into systemplate for slot $slot"
+  mkdir -p "$font_dst"
+  find "$font_src" -maxdepth 1 -type f \( -iname "*.ttf" -o -iname "*.otf" -o -iname "*.ttc" \) -exec cp -f {} "$font_dst/" \;
+
+  if command -v fc-cache >/dev/null 2>&1; then
+    fc-cache -f "$font_src" "$font_dst" >/dev/null 2>&1 || true
+  fi
+}
+
 stop_slot_processes() {
   local slot="$1"
   set_slot_context "$slot"
@@ -532,6 +555,7 @@ deploy_slot() {
   sync_slot_runtime_files "$slot"
   configure_slot "$slot"
   build_slot "$slot"
+  sync_slot_fonts "$slot"
   apply_slot_file_caps "$slot"
   start_slot "$slot"
 

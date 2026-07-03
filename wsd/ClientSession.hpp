@@ -461,6 +461,10 @@ private:
     void handleTileInvalidation(const std::string& message,
                                 const std::shared_ptr<DocumentBroker>& docBroker);
 
+    /// Repaint the current visible area after invalidations were skipped while the view had no surface.
+    bool requestVisibleAreaRepaint(const std::shared_ptr<DocumentBroker>& docBroker,
+                                   const char* reason);
+
     bool isTileInsideVisibleArea(const TileDesc& tile) const;
 
     /// If this session is read-only because of failed lock, try to unlock and make it read-write.
@@ -535,6 +539,9 @@ private:
 
     /// Visible area of the client
     Util::Rectangle _clientVisibleArea;
+
+    /// The kit invalidated tiles while this view had no usable render surface.
+    bool _needsVisibleAreaRepaint;
 
     Poco::SharedPtr<Poco::JSON::Object> _browserSettingsJSON;
 
