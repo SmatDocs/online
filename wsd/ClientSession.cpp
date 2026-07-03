@@ -4017,7 +4017,13 @@ void ClientSession::handleTileInvalidation(const std::string& message,
        (_clientSelectedPart == -1 && !_isTextDocument))
     {
         _needsVisibleAreaRepaint = true;
-        LOG_TRC("No visible area received yet - skip invalidation");
+        LOG_WRN("Deferred tile repaint after invalidation because the view is not renderable yet. "
+                << "visibleArea=" << _clientVisibleArea.getLeft() << ',' << _clientVisibleArea.getTop()
+                << ' ' << _clientVisibleArea.getWidth() << 'x' << _clientVisibleArea.getHeight()
+                << " tilePixel=" << _tileWidthPixel << 'x' << _tileHeightPixel
+                << " tileTwips=" << _tileWidthTwips << 'x' << _tileHeightTwips
+                << " selectedPart=" << _clientSelectedPart
+                << " isTextDocument=" << _isTextDocument);
         return;
     }
 
@@ -4052,7 +4058,15 @@ void ClientSession::handleTileInvalidation(const std::string& message,
 
     // We can ignore the invalidation if it's outside of all split-panes.
     if(!numPanes)
+    {
+        LOG_WRN("Tile invalidation did not intersect any visible pane. "
+                << "visibleArea=" << _clientVisibleArea.getLeft() << ',' << _clientVisibleArea.getTop()
+                << ' ' << _clientVisibleArea.getWidth() << 'x' << _clientVisibleArea.getHeight()
+                << " invalidateRect=" << invalidateRect.getLeft() << ',' << invalidateRect.getTop()
+                << ' ' << invalidateRect.getWidth() << 'x' << invalidateRect.getHeight()
+                << " isTextDocument=" << _isTextDocument);
         return;
+    }
 
     if( part == -1 ) // If no part is specified we use the part used by the client
         part = _clientSelectedPart;
@@ -4117,6 +4131,12 @@ void ClientSession::handleTileInvalidation(const std::string& message,
     {
         TileCombined tileCombined = TileCombined::create(invalidTiles);
         tileCombined.setCanonicalViewId(canonicalViewId);
+        LOG_WRN("Requesting " << invalidTiles.size()
+                << " visible tiles for live invalidation. "
+                << "visibleArea=" << _clientVisibleArea.getLeft() << ',' << _clientVisibleArea.getTop()
+                << ' ' << _clientVisibleArea.getWidth() << 'x' << _clientVisibleArea.getHeight()
+                << " part=" << part << " mode=" << mode
+                << " isTextDocument=" << _isTextDocument);
         docBroker->handleTileCombinedRequest(tileCombined, false, client_from_this());
     }
 }
@@ -4129,7 +4149,14 @@ bool ClientSession::requestVisibleAreaRepaint(const std::shared_ptr<DocumentBrok
         _tileWidthTwips == 0 || _tileHeightTwips == 0 ||
         (_clientSelectedPart == -1 && !_isTextDocument))
     {
-        LOG_TRC("Deferring visible area repaint; view is still not renderable");
+        LOG_WRN("Deferred visible area repaint is still waiting for a renderable view. "
+                << "visibleArea=" << _clientVisibleArea.getLeft() << ',' << _clientVisibleArea.getTop()
+                << ' ' << _clientVisibleArea.getWidth() << 'x' << _clientVisibleArea.getHeight()
+                << " tilePixel=" << _tileWidthPixel << 'x' << _tileHeightPixel
+                << " tileTwips=" << _tileWidthTwips << 'x' << _tileHeightTwips
+                << " selectedPart=" << _clientSelectedPart
+                << " isTextDocument=" << _isTextDocument
+                << " reason=" << reason);
         return false;
     }
 
@@ -4186,7 +4213,14 @@ bool ClientSession::requestVisibleAreaRepaint(const std::shared_ptr<DocumentBrok
 
     if (tiles.empty())
     {
-        LOG_TRC("Deferring visible area repaint; no visible tiles could be built");
+        LOG_WRN("Deferred visible area repaint could not build visible tiles. "
+                << "visibleArea=" << _clientVisibleArea.getLeft() << ',' << _clientVisibleArea.getTop()
+                << ' ' << _clientVisibleArea.getWidth() << 'x' << _clientVisibleArea.getHeight()
+                << " tilePixel=" << _tileWidthPixel << 'x' << _tileHeightPixel
+                << " tileTwips=" << _tileWidthTwips << 'x' << _tileHeightTwips
+                << " selectedPart=" << _clientSelectedPart
+                << " isTextDocument=" << _isTextDocument
+                << " reason=" << reason);
         return false;
     }
 
@@ -4194,7 +4228,12 @@ bool ClientSession::requestVisibleAreaRepaint(const std::shared_ptr<DocumentBrok
 
     TileCombined tileCombined = TileCombined::create(tiles);
     tileCombined.setCanonicalViewId(canonicalViewId);
-    LOG_INF("Requesting " << tiles.size() << " fresh visible tiles after deferred invalidation: " << reason);
+    LOG_WRN("Requesting " << tiles.size() << " fresh visible tiles after deferred invalidation. "
+            << "reason=" << reason
+            << " visibleArea=" << _clientVisibleArea.getLeft() << ',' << _clientVisibleArea.getTop()
+            << ' ' << _clientVisibleArea.getWidth() << 'x' << _clientVisibleArea.getHeight()
+            << " part=" << part << " mode=" << mode
+            << " isTextDocument=" << _isTextDocument);
     docBroker->handleTileCombinedRequest(tileCombined, true, client_from_this());
     return true;
 }
