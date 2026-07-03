@@ -736,7 +736,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			// the zoom level has changed
 			app.socket.sendMessage('clientzoom ' + newClientZoom);
 
-			if (!this._map._fatal && app.idleHandler._active && app.socket.connected())
+			if (!this._map._fatal && (app.idleHandler._active || this._map.options.alwaysActive) && app.socket.connected())
 				this._clientZoom = newClientZoom;
 		}
 	},

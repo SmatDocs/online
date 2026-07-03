@@ -243,7 +243,7 @@ class Socket {
 			return;
 		}
 
-		if (!app.idleHandler._active) {
+		if (!app.idleHandler._active && !this._map?.options?.alwaysActive) {
 			// Avoid communicating when we're inactive.
 			if (typeof msg !== 'string') return;
 

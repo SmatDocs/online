@@ -298,6 +298,9 @@ function refreshVisibleTilesAfterActivation(reason: string) {
 		const docLayer = app.map._docLayer as any;
 		if (docLayer?._requestNewTiles) {
 			window.app.console.warn('Refreshing visible tiles after browser activation: ' + reason);
+			(TileManager as any).refreshTilesInBackground?.();
+			docLayer._sendClientZoom?.(true);
+			app.activeDocument?.activeLayout?.sendClientVisibleArea?.(true);
 			docLayer._requestNewTiles();
 			TileManager.resetPreFetching(true);
 		}
@@ -305,6 +308,7 @@ function refreshVisibleTilesAfterActivation(reason: string) {
 
 	window.setTimeout(refreshTiles, 0);
 	window.setTimeout(refreshTiles, 250);
+	window.setTimeout(refreshTiles, 1000);
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -315,4 +319,8 @@ document.addEventListener('visibilitychange', () => {
 
 window.addEventListener('focus', () => {
 	refreshVisibleTilesAfterActivation('focus');
+});
+
+window.addEventListener('pageshow', () => {
+	refreshVisibleTilesAfterActivation('pageshow');
 });

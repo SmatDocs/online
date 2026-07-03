@@ -148,7 +148,11 @@ class ViewLayoutBase {
 			// Visible area is dirty, update it on the server
 			app.socket.sendMessage(newClientVisibleAreaCommand);
 			if (app.map.contextToolbar) app.map.contextToolbar.hideContextToolbar(); // hide context toolbar when scroll/window resize etc...
-			if (!app.map._fatal && app.idleHandler._active && app.socket.connected())
+			if (
+				!app.map._fatal &&
+				(app.idleHandler._active || app.map.options.alwaysActive) &&
+				app.socket.connected()
+			)
 				this.clientVisibleAreaCommand = newClientVisibleAreaCommand;
 		}
 	}
