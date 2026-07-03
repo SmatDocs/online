@@ -232,6 +232,7 @@ static const Util::UnorderedStringMap<std::string> DefAppConfig = {
     { "per_view.idle_timeout_secs", "3600" },
     { "per_view.min_saved_message_timeout_secs", "6" },
     { "per_view.out_of_focus_timeout_secs", "3600" },
+    { "per_view.tile_roundtrip_timeout_secs", "10" },
     { "product_name", APP_NAME },
     { "quarantine_files.expiry_min", "3000" },
     { "quarantine_files.limit_dir_size_mb", "250" },

@@ -705,6 +705,7 @@ setup-wsd: all @JAILS_PATH@ @CACHE_PATH@ presets-dir build-samples
 
 COMMON_PARAMS = \
 	$(FIND_FREE_PORT_PARAM) \
+	--disable-ssl \
 	$(if $(TEST_APPARMOR),--disable-cool-user-checking) \
 	--o:sys_template_path="@SYSTEMPLATE_PATH@" \
 	--o:child_root_path="@JAILS_PATH@" \

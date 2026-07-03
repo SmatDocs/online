@@ -3830,8 +3830,13 @@ size_t ClientSession::getTilesOnFlyUpperLimit() const
 void ClientSession::removeOutdatedTilesOnFly(const std::chrono::steady_clock::time_point now)
 {
     size_t dropped = 0;
-    const auto highTimeoutMs = std::chrono::milliseconds(TILE_ROUNDTRIP_TIMEOUT_MS);
-    const auto lowTimeoutMs = std::chrono::milliseconds((int)(0.9 * TILE_ROUNDTRIP_TIMEOUT_MS));
+    CONFIG_STATIC const int tileRoundtripTimeoutSecs = std::max(
+        ConfigUtil::getConfigValue<int>(
+            "per_view.tile_roundtrip_timeout_secs", DEFAULT_TILE_ROUNDTRIP_TIMEOUT_SECS),
+        1);
+    const auto highTimeoutMs = std::chrono::seconds(tileRoundtripTimeoutSecs);
+    const auto lowTimeoutMs = std::chrono::milliseconds(
+        static_cast<long long>(tileRoundtripTimeoutSecs) * 900);
     // Check only the beginning of the list, tiles are ordered by timestamp
     while(!_tilesOnFly.empty())
     {
@@ -3852,7 +3857,7 @@ void ClientSession::removeOutdatedTilesOnFly(const std::chrono::steady_clock::ti
             break;
     }
     if (dropped > 0)
-        LOG_WRN("client not consuming tiles; stalled for " << (TILE_ROUNDTRIP_TIMEOUT_MS/1000) << " seconds: removed tracking for " << dropped << " on the fly tiles");
+        LOG_WRN("client not consuming tiles; stalled for " << tileRoundtripTimeoutSecs << " seconds: removed tracking for " << dropped << " on the fly tiles");
 }
 
 Util::Rectangle ClientSession::getNormalizedVisibleArea() const

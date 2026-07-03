@@ -41,7 +41,7 @@ constexpr int POLL_FORKIT_TIMEOUT_SECS = 5;
 constexpr int WS_SEND_TIMEOUT_MS = 1000 * TRACE_MULTIPLIER;
 constexpr int CLIPBOARD_EXPIRY_MINUTES = 10;
 
-constexpr int TILE_ROUNDTRIP_TIMEOUT_MS = 10 * TRACE_MULTIPLIER * 1000;
+constexpr int DEFAULT_TILE_ROUNDTRIP_TIMEOUT_SECS = 10 * TRACE_MULTIPLIER;
 
 /// Pipe and Socket read buffer size.
 /// Should be large enough for ethernet packets
