@@ -1,4 +1,3 @@
- 
 services:
   coolwsd:
     build:
