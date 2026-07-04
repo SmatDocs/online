@@ -574,6 +574,7 @@ deploy_slot() {
 switch_slot() {
   local slot="$1"
   local switch_cmd=""
+  local switch_script=""
 
   case "$slot" in
     blue) switch_cmd="${PRODUCTION_SWITCH_TO_BLUE_CMD:-}" ;;
@@ -584,10 +585,16 @@ switch_slot() {
       ;;
   esac
 
+  set_slot_context "$slot"
+  switch_script="$SLOT_ROOT/scripts/deploy/switch_nginx_slot.sh"
+
   echo "$slot" > "$PENDING_SLOT_PATH"
   if [[ -n "$switch_cmd" ]]; then
     echo "[prod] Switching traffic to $slot using configured command"
     bash -lc "$switch_cmd"
+  elif [[ -x "$switch_script" ]]; then
+    echo "[prod] Switching traffic to $slot using slot script"
+    "$switch_script" "$slot"
   else
     echo "[prod] Switching traffic to $slot using repository script"
     "$REPO_ROOT/scripts/deploy/switch_nginx_slot.sh" "$slot"
