@@ -17,6 +17,7 @@ esac
 
 UPSTREAM_FILE="${UPSTREAM_FILE:-/etc/nginx/conf.d/collabora_backend_overten.conf}"
 SITE_FILE="${SITE_FILE:-/etc/nginx/sites-available/docs.overtenai.com}"
+SITE_FILES="${SITE_FILES:-$SITE_FILE /etc/nginx/sites-enabled/docs.overtenai.com}"
 
 as_root() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -40,15 +41,24 @@ upstream collabora_backend {
 }
 EOC
 
-if [ -f "$SITE_FILE" ]; then
-  if ! grep -q "proxy_pass http://collabora_backend;" "$SITE_FILE"; then
-    as_root sed -i -E 's#proxy_pass http://(collabora|localhost:[0-9]+|127\.0\.0\.1:[0-9]+);#proxy_pass http://collabora_backend;#g' "$SITE_FILE"
+for site_file in $SITE_FILES; do
+  if [ ! -f "$site_file" ]; then
+    continue
   fi
-  if ! grep -q "proxy_pass http://collabora_backend;" "$SITE_FILE"; then
-    echo "[switch] Could not rewrite proxy_pass in $SITE_FILE" >&2
+
+  # Let the stricter cool.html and versioned asset regex locations match first.
+  # A ^~ /browser fallback bypasses those regex locations and can make cool.html
+  # cache for months, pinning stale Collabora bootstrap code after deploys.
+  as_root sed -i -E 's#location[[:space:]]+\^~[[:space:]]+/browser[[:space:]]*\{#location /browser {#g' "$site_file"
+
+  if ! grep -q "proxy_pass http://collabora_backend;" "$site_file"; then
+    as_root sed -i -E 's#proxy_pass http://(collabora|localhost:[0-9]+|127\.0\.0\.1:[0-9]+);#proxy_pass http://collabora_backend;#g' "$site_file"
+  fi
+  if ! grep -q "proxy_pass http://collabora_backend;" "$site_file"; then
+    echo "[switch] Could not rewrite proxy_pass in $site_file" >&2
     exit 1
   fi
-fi
+done
 
 as_root nginx -t
 if command -v systemctl >/dev/null 2>&1; then
