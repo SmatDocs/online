@@ -555,6 +555,10 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 	},
 
 	_onDocumentBlur: function() {
+		if (this._map && this._map.options && this._map.options.alwaysActive) {
+			return;
+		}
+
 		// Reclaim the graphics memory of non-visible tiles when the document loses focus
 		// (which happens when the browser is minimised, switched away from or when switching
 		// tabs).

@@ -46,11 +46,6 @@ for site_file in $SITE_FILES; do
     continue
   fi
 
-  # Let the stricter cool.html and versioned asset regex locations match first.
-  # A ^~ /browser fallback bypasses those regex locations and can make cool.html
-  # cache for months, pinning stale Collabora bootstrap code after deploys.
-  as_root sed -i -E 's#location[[:space:]]+\^~[[:space:]]+/browser[[:space:]]*\{#location /browser {#g' "$site_file"
-
   if ! grep -q "proxy_pass http://collabora_backend;" "$site_file"; then
     as_root sed -i -E 's#proxy_pass http://(collabora|localhost:[0-9]+|127\.0\.0\.1:[0-9]+);#proxy_pass http://collabora_backend;#g' "$site_file"
   fi
