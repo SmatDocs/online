@@ -243,6 +243,9 @@ public:
     size_t getTilesOnFlyUpperLimit() const;
     void removeOutdatedTilesOnFly(std::chrono::steady_clock::time_point now);
     void onTileProcessed(TileWireId wireId);
+    /// Clear all in-flight tile tracking, typically when a browser view returns
+    /// from background throttling and may never send the old tileprocessed acks.
+    size_t clearTilesOnFly(const char* reason);
     /// Remove a tile from the on-fly tracking (no logging if absent).
     /// Returns true if the wireId was found and removed.
     bool removeTileOnFly(TileWireId wireId);

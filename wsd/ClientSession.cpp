@@ -550,6 +550,18 @@ void ClientSession::onTileProcessed(TileWireId wireId)
         LOG_INF("Tileprocessed message with an unknown wire-id '" << wireId << "' from session " << getId());
 }
 
+size_t ClientSession::clearTilesOnFly(const char* reason)
+{
+    const size_t count = _tilesOnFly.size();
+    if (count == 0)
+        return 0;
+
+    LOG_WRN("Clearing " << count << " in-flight tile acknowledgements for session " << getId()
+            << " during visible-area recovery. reason=" << reason);
+    _tilesOnFly.clear();
+    return count;
+}
+
 #if !MOBILEAPP
 namespace
 {
@@ -1495,6 +1507,18 @@ bool ClientSession::_handleInput(const char *buffer, int length)
         if (isEditable() && COOLProtocol::tokenIndicatesDocumentModification(tokens))
         {
             docBroker->updateLastModifyingActivityTime();
+        }
+
+        if (tokens.equals(0, "useractive"))
+        {
+            const size_t cleared = clearTilesOnFly("useractive");
+            LOG_WRN("Visible-area recovery received useractive for session " << getId()
+                    << ". clearedInFlightTiles=" << cleared);
+            requestVisibleAreaRepaint(
+                docBroker,
+                cleared > 0
+                    ? "useractive cleared stale in-flight tiles"
+                    : "useractive browser activation");
         }
 
         if (!filterMessage(firstLine))
