@@ -2268,13 +2268,33 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			window.postMobileMessage('COMMANDRESULT ' + textMsg);
 		}
 
-		if (this._map.CallPythonScriptSource != null) {
-			this._map.CallPythonScriptSource.postMessage(JSON.stringify({'MessageId': 'CallPythonScript-Result',
-										     'SendTime': Date.now(),
-										     'Values': obj
-										    }),
-								     '*');
-			this._map.CallPythonScriptSource = null;
+		var pythonRequests = this._map.CallPythonScriptRequests;
+		if (Array.isArray(pythonRequests) && pythonRequests.length > 0) {
+			var sendTime = Date.now();
+			var matchedResult = window.CallPythonScriptBridge.takeMatchingResult(
+				pythonRequests, commandName, obj, sendTime);
+			if (matchedResult.completedRequest !== null) {
+				this._map.CallPythonScriptRequests = matchedResult.remainingRequests;
+				window.app.console.log('[CallPythonScript][' + new Date(sendTime).toISOString() + '] delivering result', {
+					commandName: commandName,
+					elapsedMs: sendTime - matchedResult.completedRequest.requestedAt,
+					pendingCount: matchedResult.remainingRequests.length,
+					result: obj,
+				});
+				window.app.console.log('[CallPythonScript][' + new Date(sendTime).toISOString() + '] postMessage payload\n' +
+					JSON.stringify(matchedResult.responseMessage, null, 2));
+				matchedResult.completedRequest.source.postMessage(
+					JSON.stringify(matchedResult.responseMessage), '*');
+			}
+			else {
+				window.app.console.log('[CallPythonScript][' + new Date().toISOString() + '] ignoring unrelated UNO result', {
+					commandName: commandName,
+					pendingCommands: pythonRequests.map(function(request) {
+						return request.commandName;
+					}),
+					result: obj,
+				});
+			}
 		}
 	},
 

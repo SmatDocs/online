@@ -46,4 +46,5 @@
 /// <reference path="./DomUtil.test.ts" />
 /// <reference path="./Shortcuts.test.ts" />
 /// <reference path="./VectorPrimitiveRenderer.test.ts" />
+/// <reference path="./CallPythonScriptBridge.test.ts" />
 // NOTE: reference new tests here ...

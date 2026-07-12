@@ -42,7 +42,7 @@ window.L.Map.WOPI = window.L.Handler.extend({
 	AIModelName: '',
 	EnableShare: false,
 	HideUserList: null,
-	CallPythonScriptSource: null,
+	CallPythonScriptRequests: null,
 	SupportsRename: false,
 	UserCanRename: false,
 	UserCanWrite: false,
@@ -761,7 +761,13 @@ window.L.Map.WOPI = window.L.Handler.extend({
 			if (msg.Values) {
 				var alwaysActive = msg.Values.AlwaysActive;
 				this._map.options.alwaysActive = !!alwaysActive;
+				if (alwaysActive) {
+					app.idleHandler.refreshVisibleTilesAfterActivation('host_always_active');
+				}
 			}
+		}
+		else if (msg.MessageId === 'Refresh_Visible_Area') {
+			app.idleHandler.refreshVisibleTilesAfterActivation('host_visible');
 		}
 		else if (msg.MessageId === 'Get_Views') {
 			this._postViewsMessage('Get_Views_Resp');
@@ -1033,8 +1039,24 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		else if (msg.MessageId === 'CallPythonScript' &&
 			 Object.prototype.hasOwnProperty.call(msg, 'ScriptFile') &&
 			 Object.prototype.hasOwnProperty.call(msg, 'Function')) {
-			this._map.CallPythonScriptSource = e.source;
-			this._map.sendUnoCommand('vnd.sun.star.script:' + msg.ScriptFile + '$' + msg.Function + '?language=Python&location=share', msg.Values);
+			var pythonCommandName = 'vnd.sun.star.script:' + msg.ScriptFile + '$' + msg.Function + '?language=Python&location=share';
+			var now = Date.now();
+			var requests = window.CallPythonScriptBridge.registerRequest(
+				this._map.CallPythonScriptRequests,
+				{
+				commandName: pythonCommandName,
+				requestedAt: now,
+				source: e.source,
+				},
+				now
+			);
+			this._map.CallPythonScriptRequests = requests;
+			window.app.console.log('[CallPythonScript][' + new Date(now).toISOString() + '] registered', {
+				commandName: pythonCommandName,
+				pendingCount: requests.length,
+				values: msg.Values,
+			});
+			this._map.sendUnoCommand(pythonCommandName, msg.Values);
 		}
 		else if (msg.MessageId === 'Action_RemoveView') {
 			if (msg.Values && msg.Values.ViewId !== null && msg.Values.ViewId !== undefined) {

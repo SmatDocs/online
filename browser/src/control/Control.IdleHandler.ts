@@ -37,6 +37,7 @@ class IdleHandler {
     _active: boolean = true;
     map: any;
 	dimId: string = app.idleHandlerId;
+	_visibleTileRefreshTimers: number[] = [];
 
 	getIdleMessage(): string {
 		if (this.map['wopi'] && this.map['wopi'].DisableInactiveMessages) {
@@ -233,6 +234,43 @@ class IdleHandler {
 		}
 	}
 
+	refreshVisibleTilesAfterActivation(reason: string) {
+		if (document.hidden || !app.map?._docLoaded) {
+			return;
+		}
+
+		this.notifyActive();
+		if (app.socket?.connected?.()) {
+			app.socket.sendMessage('useractive');
+		}
+		this._active = true;
+
+		for (const timer of this._visibleTileRefreshTimers) {
+			window.clearTimeout(timer);
+		}
+		this._visibleTileRefreshTimers = [];
+
+		const refreshTiles = () => {
+			if (document.hidden || !app.map?._docLoaded) {
+				return;
+			}
+
+			const docLayer = app.map._docLayer as any;
+			if (docLayer?._requestNewTiles) {
+				window.app.console.warn('Refreshing visible tiles after activation: ' + reason);
+				(TileManager as any).refreshTilesInBackground?.();
+				docLayer._sendClientZoom?.(true);
+				app.activeDocument?.activeLayout?.sendClientVisibleArea?.(true);
+				docLayer._requestNewTiles();
+				TileManager.resetPreFetching(true);
+			}
+		};
+
+		for (const delay of [0, 250, 1000]) {
+			this._visibleTileRefreshTimers.push(window.setTimeout(refreshTiles, delay));
+		}
+	}
+
 	_sendInactiveMessage() {
 		if (this.isAlwaysActive()) {
 			this._active = true;
@@ -279,48 +317,20 @@ class IdleHandler {
 // Initiate the class.
 app.idleHandler = new IdleHandler();
 
-function refreshVisibleTilesAfterActivation(reason: string) {
-	if (document.hidden || !app.map?._docLoaded) {
-		return;
-	}
-
-	app.idleHandler.notifyActive();
-	if (app.socket?.connected?.()) {
-		app.socket.sendMessage('useractive');
-	}
-	app.idleHandler._active = true;
-
-	const refreshTiles = () => {
-		if (document.hidden || !app.map?._docLoaded) {
-			return;
-		}
-
-		const docLayer = app.map._docLayer as any;
-		if (docLayer?._requestNewTiles) {
-			window.app.console.warn('Refreshing visible tiles after browser activation: ' + reason);
-			(TileManager as any).refreshTilesInBackground?.();
-			docLayer._sendClientZoom?.(true);
-			app.activeDocument?.activeLayout?.sendClientVisibleArea?.(true);
-			docLayer._requestNewTiles();
-			TileManager.resetPreFetching(true);
-		}
-	};
-
-	window.setTimeout(refreshTiles, 0);
-	window.setTimeout(refreshTiles, 250);
-	window.setTimeout(refreshTiles, 1000);
-}
-
 document.addEventListener('visibilitychange', () => {
 	if (!document.hidden) {
-		refreshVisibleTilesAfterActivation('visibilitychange');
+		app.idleHandler.refreshVisibleTilesAfterActivation('visibilitychange');
 	}
 });
 
 window.addEventListener('focus', () => {
-	refreshVisibleTilesAfterActivation('focus');
+	app.idleHandler.refreshVisibleTilesAfterActivation('focus');
 });
 
 window.addEventListener('pageshow', () => {
-	refreshVisibleTilesAfterActivation('pageshow');
+	app.idleHandler.refreshVisibleTilesAfterActivation('pageshow');
+});
+
+window.addEventListener('resize', () => {
+	app.idleHandler.refreshVisibleTilesAfterActivation('resize');
 });

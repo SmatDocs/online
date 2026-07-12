@@ -477,6 +477,7 @@ COOL_JS_LST =\
 	src/canvas/sections/ScrollSection.ts \
 	src/canvas/sections/MouseControl.ts \
 	src/app/LayerUtil.ts \
+	src/map/handler/CallPythonScriptBridge.js \
 	src/layer/tile/CanvasTileLayer.js \
 	src/layer/vector/CDarkOverlay.ts \
 	src/layer/SplitPanesContext.ts \
