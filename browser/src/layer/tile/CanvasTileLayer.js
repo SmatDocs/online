@@ -3432,7 +3432,10 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 
 			// this isn't being triggered now when the sidebar shows up
 			const considerCommentWidthInOffset = () => {
-				if (app.activeDocument.partHasComments) {
+				const commentList = app.sectionContainer.getSectionWithName(app.CSections.CommentList.name);
+				const compactViewport = newSize.x / app.dpiScale < 768;
+				const commentsVisible = commentList.sectionProperties.show === true;
+				if (!compactViewport && commentsVisible && app.activeDocument.partHasComments) {
 					if ((recalcFirstFit || !this._includedCommentsInFirstFit)) {
 						bringCommentsIntoView = true;
 						this._includedCommentsInFirstFit = true;
