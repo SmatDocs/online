@@ -36,6 +36,9 @@ concurrency:
   group: collabora-deploy-${{ github.ref_name }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   deploy-staging:
     name: Deploy Collabora Staging
@@ -50,6 +53,8 @@ jobs:
       - name: Deploy staging via SSH
         uses: appleboy/ssh-action@v1.2.0
         env:
+          GH_REPO_TOKEN: ${{ github.token }}
+          REPO_URL: https://github.com/${{ github.repository }}.git
           STAGING_DEPLOY_REF: staging
         with:
           host: ${{ secrets.COLLABORA_PRODUCTION_SSH_HOST }}
@@ -58,12 +63,20 @@ jobs:
           port: ${{ secrets.COLLABORA_PRODUCTION_SSH_PORT || 22 }}
           command_timeout: 30m
           script_stop: true
-          envs: STAGING_DEPLOY_REF
-          script: >-
-            bash -lc 'set -euo pipefail;
-            cd "/home/humphry/online";
-            STAGING_DEPLOY_REF="${STAGING_DEPLOY_REF:-staging}"
-            ./scripts/deploy/deploy_collabora_staging.sh "/home/humphry/online"'
+          envs: GH_REPO_TOKEN,REPO_URL,STAGING_DEPLOY_REF
+          script: |
+            set -euo pipefail
+            cd "/home/humphry/online"
+            git remote set-url origin "$REPO_URL"
+            AUTH_HEADER="$(printf 'x-access-token:%s' "$GH_REPO_TOKEN" | base64 -w0)"
+            export GIT_CONFIG_COUNT=2
+            export GIT_CONFIG_KEY_0=credential.helper
+            export GIT_CONFIG_VALUE_0=
+            export GIT_CONFIG_KEY_1=http.https://github.com/.extraheader
+            export GIT_CONFIG_VALUE_1="AUTHORIZATION: basic $AUTH_HEADER"
+            unset AUTH_HEADER GH_REPO_TOKEN
+            STAGING_DEPLOY_REF="${STAGING_DEPLOY_REF:-staging}" \
+              ./scripts/deploy/deploy_collabora_staging.sh "/home/humphry/online"
 
   deploy-production:
     name: Deploy Collabora Production (Blue-Green)
@@ -79,6 +92,8 @@ jobs:
       - name: Deploy to Collabora host via SSH
         uses: appleboy/ssh-action@v1.2.0
         env:
+          GH_REPO_TOKEN: ${{ github.token }}
+          REPO_URL: https://github.com/${{ github.repository }}.git
           PRODUCTION_BLUE_HEALTH_URL: ${{ secrets.COLLABORA_PRODUCTION_BLUE_HEALTH_URL }}
           PRODUCTION_GREEN_HEALTH_URL: ${{ secrets.COLLABORA_PRODUCTION_GREEN_HEALTH_URL }}
           DEPLOY_EVENT_NAME: ${{ github.event_name }}
@@ -91,11 +106,19 @@ jobs:
           port: ${{ secrets.COLLABORA_PRODUCTION_SSH_PORT || 22 }}
           command_timeout: 60m
           script_stop: false
-          envs: PRODUCTION_BLUE_HEALTH_URL,PRODUCTION_GREEN_HEALTH_URL,DEPLOY_EVENT_NAME,DEPLOY_PRODUCTION_ACTION,DEPLOY_PRODUCTION_REF
+          envs: GH_REPO_TOKEN,REPO_URL,PRODUCTION_BLUE_HEALTH_URL,PRODUCTION_GREEN_HEALTH_URL,DEPLOY_EVENT_NAME,DEPLOY_PRODUCTION_ACTION,DEPLOY_PRODUCTION_REF
           script: |
             cat > /tmp/collabora-production-deploy.sh <<'REMOTE_SCRIPT'
             set -euo pipefail
             cd "/home/humphry/online"
+            git remote set-url origin "$REPO_URL"
+            AUTH_HEADER="$(printf 'x-access-token:%s' "$GH_REPO_TOKEN" | base64 -w0)"
+            export GIT_CONFIG_COUNT=2
+            export GIT_CONFIG_KEY_0=credential.helper
+            export GIT_CONFIG_VALUE_0=
+            export GIT_CONFIG_KEY_1=http.https://github.com/.extraheader
+            export GIT_CONFIG_VALUE_1="AUTHORIZATION: basic $AUTH_HEADER"
+            unset AUTH_HEADER GH_REPO_TOKEN
             MODE="deploy_only"
             EVT="${DEPLOY_EVENT_NAME:-}"
             ACT="${DEPLOY_PRODUCTION_ACTION:-}"
