@@ -818,6 +818,10 @@ class UIManager extends window.L.Control {
 	 */
 	initializeSidebar(): void {
 		if (window.mode.isDesktop() && !window.ThisIsAMobileApp) {
+			// Make the browser-side visibility decision before core can deliver
+			// its first deck payload. Sending SidebarHide alone is asynchronous;
+			// without this preference the payload briefly opens the sidebar.
+			this.setDocTypePref('ShowSidebar', false);
 			app.socket.sendMessage('uno .uno:SidebarHide');
 		}
 		else if (window.mode.isChromebook() || window.mode.isSmallScreenDevice() || window.mode.isTablet()) {

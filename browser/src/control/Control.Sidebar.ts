@@ -124,6 +124,24 @@ class Sidebar extends SidebarBase {
 		return this.targetDeckCommand;
 	}
 
+	shouldShowSidebar(): boolean {
+		return this.map.uiManager.getBooleanDocTypePref('ShowSidebar', false);
+	}
+
+	applySidebarVisibility(): boolean {
+		const shouldShow = this.shouldShowSidebar();
+		if (shouldShow && !this.isVisible()) {
+			this.showSidebar();
+
+			// on initial load of file do not focus automatically
+			if (!this.sidebarShownTheFirstTime) this.isUserRequest = true;
+		} else if (!shouldShow && this.isVisible()) {
+			this.closeSidebar();
+		}
+
+		return shouldShow;
+	}
+
 	changeDeck(unoCommand: string | null) {
 		if (unoCommand !== null && unoCommand !== undefined)
 			app.socket.sendMessage('uno ' + unoCommand);
@@ -192,14 +210,7 @@ class Sidebar extends SidebarBase {
 
 				this.builder.build(tempContainer, [this.model.getSnapshot()], false);
 
-				if (!this.isVisible()) {
-					this.showSidebar();
-
-					// on initial load of file do not focus automatically
-					if (!this.sidebarShownTheFirstTime) this.isUserRequest = true;
-				}
-
-				this.map.uiManager.setDocTypePref('ShowSidebar', true);
+				const shouldShow = this.applySidebarVisibility();
 
 				// cache - check happens in task and we will update value later in this function
 				const wasUserRequest = this.isUserRequest;
@@ -231,7 +242,7 @@ class Sidebar extends SidebarBase {
 						); // see animation time in #sidebar-dock-wrapper.visible
 					}
 
-					if (this.sidebarShownTheFirstTime) {
+					if (shouldShow && this.sidebarShownTheFirstTime) {
 						app.serverConnectionService.onShowSidebar();
 						this.sidebarShownTheFirstTime = false;
 					}

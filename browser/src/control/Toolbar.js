@@ -297,6 +297,14 @@ window.L.Map.include({
 		if (command.indexOf('.uno:') < 0 && command.indexOf('vnd.sun.star.script') < 0)
 			console.error('Trying to send uno command without prefix: "' + command + '"');
 
+		// Keep the browser-side visibility preference in sync before core sends
+		// the corresponding sidebar payload. This lets startup remain closed
+		// while an explicit user or host command can still open the sidebar.
+		if (command === '.uno:SidebarShow')
+			this.uiManager.setDocTypePref('ShowSidebar', true);
+		else if (command === '.uno:SidebarHide')
+			this.uiManager.setDocTypePref('ShowSidebar', false);
+
 		if ((command.startsWith('.uno:Sidebar') && !command.startsWith('.uno:SidebarShow')) ||
 			command.startsWith('.uno:CustomAnimation') || command.startsWith('.uno:ModifyPage') ||
 			command.startsWith('.uno:MasterSlidesPanel') || command.startsWith('.uno:SidebarDeck')) {
@@ -307,6 +315,7 @@ window.L.Map.include({
 					this.sidebar.setupTargetDeck(command);
 				} else {
 					// we don't know which deck was active last, show first then switch if needed
+					this.uiManager.setDocTypePref('ShowSidebar', true);
 					app.socket.sendMessage('uno .uno:SidebarShow');
 
 					this.sidebar.setupTargetDeck(command);
