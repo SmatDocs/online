@@ -48,4 +48,5 @@
 /// <reference path="./VectorPrimitiveRenderer.test.ts" />
 /// <reference path="./CallPythonScriptBridge.test.ts" />
 /// <reference path="./SidebarVisibility.test.ts" />
+/// <reference path="./RenameInteraction.test.ts" />
 // NOTE: reference new tests here ...

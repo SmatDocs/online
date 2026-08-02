@@ -2496,7 +2496,7 @@ class Socket {
 			);
 		}
 
-		this._map.fire('blockUI', { message: msg });
+		this._map.fire('blockUI', { message: msg, reason: textMsg });
 	}
 
 	// 'blockedcommand: ' message.

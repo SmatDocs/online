@@ -215,7 +215,9 @@ window.L.Map.include({
 		if (!filename) {
 			return;
 		}
-		this.showBusy(_('Renaming...'), false);
+		// Keep the document navigable while the server performs its atomic
+		// save/rename. Mutation commands are blocked separately by blockui.
+		this.uiManager.beginRenameInteraction();
 		app.socket.captureZoomBeforeRenameReload();
 		app.socket.sendMessage('renamefile filename=' + encodeURIComponent(filename));
 	},

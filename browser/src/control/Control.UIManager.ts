@@ -1776,10 +1776,22 @@ class UIManager extends window.L.Control {
 	 */
 	blockUI(event: any): void {
 		this.blockedUI = true;
+		if (event?.reason === 'rename') {
+			// Saving and replacing the WOPI file must still reject mutations, but
+			// navigation is client-side and safe. Keep the canvas available for
+			// wheel/touch scrolling and use the title progress bar instead of a
+			// modal overlay that consumes every pointer event.
+			this.beginRenameInteraction();
+			return;
+		}
 		this.map.fire('showbusy', {label: event ? event.message : null});
 
 		const canvas = document.getElementById('document-canvas');
 		if (canvas) canvas.style.pointerEvents = 'none'; // To remove the need for checking isUIBlocked.
+	}
+
+	beginRenameInteraction(): void {
+		this.documentNameInput?.showLoadingAnimation();
 	}
 
 	/**
