@@ -818,10 +818,7 @@ class UIManager extends window.L.Control {
 	 */
 	initializeSidebar(): void {
 		if (window.mode.isDesktop() && !window.ThisIsAMobileApp) {
-			// Make the browser-side visibility decision before core can deliver
-			// its first deck payload. Sending SidebarHide alone is asynchronous;
-			// without this preference the payload briefly opens the sidebar.
-			this.setDocTypePref('ShowSidebar', false);
+			this.resetSidebarForDocumentLoad();
 			app.socket.sendMessage('uno .uno:SidebarHide');
 		}
 		else if (window.mode.isChromebook() || window.mode.isSmallScreenDevice() || window.mode.isTablet()) {
@@ -834,6 +831,15 @@ class UIManager extends window.L.Control {
 			// Chromebooks early
 			app.socket.sendMessage('uno .uno:SidebarHide');
 		}
+	}
+
+	resetSidebarForDocumentLoad(): void {
+		// Make the browser-side visibility decision before core can deliver
+		// its first deck payload. Sending SidebarHide alone is asynchronous;
+		// without this preference the payload briefly opens the sidebar.
+		this.setDocTypePref('ShowSidebar', false);
+		if (this.map.sidebar && this.map.sidebar.isVisible())
+			this.map.sidebar.closeSidebar();
 	}
 
 	/**

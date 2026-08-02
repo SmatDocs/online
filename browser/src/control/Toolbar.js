@@ -302,8 +302,13 @@ window.L.Map.include({
 		// while an explicit user or host command can still open the sidebar.
 		if (command === '.uno:SidebarShow')
 			this.uiManager.setDocTypePref('ShowSidebar', true);
-		else if (command === '.uno:SidebarHide')
-			this.uiManager.setDocTypePref('ShowSidebar', false);
+		else if (command === '.uno:SidebarHide') {
+			// Hiding is a visibility command, not a deck selection. Handle it
+			// before the generic sidebar-deck branch can turn it into SidebarShow.
+			this.uiManager.resetSidebarForDocumentLoad();
+			app.socket.sendMessage('uno .uno:SidebarHide');
+			return;
+		}
 
 		if ((command.startsWith('.uno:Sidebar') && !command.startsWith('.uno:SidebarShow')) ||
 			command.startsWith('.uno:CustomAnimation') || command.startsWith('.uno:ModifyPage') ||

@@ -68,4 +68,30 @@ describe('Sidebar initial visibility', function() {
 		nodeassert.strictEqual(showCalls, 1);
 		nodeassert.strictEqual(sidebar.isUserRequest, true);
 	});
+
+	it('closes a visible sidebar before a document reload', function() {
+		let storedPreference: boolean | null = null;
+		let closeCalls = 0;
+		const uiManager = {
+			setDocTypePref(name: string, value: boolean) {
+				nodeassert.strictEqual(name, 'ShowSidebar');
+				storedPreference = value;
+			},
+			map: {
+				sidebar: {
+					isVisible() {
+						return true;
+					},
+					closeSidebar() {
+						closeCalls++;
+					},
+				},
+			},
+		};
+
+		UIManager.prototype.resetSidebarForDocumentLoad.call(uiManager);
+
+		nodeassert.strictEqual(storedPreference, false);
+		nodeassert.strictEqual(closeCalls, 1);
+	});
 });

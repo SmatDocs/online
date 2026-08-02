@@ -301,6 +301,7 @@ window.L.Map.WOPI = window.L.Handler.extend({
 
 	resetAppLoaded: function() {
 		var wasInitializedUI = this._appLoaded || this._appLoadedConditions.initializedui;
+		this._map.uiManager.resetSidebarForDocumentLoad();
 		this._appLoaded = false;
 		for (var key in this._appLoadedConditions) {
 			this._appLoadedConditions[key] = false;
