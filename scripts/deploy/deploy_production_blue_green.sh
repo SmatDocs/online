@@ -25,7 +25,11 @@ set -euo pipefail
 # - PRODUCTION_ACTIVE_SLOT_FILE / PRODUCTION_LAST_DEPLOYED_SLOT_FILE
 # - PRODUCTION_DEPLOY_STATE_DIR
 # - PRODUCTION_SWITCH_TO_BLUE_CMD / PRODUCTION_SWITCH_TO_GREEN_CMD
-# - PRODUCTION_SHUTDOWN_OLD_SLOT=true|false
+# - PRODUCTION_SHUTDOWN_OLD_SLOT=true|false (default: true)
+# - PRODUCTION_DRAIN_MAX_ATTEMPTS (default: 900, or 30 minutes at 2 seconds)
+# - PRODUCTION_DRAIN_SLEEP_SECONDS (default: 2)
+# - PRODUCTION_DRAIN_CONSECUTIVE_ZERO_CHECKS (default: 3)
+# - PRODUCTION_SS_BIN (default: ss; primarily useful for tests)
 # - PRODUCTION_ENGINE_ASSETS_URL
 # - PRODUCTION_BLUE_HEALTH_URL / PRODUCTION_GREEN_HEALTH_URL
 # - PRODUCTION_HEALTH_MAX_ATTEMPTS / PRODUCTION_HEALTH_SLEEP_SECONDS / PRODUCTION_HEALTH_CONSECUTIVE_SUCCESS
@@ -37,6 +41,18 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "[prod] Not a git repository: $REPO_ROOT" >&2
   exit 1
 fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DRAIN_HELPER="${PRODUCTION_DRAIN_HELPER:-$SCRIPT_DIR/deployment_drain.sh}"
+if [[ ! -r "$DRAIN_HELPER" && -r "$REPO_ROOT/scripts/deploy/deployment_drain.sh" ]]; then
+  DRAIN_HELPER="$REPO_ROOT/scripts/deploy/deployment_drain.sh"
+fi
+if [[ ! -r "$DRAIN_HELPER" ]]; then
+  echo "[prod] Missing deployment drain helper: $DRAIN_HELPER" >&2
+  exit 1
+fi
+# shellcheck source=deployment_drain.sh
+source "$DRAIN_HELPER"
 
 MODE="${PRODUCTION_MODE:-deploy_only}"
 case "$MODE" in
@@ -608,12 +624,34 @@ stop_slot() {
   local slot="$1"
   set_slot_context "$slot"
   stop_slot_processes "$slot"
+  if command -v pm2 >/dev/null 2>&1; then
+    pm2 save >/dev/null
+  fi
 }
 
-maybe_stop_old_slot() {
+prepare_target_slot() {
+  local slot="$1"
+  local active_slot="$2"
+
+  if [[ -n "$active_slot" && "$slot" == "$active_slot" ]]; then
+    echo "[prod] Refusing to rebuild active slot $slot while nginx is sending traffic to it." >&2
+    echo "[prod] Use deploy_only, or explicitly deploy the inactive color." >&2
+    return 1
+  fi
+
+  set_slot_context "$slot"
+  echo "[prod] Preparing inactive target slot $slot before build."
+  if ! wait_for_slot_connections_to_drain "$slot" "$SLOT_PORT"; then
+    echo "[prod] Inactive target $slot was not stopped because it still has active sessions." >&2
+    return 1
+  fi
+  stop_slot "$slot"
+}
+
+retire_old_slot_if_enabled() {
   local old_slot="$1"
   local new_slot="$2"
-  local shutdown_old="${PRODUCTION_SHUTDOWN_OLD_SLOT:-false}"
+  local shutdown_old="${PRODUCTION_SHUTDOWN_OLD_SLOT:-true}"
 
   if [[ -z "$old_slot" || "$old_slot" == "$new_slot" ]]; then
     return
@@ -621,7 +659,13 @@ maybe_stop_old_slot() {
 
   case "${shutdown_old,,}" in
     1|true|yes|on)
-      echo "[prod] Stopping old slot: $old_slot"
+      set_slot_context "$old_slot"
+      echo "[prod] Draining old slot $old_slot after switching traffic to $new_slot."
+      if ! wait_for_slot_connections_to_drain "$old_slot" "$SLOT_PORT"; then
+        echo "[prod] Old slot $old_slot remains online because active sessions did not drain." >&2
+        return 1
+      fi
+      echo "[prod] Stopping drained old slot: $old_slot"
       stop_slot "$old_slot"
       ;;
   esac
@@ -633,9 +677,22 @@ deploy_and_switch() {
   local previous_active=""
 
   previous_active="$(current_active_slot)"
+  prepare_target_slot "$slot" "$previous_active"
   deploy_slot "$slot" "$requested_ref"
   switch_slot "$slot"
-  maybe_stop_old_slot "$previous_active" "$slot"
+  retire_old_slot_if_enabled "$previous_active" "$slot"
+}
+
+deploy_inactive_checkpoint() {
+  local slot="$1"
+  local requested_ref="$2"
+  local active_slot=""
+
+  active_slot="$(current_active_slot)"
+  prepare_target_slot "$slot" "$active_slot"
+  deploy_slot "$slot" "$requested_ref"
+  echo "[prod] Stopping refreshed inactive slot $slot after its health check."
+  stop_slot "$slot"
 }
 
 echo "[prod] Mode: $MODE"
@@ -660,7 +717,7 @@ case "$MODE" in
     FOLLOWUP_SLOT="$(other_slot "$TARGET_SLOT")"
     echo "[prod] Deploying both slots (switch to $TARGET_SLOT, then refresh $FOLLOWUP_SLOT)"
     deploy_and_switch "$TARGET_SLOT" "$DEFAULT_DEPLOY_REF"
-    deploy_slot "$FOLLOWUP_SLOT" "$DEFAULT_DEPLOY_REF"
+    deploy_inactive_checkpoint "$FOLLOWUP_SLOT" "$DEFAULT_DEPLOY_REF"
     ;;
   rollback_blue)
     ROLLBACK_REF="$(checkpoint_ref_for_slot "blue")"
@@ -679,7 +736,7 @@ case "$MODE" in
     FOLLOWUP_REF="$(checkpoint_ref_for_slot "$FOLLOWUP_SLOT")"
     echo "[prod] Rolling back both slots (switch to $TARGET_SLOT, then refresh $FOLLOWUP_SLOT)"
     deploy_and_switch "$TARGET_SLOT" "$TARGET_REF"
-    deploy_slot "$FOLLOWUP_SLOT" "$FOLLOWUP_REF"
+    deploy_inactive_checkpoint "$FOLLOWUP_SLOT" "$FOLLOWUP_REF"
     ;;
 esac
 

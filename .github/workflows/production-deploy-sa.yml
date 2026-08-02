@@ -128,9 +128,14 @@ jobs:
               esac
             fi
 
-            DEPLOY_SCRIPT="$(mktemp)"
+            DEPLOY_TMP_DIR="$(mktemp -d)"
+            DEPLOY_SCRIPT="$DEPLOY_TMP_DIR/deploy_production_blue_green.sh"
+            DRAIN_HELPER="$DEPLOY_TMP_DIR/deployment_drain.sh"
+            trap 'rm -f "$DEPLOY_SCRIPT" "$DRAIN_HELPER"; rmdir "$DEPLOY_TMP_DIR"' EXIT
             git show "${SCRIPT_REF}:scripts/deploy/deploy_production_blue_green.sh" > "$DEPLOY_SCRIPT"
-            chmod +x "$DEPLOY_SCRIPT"
+            git show "${SCRIPT_REF}:scripts/deploy/deployment_drain.sh" > "$DRAIN_HELPER"
+            chmod +x "$DEPLOY_SCRIPT" "$DRAIN_HELPER"
+            export PRODUCTION_SHUTDOWN_OLD_SLOT=true
 
             if [ "$USE_DEPLOY_REF" = "1" ]; then
               echo "[workflow-sa] Using PRODUCTION_DEPLOY_REF=${REF}"
