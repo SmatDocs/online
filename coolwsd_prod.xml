@@ -290,7 +290,7 @@
       <use_integration_theme desc="Use theme from the integrator" type="bool" default="true">true</use_integration_theme>
       <statusbar_save_indicator desc="Show saving status indicator in the statusbar" type="bool" default="true">true</statusbar_save_indicator>
 
-      <brandProductName desc="Change the displayed name the application will have for the user." type="string">Overten</brandProductName>
+      <brandProductName desc="Change the displayed name the application will have for the user." type="string">App</brandProductName>
     <brandProductURL desc="Change the product URL, empty makes disable the link" type="string">https://overten.ai</brandProductURL>
     <logoURL desc="Change the URL of the logo used by Collabora Online, use none to hide it." type="string">https://overten.ai/logo.svg</logoURL>
 

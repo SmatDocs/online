@@ -3,7 +3,7 @@
  * L.ProgressOverlay is used to overlay progress images over the map.
  */
 
-/* global app brandProductName $ */
+/* global app $ */
 L.ProgressOverlay = window.L.Layer.extend({
 
 	options: {
@@ -26,12 +26,6 @@ L.ProgressOverlay = window.L.Layer.extend({
 		this._spinner = window.L.DomUtil.create('div', 'leaflet-progress-spinner', this._container);
 		this._spinnerCanvas = window.L.DomUtil.create('canvas', 'leaflet-progress-spinner-canvas', this._spinner);
 
-		var productName;
-		if (window.ThisIsAMobileApp) {
-			productName = window.MobileAppName;
-		} else {
-			productName = (typeof brandProductName !== 'undefined') ? brandProductName : 'Collabora Online Development Edition (unbranded)';
-		}
 		if (window.logoURL) {
 			this._spinner.style.setProperty(
 				'--spinner-logo',
@@ -39,10 +33,6 @@ L.ProgressOverlay = window.L.Layer.extend({
 			);
 			this._spinnerCanvas.style.opacity = '0';
 		}
-		this._brandLabel = window.L.DomUtil.create('div', 'leaflet-progress-label brand-label', this._container);
-		this._brandLabel.innerHTML = productName;
-
-
 		this._label = window.L.DomUtil.create('div', 'leaflet-progress-label', this._container);
 		this._progress = window.L.DomUtil.create('div', 'leaflet-progress', this._container);
 		this._bar = window.L.DomUtil.create('span', '', this._progress);
@@ -68,6 +58,7 @@ L.ProgressOverlay = window.L.Layer.extend({
 	},
 
 	showSpinner: function() {
+		this._dismissInitialLoadingScreen();
 		window.L.DomUtil.get('document-container').appendChild(this._container);
 		this._spinnerInterval = app.LOUtil.startSpinner(this._spinnerCanvas, this.options.spinnerSpeed);
 	},
@@ -75,6 +66,13 @@ L.ProgressOverlay = window.L.Layer.extend({
 	hideSpinner: function() {
 		if (this._container)
 			$(this._container).remove();
+		this._dismissInitialLoadingScreen();
+	},
+
+	_dismissInitialLoadingScreen: function() {
+		var initialLoadingScreen = document.getElementById('initial-loading-screen');
+		if (initialLoadingScreen)
+			initialLoadingScreen.remove();
 	},
 
 	// Show the progress bar, but only if things seem slow
