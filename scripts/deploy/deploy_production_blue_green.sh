@@ -632,6 +632,52 @@ stop_slot() {
   fi
 }
 
+retire_inactive_slot() {
+  local slot="$1"
+  local expected_active_slot="$2"
+  local reason="${3:-inactive after traffic switch}"
+  local force_retire="${PRODUCTION_FORCE_RETIRE_AFTER_DRAIN_TIMEOUT:-true}"
+  local drain_status=0
+  local routed_slot=""
+
+  set_slot_context "$slot"
+  echo "[prod] Retiring inactive slot $slot ($reason)."
+  wait_for_slot_connections_to_drain "$slot" "$SLOT_PORT" || drain_status=$?
+  if (( drain_status != 0 )); then
+    if (( drain_status != 1 )); then
+      echo "[prod] Slot $slot remains online because drain inspection failed." >&2
+      return 1
+    fi
+    case "${force_retire,,}" in
+      1|true|yes|on) ;;
+      *)
+        echo "[prod] Slot $slot remains online because forced retirement is disabled." >&2
+        return 1
+        ;;
+    esac
+    if [[ -z "$expected_active_slot" || "$(current_active_slot)" != "$expected_active_slot" ]]; then
+      echo "[prod] Refusing forced retirement because $expected_active_slot is not the recorded active slot." >&2
+      return 1
+    fi
+    if ! routed_slot="$(confirm_slot_is_not_nginx_routed "$slot" "$UPSTREAM_FILE" "$BLUE_PORT" "$GREEN_PORT")"; then
+      echo "[prod] Refusing forced retirement because inactive Nginx routing could not be proven." >&2
+      return 1
+    fi
+    if [[ "$routed_slot" != "$expected_active_slot" ]]; then
+      echo "[prod] Refusing forced retirement because Nginx routes to $routed_slot, not $expected_active_slot." >&2
+      return 1
+    fi
+    echo "[prod] Drain grace period expired; force-retiring inactive slot $slot and disconnecting its remaining sessions." >&2
+  else
+    echo "[prod] Stopping drained inactive slot: $slot"
+  fi
+
+  stop_slot "$slot"
+  if (( drain_status == 1 )); then
+    echo "[prod] Inactive slot $slot was force-retired after its drain grace period."
+  fi
+}
+
 prepare_target_slot() {
   local slot="$1"
   local active_slot="$2"
@@ -642,22 +688,14 @@ prepare_target_slot() {
     return 1
   fi
 
-  set_slot_context "$slot"
   echo "[prod] Preparing inactive target slot $slot before build."
-  if ! wait_for_slot_connections_to_drain "$slot" "$SLOT_PORT"; then
-    echo "[prod] Inactive target $slot was not stopped because it still has active sessions." >&2
-    return 1
-  fi
-  stop_slot "$slot"
+  retire_inactive_slot "$slot" "$active_slot" "stale inactive target before rebuild"
 }
 
 retire_old_slot_if_enabled() {
   local old_slot="$1"
   local new_slot="$2"
   local shutdown_old="${PRODUCTION_SHUTDOWN_OLD_SLOT:-true}"
-  local force_retire="${PRODUCTION_FORCE_RETIRE_AFTER_DRAIN_TIMEOUT:-true}"
-  local drain_status=0
-  local routed_slot=""
 
   if [[ -z "$old_slot" || "$old_slot" == "$new_slot" ]]; then
     return
@@ -665,41 +703,7 @@ retire_old_slot_if_enabled() {
 
   case "${shutdown_old,,}" in
     1|true|yes|on)
-      set_slot_context "$old_slot"
-      echo "[prod] Draining old slot $old_slot after switching traffic to $new_slot."
-      wait_for_slot_connections_to_drain "$old_slot" "$SLOT_PORT" || drain_status=$?
-      if (( drain_status != 0 )); then
-        if (( drain_status != 1 )); then
-          echo "[prod] Old slot $old_slot remains online because drain inspection failed." >&2
-          return 1
-        fi
-        case "${force_retire,,}" in
-          1|true|yes|on) ;;
-          *)
-            echo "[prod] Old slot $old_slot remains online because active sessions did not drain and forced retirement is disabled." >&2
-            return 1
-            ;;
-        esac
-        if [[ "$(current_active_slot)" != "$new_slot" ]]; then
-          echo "[prod] Refusing forced retirement because $new_slot is no longer the recorded active slot." >&2
-          return 1
-        fi
-        if ! routed_slot="$(confirm_slot_is_not_nginx_routed "$old_slot" "$UPSTREAM_FILE" "$BLUE_PORT" "$GREEN_PORT")"; then
-          echo "[prod] Refusing forced retirement because inactive Nginx routing could not be proven." >&2
-          return 1
-        fi
-        if [[ "$routed_slot" != "$new_slot" ]]; then
-          echo "[prod] Refusing forced retirement because Nginx routes to $routed_slot, not $new_slot." >&2
-          return 1
-        fi
-        echo "[prod] Drain grace period expired; force-retiring inactive slot $old_slot and disconnecting its remaining sessions." >&2
-      else
-        echo "[prod] Stopping drained old slot: $old_slot"
-      fi
-      stop_slot "$old_slot"
-      if (( drain_status == 1 )); then
-        echo "[prod] Inactive slot $old_slot was force-retired after its drain grace period."
-      fi
+      retire_inactive_slot "$old_slot" "$new_slot" "replaced by $new_slot"
       ;;
   esac
 }

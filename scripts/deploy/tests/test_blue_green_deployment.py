@@ -125,14 +125,15 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertIn("PRODUCTION_SHUTDOWN_OLD_SLOT:-true", script)
         self.assertIn("PRODUCTION_FORCE_RETIRE_AFTER_DRAIN_TIMEOUT:-true", script)
         self.assertIn('prepare_target_slot "$slot" "$previous_active"', script)
+        self.assertIn("retire_inactive_slot", script)
         self.assertIn(
-            'wait_for_slot_connections_to_drain "$old_slot" "$SLOT_PORT"',
+            'retire_inactive_slot "$old_slot" "$new_slot" "replaced by $new_slot"',
             script,
         )
         self.assertIn('retire_old_slot_if_enabled "$previous_active" "$slot"', script)
         self.assertIn("pm2 save", script)
         self.assertIn(
-            'confirm_slot_is_not_nginx_routed "$old_slot" "$UPSTREAM_FILE"',
+            'confirm_slot_is_not_nginx_routed "$slot" "$UPSTREAM_FILE"',
             script,
         )
         self.assertIn("force-retired after its drain grace period", script)
@@ -151,6 +152,19 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertLess(prepare_position, deploy_position)
         self.assertLess(deploy_position, switch_position)
         self.assertLess(switch_position, retire_position)
+
+    def test_stale_inactive_target_uses_force_retirement_path(self) -> None:
+        script = _read("scripts/deploy/deploy_production_blue_green.sh")
+
+        self.assertIn(
+            'retire_inactive_slot "$slot" "$active_slot" '
+            '"stale inactive target before rebuild"',
+            script,
+        )
+        self.assertNotIn(
+            "Inactive target $slot was not stopped because it still has active sessions",
+            script,
+        )
 
     def test_deploy_both_still_finishes_with_inactive_slot_stopped(self) -> None:
         script = _read("scripts/deploy/deploy_production_blue_green.sh")
