@@ -136,6 +136,7 @@ jobs:
             git show "${SCRIPT_REF}:scripts/deploy/deployment_drain.sh" > "$DRAIN_HELPER"
             chmod +x "$DEPLOY_SCRIPT" "$DRAIN_HELPER"
             export PRODUCTION_SHUTDOWN_OLD_SLOT=true
+            export PRODUCTION_FORCE_RETIRE_AFTER_DRAIN_TIMEOUT=true
 
             if [ "$USE_DEPLOY_REF" = "1" ]; then
               echo "[workflow-sa] Using PRODUCTION_DEPLOY_REF=${REF}"

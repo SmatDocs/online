@@ -26,7 +26,9 @@ set -euo pipefail
 # - PRODUCTION_DEPLOY_STATE_DIR
 # - PRODUCTION_SWITCH_TO_BLUE_CMD / PRODUCTION_SWITCH_TO_GREEN_CMD
 # - PRODUCTION_SHUTDOWN_OLD_SLOT=true|false (default: true)
-# - PRODUCTION_DRAIN_MAX_ATTEMPTS (default: 900, or 30 minutes at 2 seconds)
+# - PRODUCTION_FORCE_RETIRE_AFTER_DRAIN_TIMEOUT=true|false (default: true)
+# - PRODUCTION_UPSTREAM_FILE (default: /etc/nginx/conf.d/collabora_backend_overten.conf)
+# - PRODUCTION_DRAIN_MAX_ATTEMPTS (default: 450, or 15 minutes at 2 seconds)
 # - PRODUCTION_DRAIN_SLEEP_SECONDS (default: 2)
 # - PRODUCTION_DRAIN_CONSECUTIVE_ZERO_CHECKS (default: 3)
 # - PRODUCTION_SS_BIN (default: ss; primarily useful for tests)
@@ -88,6 +90,7 @@ BLUE_PORT="${PRODUCTION_BLUE_PORT:-9980}"
 GREEN_PORT="${PRODUCTION_GREEN_PORT:-9981}"
 BLUE_PM2_NAME="${PRODUCTION_BLUE_PM2_NAME:-coolwsd-blue}"
 GREEN_PM2_NAME="${PRODUCTION_GREEN_PM2_NAME:-coolwsd-green}"
+UPSTREAM_FILE="${PRODUCTION_UPSTREAM_FILE:-/etc/nginx/conf.d/collabora_backend_overten.conf}"
 
 HEALTH_MAX_ATTEMPTS="${PRODUCTION_HEALTH_MAX_ATTEMPTS:-90}"
 HEALTH_SLEEP_SECONDS="${PRODUCTION_HEALTH_SLEEP_SECONDS:-2}"
@@ -652,6 +655,9 @@ retire_old_slot_if_enabled() {
   local old_slot="$1"
   local new_slot="$2"
   local shutdown_old="${PRODUCTION_SHUTDOWN_OLD_SLOT:-true}"
+  local force_retire="${PRODUCTION_FORCE_RETIRE_AFTER_DRAIN_TIMEOUT:-true}"
+  local drain_status=0
+  local routed_slot=""
 
   if [[ -z "$old_slot" || "$old_slot" == "$new_slot" ]]; then
     return
@@ -661,12 +667,39 @@ retire_old_slot_if_enabled() {
     1|true|yes|on)
       set_slot_context "$old_slot"
       echo "[prod] Draining old slot $old_slot after switching traffic to $new_slot."
-      if ! wait_for_slot_connections_to_drain "$old_slot" "$SLOT_PORT"; then
-        echo "[prod] Old slot $old_slot remains online because active sessions did not drain." >&2
-        return 1
+      wait_for_slot_connections_to_drain "$old_slot" "$SLOT_PORT" || drain_status=$?
+      if (( drain_status != 0 )); then
+        if (( drain_status != 1 )); then
+          echo "[prod] Old slot $old_slot remains online because drain inspection failed." >&2
+          return 1
+        fi
+        case "${force_retire,,}" in
+          1|true|yes|on) ;;
+          *)
+            echo "[prod] Old slot $old_slot remains online because active sessions did not drain and forced retirement is disabled." >&2
+            return 1
+            ;;
+        esac
+        if [[ "$(current_active_slot)" != "$new_slot" ]]; then
+          echo "[prod] Refusing forced retirement because $new_slot is no longer the recorded active slot." >&2
+          return 1
+        fi
+        if ! routed_slot="$(confirm_slot_is_not_nginx_routed "$old_slot" "$UPSTREAM_FILE" "$BLUE_PORT" "$GREEN_PORT")"; then
+          echo "[prod] Refusing forced retirement because inactive Nginx routing could not be proven." >&2
+          return 1
+        fi
+        if [[ "$routed_slot" != "$new_slot" ]]; then
+          echo "[prod] Refusing forced retirement because Nginx routes to $routed_slot, not $new_slot." >&2
+          return 1
+        fi
+        echo "[prod] Drain grace period expired; force-retiring inactive slot $old_slot and disconnecting its remaining sessions." >&2
+      else
+        echo "[prod] Stopping drained old slot: $old_slot"
       fi
-      echo "[prod] Stopping drained old slot: $old_slot"
       stop_slot "$old_slot"
+      if (( drain_status == 1 )); then
+        echo "[prod] Inactive slot $old_slot was force-retired after its drain grace period."
+      fi
       ;;
   esac
 }

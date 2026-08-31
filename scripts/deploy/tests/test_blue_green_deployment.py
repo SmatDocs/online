@@ -57,6 +57,26 @@ def _run_drain(
     )
 
 
+def _run_routing_check(
+    upstream_file: Path,
+    retiring_slot: str,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; confirm_slot_is_not_nginx_routed "$2" "$3" 9980 9981',
+            "routing-test",
+            str(DRAIN_HELPER),
+            retiring_slot,
+            str(upstream_file),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 class DrainHelperTests(unittest.TestCase):
     def test_requires_consecutive_zero_connection_checks(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -67,7 +87,7 @@ class DrainHelperTests(unittest.TestCase):
         self.assertIn("zero established connections (3/3)", result.stdout)
         self.assertIn("blue is drained", result.stdout)
 
-    def test_timeout_leaves_the_slot_running(self) -> None:
+    def test_timeout_is_reported_to_the_deployment_caller(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             fake_ss = _make_fake_ss(
                 Path(temp_dir),
@@ -76,16 +96,34 @@ class DrainHelperTests(unittest.TestCase):
             result = _run_drain(fake_ss, attempts=2, zero_checks=2)
 
         self.assertEqual(result.returncode, 1)
-        self.assertIn("PM2 process must remain running", result.stderr)
+        self.assertIn("Timed out without draining blue", result.stderr)
         self.assertNotIn("blue is drained", result.stdout)
+
+    def test_forced_retirement_guard_accepts_only_the_inactive_slot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            upstream_file = Path(temp_dir) / "collabora-upstream.conf"
+            upstream_file.write_text(
+                "upstream collabora_backend { server 127.0.0.1:9981; }\n",
+                encoding="utf-8",
+            )
+            inactive_result = _run_routing_check(upstream_file, "blue")
+            active_result = _run_routing_check(upstream_file, "green")
+
+        self.assertEqual(inactive_result.returncode, 0, inactive_result.stderr)
+        self.assertEqual(inactive_result.stdout.strip(), "green")
+        self.assertEqual(active_result.returncode, 1)
+        self.assertIn("Nginx still routes to green", active_result.stderr)
 
 
 class DeploymentContractTests(unittest.TestCase):
     def test_rolling_deploy_drains_and_retires_old_slot_by_default(self) -> None:
         script = _read("scripts/deploy/deploy_production_blue_green.sh")
+        drain_helper = _read("scripts/deploy/deployment_drain.sh")
 
         self.assertIn('source "$DRAIN_HELPER"', script)
+        self.assertIn("PRODUCTION_DRAIN_MAX_ATTEMPTS:-450", drain_helper)
         self.assertIn("PRODUCTION_SHUTDOWN_OLD_SLOT:-true", script)
+        self.assertIn("PRODUCTION_FORCE_RETIRE_AFTER_DRAIN_TIMEOUT:-true", script)
         self.assertIn('prepare_target_slot "$slot" "$previous_active"', script)
         self.assertIn(
             'wait_for_slot_connections_to_drain "$old_slot" "$SLOT_PORT"',
@@ -93,6 +131,11 @@ class DeploymentContractTests(unittest.TestCase):
         )
         self.assertIn('retire_old_slot_if_enabled "$previous_active" "$slot"', script)
         self.assertIn("pm2 save", script)
+        self.assertIn(
+            'confirm_slot_is_not_nginx_routed "$old_slot" "$UPSTREAM_FILE"',
+            script,
+        )
+        self.assertIn("force-retired after its drain grace period", script)
 
         prepare_position = script.index(
             'prepare_target_slot "$slot" "$previous_active"'
@@ -141,6 +184,10 @@ class DeploymentContractTests(unittest.TestCase):
                 workflow,
             )
             self.assertIn("export PRODUCTION_SHUTDOWN_OLD_SLOT=true", workflow)
+            self.assertIn(
+                "export PRODUCTION_FORCE_RETIRE_AFTER_DRAIN_TIMEOUT=true",
+                workflow,
+            )
 
 if __name__ == "__main__":
     unittest.main()
