@@ -35,8 +35,9 @@ Write a short impact note, local Markdown or in the chat, answering:
      ~$0.118/GiB, and 1 MB/min sustained ≈ $4.75/month.
    - LLM calls and tokens, and CPU, RAM and disk on the host it runs on.
 5. **Where it runs.**
-   - Finland serves users only.
-   - Background, heavy or periodic work runs on the worker host (Contabo),
+   - Finland serves users. Owner exception, 2026-10-31: the existing sales-agent
+     background worker may also run on Finland, separate from the API process.
+   - Other background, heavy or periodic work runs on the worker host (Contabo),
      or Acuon for experiments, never inside the API process beside chat.
    - Work that runs per replica must be leased so it runs once.
 6. **Failure behaviour.**
